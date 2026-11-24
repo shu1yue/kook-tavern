@@ -1,0 +1,12 @@
+/target
+.env
+.env.*
+!.env.example
+DEPLOY_ECS.md
+.ops/
+/data
+/exports
+*.db
+*.db-wal
+*.db-shm
+.DS_Store

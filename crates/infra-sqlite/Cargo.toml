@@ -1,0 +1,14 @@
+[package]
+name = "tavern-infra-sqlite"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tavern-core.workspace = true
+tavern-domain.workspace = true
+tracing.workspace = true

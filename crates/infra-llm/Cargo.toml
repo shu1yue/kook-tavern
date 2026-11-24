@@ -1,0 +1,16 @@
+[package]
+name = "tavern-infra-llm"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tavern-core.workspace = true
+tavern-domain.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true

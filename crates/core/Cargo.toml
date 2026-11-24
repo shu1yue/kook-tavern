@@ -1,0 +1,11 @@
+[package]
+name = "tavern-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+rand.workspace = true
+tavern-domain.workspace = true
+tracing.workspace = true

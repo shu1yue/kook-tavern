@@ -1,0 +1,18 @@
+[package]
+name = "tavern-adapter-kook"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+flate2.workspace = true
+futures-util.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tavern-core.workspace = true
+tavern-domain.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tracing.workspace = true

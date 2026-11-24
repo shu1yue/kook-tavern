@@ -1,0 +1,10 @@
+[package]
+name = "tavern-adapter-cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+tavern-core.workspace = true
+tavern-domain.workspace = true
+tokio.workspace = true

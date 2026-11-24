@@ -1,0 +1,26 @@
+[package]
+name = "kook-tavern-dm"
+version.workspace = true
+edition.workspace = true
+description = "KOOK AI Tavern & Lightweight TRPG DM Engine"
+
+[[bin]]
+name = "kook-tavern-dm"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+dotenvy.workspace = true
+tavern-adapter-cli.workspace = true
+tavern-adapter-kook.workspace = true
+tavern-core.workspace = true
+tavern-domain.workspace = true
+tavern-infra-llm.workspace = true
+tavern-infra-sqlite.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true

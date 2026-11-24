@@ -1,0 +1,11 @@
+[package]
+name = "tavern-domain"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono.workspace = true
+rand.workspace = true
+regex.workspace = true
+serde.workspace = true
+thiserror.workspace = true
