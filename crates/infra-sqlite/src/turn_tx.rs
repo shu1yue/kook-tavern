@@ -2,7 +2,9 @@ use anyhow::Result;
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension, params};
 use tavern_core::ResolvingLease;
-use tavern_domain::{PendingAction, Player, RoomSnapshot, RoomState, TurnPhase, TurnRecord};
+use tavern_domain::{
+    DirectMessageOut, PendingAction, Player, RoomSnapshot, RoomState, TurnPhase, TurnRecord,
+};
 
 use crate::mappers::{
     query_pending_actions, query_players, query_room, update_player_dm_state, write_pending_action,
@@ -146,6 +148,7 @@ pub fn try_begin_resolving_tx(
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn commit_turn_cas_tx(
     conn: &mut Connection,
     expected_version: u64,
@@ -154,6 +157,7 @@ pub fn commit_turn_cas_tx(
     updated_players: &[Player],
     turn: &TurnRecord,
     resolved_turn: u32,
+    whispers: &[DirectMessageOut],
 ) -> Result<bool> {
     let tx = conn.transaction()?;
 
@@ -225,6 +229,23 @@ pub fn commit_turn_cas_tx(
             turn.created_at.to_rfc3339(),
         ],
     )?;
+
+    for w in whispers {
+        tx.execute(
+            r#"
+            INSERT INTO whispers (channel_id, turn_number, user_id, player_name, content, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "#,
+            params![
+                updated_room.channel_id,
+                turn.turn_number,
+                w.user_id,
+                w.player_name,
+                w.content,
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+    }
 
     tx.execute(
         "DELETE FROM pending_actions WHERE channel_id = ?1 AND target_turn <= ?2",
@@ -309,6 +330,10 @@ pub fn pop_and_restore_snapshot_tx(
 
     tx.execute(
         "DELETE FROM turns WHERE channel_id = ?1 AND turn_number > ?2",
+        params![channel_id, snapshot.room.turn_number],
+    )?;
+    tx.execute(
+        "DELETE FROM whispers WHERE channel_id = ?1 AND turn_number > ?2",
         params![channel_id, snapshot.room.turn_number],
     )?;
     tx.execute("DELETE FROM snapshots WHERE id = ?1", params![snap_id])?;

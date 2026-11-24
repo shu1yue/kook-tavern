@@ -57,6 +57,12 @@ pub struct DmTurnOutput {
 }
 
 #[derive(Debug, Clone)]
+pub struct SummaryOutput {
+    pub summary: String,
+    pub usage: LlmUsage,
+}
+
+#[derive(Debug, Clone)]
 pub struct IncomingMessage {
     pub guild_id: Option<String>,
     pub channel_id: String,
@@ -87,6 +93,12 @@ pub enum EngineResponse {
         body: String,
         theme: CardTheme,
         show_actions: bool,
+    },
+    /// Delivered privately to a single user (DM or KOOK `temp_target_id`), NEVER public!
+    PrivateNotice {
+        user_id: String,
+        title: String,
+        body: String,
     },
     StoryTurn {
         channel_id: String,

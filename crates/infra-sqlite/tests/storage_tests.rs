@@ -62,6 +62,7 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
     let now = Utc::now();
     let room = RoomState {
         channel_id: "ch1".into(),
+        guild_id: "g1".into(),
         scenario_id: "ember_tavern".into(),
         title: "余烬酒馆".into(),
         location: "大厅".into(),
@@ -71,6 +72,7 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
         turn_phase: TurnPhase::Collecting,
         chat_mode: ChatMode::Strict,
         narrative_style: NarrativeStyle::Prose,
+        gm_user_id: "u1".into(),
         web_token: "tok123".into(),
         clues: vec![],
         summary: String::new(),
@@ -124,10 +126,22 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
     assert_eq!(mid_room.state_version, 2);
 
     // Concurrent `/join` profile edit during Resolving MUST survive `commit_turn_cas`!
-    let mut edited = player.clone();
-    edited.character_name = "陆沉".into();
-    edited.role_desc = "机械师".into();
-    store.upsert_player(&edited).unwrap();
+    store
+        .update_player_profile("ch1", "u1", "陆沉", "机械师", &["勇猛".into()])
+        .unwrap()
+        .unwrap();
+
+    // GM mutation during Resolving MUST return RoomResolving and never race with DM commit!
+    assert!(matches!(
+        store
+            .gm_mutate_player("ch1", "陆沉", -2, 0, None, None)
+            .unwrap(),
+        tavern_core::GmUpdateOutcome::RoomResolving
+    ));
+    assert!(matches!(
+        store.gm_add_clue("ch1", "竞态线索").unwrap(),
+        tavern_core::GmUpdateOutcome::RoomResolving
+    ));
 
     // Atomic action submitted during Resolving lands safely in turn 2 buffer!
     assert_eq!(
@@ -172,7 +186,8 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
             &updated_room,
             std::slice::from_ref(&dm_updated_player),
             &turn,
-            1
+            1,
+            &[],
         )
         .unwrap());
 
@@ -184,7 +199,8 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
             &updated_room,
             std::slice::from_ref(&dm_updated_player),
             &turn,
-            1
+            1,
+            &[],
         )
         .unwrap());
 

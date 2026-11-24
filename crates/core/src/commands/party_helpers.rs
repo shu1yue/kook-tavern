@@ -8,10 +8,15 @@ pub fn ensure_player(
     msg: &IncomingMessage,
     scenario: &Scenario,
 ) -> Result<Player> {
-    if let Some(mut existing) = engine.store.get_player(&msg.channel_id, &msg.user_id)? {
+    if let Some(existing) = engine.store.get_player(&msg.channel_id, &msg.user_id)? {
         if existing.is_afk {
-            existing.is_afk = false;
-            engine.store.upsert_player(&existing)?;
+            // Targeted column update ONLY — never overwrites DM stats!
+            if let Some(updated) = engine
+                .store
+                .set_player_afk(&msg.channel_id, &msg.user_id, false)?
+            {
+                return Ok(updated);
+            }
         }
         return Ok(existing);
     }

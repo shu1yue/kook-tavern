@@ -35,6 +35,7 @@ pub async fn run_kook_bot(token: String, engine: GameEngine) -> Result<()> {
             Err(err) => {
                 error!(error = %err, wait_secs = backoff_secs, "获取 KOOK Gateway 失败，稍后重试");
                 if wait_backoff_or_shutdown(backoff_secs).await {
+                    drain_inflight_events(&event_permits).await;
                     return Ok(());
                 }
                 backoff_secs = (backoff_secs * 2).min(60);
@@ -57,6 +58,7 @@ pub async fn run_kook_bot(token: String, engine: GameEngine) -> Result<()> {
             Ok(Err(err)) => {
                 error!(error = %err, wait_secs = backoff_secs, "KOOK WebSocket 连接失败");
                 if wait_backoff_or_shutdown(backoff_secs).await {
+                    drain_inflight_events(&event_permits).await;
                     return Ok(());
                 }
                 backoff_secs = (backoff_secs * 2).min(60);
@@ -65,6 +67,7 @@ pub async fn run_kook_bot(token: String, engine: GameEngine) -> Result<()> {
             Err(_) => {
                 error!(wait_secs = backoff_secs, "KOOK WebSocket 建连超时（>20s）");
                 if wait_backoff_or_shutdown(backoff_secs).await {
+                    drain_inflight_events(&event_permits).await;
                     return Ok(());
                 }
                 backoff_secs = (backoff_secs * 2).min(60);
@@ -83,14 +86,22 @@ pub async fn run_kook_bot(token: String, engine: GameEngine) -> Result<()> {
         loop {
             tokio::select! {
                 _ = shutdown_signal() => {
-                    info!("收到优雅退出信号（SIGINT/SIGTERM），关闭 KOOK 机器人");
+                    info!("收到优雅退出信号（SIGINT/SIGTERM），等待在途事件清理后关闭 KOOK 机器人");
+                    drain_inflight_events(&event_permits).await;
                     return Ok(());
                 }
                 _ = ping_timer.tick() => {
                     let ping_payload = json!({ "s": 2, "sn": last_sn }).to_string();
-                    if let Err(err) = write.send(WsMessage::Text(ping_payload.into())).await {
-                        warn!(error = %err, "发送心跳 Ping 失败，准备重连");
-                        break;
+                    match timeout(Duration::from_secs(10), write.send(WsMessage::Text(ping_payload.into()))).await {
+                        Ok(Ok(())) => {}
+                        Ok(Err(err)) => {
+                            warn!(error = %err, "发送心跳 Ping 失败，准备重连");
+                            break;
+                        }
+                        Err(_) => {
+                            warn!("发送心跳 Ping 超时（>10s），准备重连");
+                            break;
+                        }
                     }
                     awaiting_pong_since = Some(Instant::now());
                     debug!(sn = last_sn, "已发送 KOOK 心跳 Ping");
@@ -126,7 +137,11 @@ pub async fn run_kook_bot(token: String, engine: GameEngine) -> Result<()> {
                         },
                         WsMessage::Text(t) => t.to_string(),
                         WsMessage::Ping(payload) => {
-                            let _ = write.send(WsMessage::Pong(payload)).await;
+                            let _ = timeout(
+                                Duration::from_secs(10),
+                                write.send(WsMessage::Pong(payload)),
+                            )
+                            .await;
                             continue;
                         }
                         WsMessage::Close(_) => {
@@ -206,10 +221,19 @@ pub async fn run_kook_bot(token: String, engine: GameEngine) -> Result<()> {
             last_sn = 0;
         }
         if wait_backoff_or_shutdown(backoff_secs).await {
+            drain_inflight_events(&event_permits).await;
             return Ok(());
         }
         backoff_secs = (backoff_secs * 2).min(60);
     }
+}
+
+async fn drain_inflight_events(permits: &Semaphore) {
+    let _ = timeout(
+        Duration::from_secs(5),
+        permits.acquire_many(MAX_CONCURRENT_EVENTS as u32),
+    )
+    .await;
 }
 
 async fn wait_backoff_or_shutdown(secs: u64) -> bool {

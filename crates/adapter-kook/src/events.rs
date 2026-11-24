@@ -44,12 +44,17 @@ pub async fn handle_kook_event(d: Value, engine: GameEngine, client: KookClient)
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
-    let channel_id = if is_direct {
+    let reply_target = if is_direct {
         author_id.clone()
+    } else {
+        target_id.clone()
+    };
+    let channel_id = if is_direct {
+        format!("dm:{author_id}")
     } else {
         target_id
     };
-    if channel_id.is_empty() || author_id.is_empty() {
+    if reply_target.is_empty() || author_id.is_empty() {
         return;
     }
 
@@ -68,17 +73,37 @@ pub async fn handle_kook_event(d: Value, engine: GameEngine, client: KookClient)
         .to_string();
 
     let raw_content = d.get("content").and_then(Value::as_str).unwrap_or("");
+    let cleaned = strip_kook_mentions(raw_content);
+
+    let placeholder_id = if !is_direct
+        && engine.will_likely_resolve_turn(
+            guild_id.as_deref(),
+            &channel_id,
+            &author_id,
+            &cleaned,
+            is_direct,
+        ) {
+        client.send_thinking_placeholder(&reply_target).await
+    } else {
+        None
+    };
+
     let incoming = IncomingMessage {
         guild_id,
         channel_id: channel_id.clone(),
         user_id: author_id,
         user_name,
-        content: strip_kook_mentions(raw_content),
+        content: cleaned,
         is_direct,
     };
 
-    match engine.handle_message(incoming).await {
-        Ok(resp) => send_reply(&client, &channel_id, is_direct, resp).await,
+    let result = engine.handle_message(incoming).await;
+    if let Some(pid) = placeholder_id {
+        client.delete_channel_message(&pid).await;
+    }
+
+    match result {
+        Ok(resp) => send_reply(&client, &reply_target, is_direct, resp).await,
         Err(err) => {
             error!(channel_id, is_direct, error = %format!("{err:#}"), "游戏引擎处理消息失败");
             let err_resp = EngineResponse::Notice {
@@ -88,7 +113,7 @@ pub async fn handle_kook_event(d: Value, engine: GameEngine, client: KookClient)
                 theme: CardTheme::Danger,
                 show_actions: true,
             };
-            send_reply(&client, &channel_id, is_direct, err_resp).await;
+            send_reply(&client, &reply_target, is_direct, err_resp).await;
         }
     }
 }
@@ -99,6 +124,11 @@ async fn handle_button_event(d: &Value, engine: GameEngine, client: KookClient) 
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
+    let guild_id = d
+        .pointer("/extra/body/guild_id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(String::from);
     let user_id = d
         .pointer("/extra/body/user_id")
         .and_then(Value::as_str)
@@ -119,10 +149,29 @@ async fn handle_button_event(d: &Value, engine: GameEngine, client: KookClient) 
     if channel_id.is_empty() || value.is_empty() {
         return;
     }
-    match engine
-        .handle_button(&channel_id, &user_id, &user_name, value)
-        .await
-    {
+
+    let expected_resolve = format!("tavern:resolve:{channel_id}");
+    let placeholder_id = if value == expected_resolve
+        && engine.will_likely_resolve_turn(
+            guild_id.as_deref(),
+            &channel_id,
+            &user_id,
+            "/go",
+            false,
+        ) {
+        client.send_thinking_placeholder(&channel_id).await
+    } else {
+        None
+    };
+
+    let result = engine
+        .handle_button_in_guild(guild_id.as_deref(), &channel_id, &user_id, &user_name, value)
+        .await;
+    if let Some(pid) = placeholder_id {
+        client.delete_channel_message(&pid).await;
+    }
+
+    match result {
         Ok(resp) => client.dispatch_response(&channel_id, resp).await,
         Err(err) => {
             error!(channel_id, error = %format!("{err:#}"), "处理 KOOK 按钮事件失败");

@@ -9,6 +9,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
     conn.execute_batch(
         r#"
         PRAGMA journal_mode = WAL;
+        PRAGMA busy_timeout = 5000;
         PRAGMA foreign_keys = ON;
 
         CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -25,12 +26,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
     })?;
 
     apply_if_needed(conn, 2, "0002_m05_state_machine", |tx| {
-        add_column_if_missing(
-            tx,
-            "rooms",
-            "state_version",
-            "INTEGER NOT NULL DEFAULT 1",
-        )?;
+        add_column_if_missing(tx, "rooms", "state_version", "INTEGER NOT NULL DEFAULT 1")?;
         add_column_if_missing(
             tx,
             "rooms",
@@ -83,6 +79,50 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
                 "#,
             )?;
         }
+        Ok(())
+    })?;
+
+    apply_if_needed(conn, 3, "0003_m1_usage_whispers", |tx| {
+        add_column_if_missing(tx, "rooms", "gm_user_id", "TEXT NOT NULL DEFAULT ''")?;
+        tx.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS usage_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT NOT NULL,
+                day_utc TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_hit_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
+                estimated_cny REAL NOT NULL DEFAULT 0.0,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_usage_logs_day
+                ON usage_logs (day_utc);
+            CREATE INDEX IF NOT EXISTS idx_usage_logs_channel
+                ON usage_logs (channel_id, id DESC);
+
+            CREATE TABLE IF NOT EXISTS whispers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT NOT NULL,
+                turn_number INTEGER NOT NULL,
+                user_id TEXT NOT NULL,
+                player_name TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (channel_id) REFERENCES rooms(channel_id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_whispers_channel_user
+                ON whispers (channel_id, user_id, id DESC);
+            "#,
+        )?;
+        Ok(())
+    })?;
+
+    apply_if_needed(conn, 4, "0004_m1_room_guild_id", |tx| {
+        add_column_if_missing(tx, "rooms", "guild_id", "TEXT NOT NULL DEFAULT ''")?;
         Ok(())
     })?;
 

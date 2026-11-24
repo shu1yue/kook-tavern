@@ -33,19 +33,53 @@ pub fn cmd_join(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result
     };
 
     let (character_name, role_desc, traits) = parse_join_args(arg, &msg.user_name);
+
+    // Reject duplicate character_name owned by a different user to avoid whisper/patch misrouting
+    let all_players = engine.store.list_players(&msg.channel_id)?;
+    if all_players.iter().any(|p| {
+        p.user_id != msg.user_id && p.character_name.eq_ignore_ascii_case(&character_name)
+    }) {
+        return Ok(EngineResponse::Notice {
+            title: "⚠️ 角色名已被队友占用".to_string(),
+            body: format!(
+                "房间里已经有队友叫 **{character_name}** 啦，换个独特点的名字防止 DM 递错纸条喵！"
+            ),
+            theme: CardTheme::Warning,
+            show_actions: false,
+        });
+    }
+
     let existing = engine.store.get_player(&msg.channel_id, &msg.user_id)?;
-    let player = if let Some(mut p) = existing {
-        p.character_name = character_name;
-        if !role_desc.is_empty() {
-            p.role_desc = role_desc;
-        }
-        if !traits.is_empty() {
-            p.traits = traits;
-        }
-        p.is_afk = false;
-        p
+    let player = if let Some(prev) = existing {
+        let next_role = if role_desc.is_empty() {
+            prev.role_desc
+        } else {
+            role_desc
+        };
+        let next_traits = if traits.is_empty() {
+            prev.traits
+        } else {
+            traits
+        };
+        // Targeted profile update ONLY — never clobbers HP/SAN/inventory committed concurrently!
+        engine
+            .store
+            .update_player_profile(
+                &msg.channel_id,
+                &msg.user_id,
+                &character_name,
+                &next_role,
+                &next_traits,
+            )?
+            .unwrap_or(Player {
+                character_name,
+                role_desc: next_role,
+                traits: next_traits,
+                is_afk: false,
+                ..prev
+            })
     } else {
-        Player {
+        let p = Player {
             channel_id: msg.channel_id.clone(),
             user_id: msg.user_id.clone(),
             character_name,
@@ -62,10 +96,10 @@ pub fn cmd_join(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result
             inventory: scenario.player_defaults.starter_items,
             status_note: "精神饱满".to_string(),
             is_afk: false,
-        }
+        };
+        engine.store.upsert_player(&p)?;
+        p
     };
-
-    engine.store.upsert_player(&player)?;
     engine.emit_event(RoomEvent::RoomUpdated {
         channel_id: msg.channel_id.clone(),
         turn_number: room.turn_number,

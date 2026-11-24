@@ -3,15 +3,17 @@ use std::sync::Arc;
 use anyhow::Result;
 use chrono::Utc;
 use tavern_domain::{
-    CardTheme, EngineResponse, PendingAction, RoomEvent, RoomSnapshot, Scenario, TurnPhase,
-    TurnRecord, apply_dm_reply, format_batched_actions,
+    CardTheme, EngineResponse, PendingAction, RoomEvent, RoomSnapshot, TurnPhase, TurnRecord,
+    apply_dm_reply, format_batched_actions,
 };
 use tracing::{info, warn};
 
+use crate::commands::turn_support::{
+    InFlightLlmGuard, check_daily_budget, check_daily_budget_for_slot, schedule_background_summary,
+};
 use crate::engine::GameEngine;
 use crate::ports::RoomStore;
 
-/// RAII guard guaranteeing `Resolving -> Collecting` rollback on ANY error, cancellation, or panic.
 struct ResolvingLeaseGuard {
     store: Arc<dyn RoomStore>,
     channel_id: String,
@@ -51,8 +53,6 @@ impl Drop for ResolvingLeaseGuard {
     }
 }
 
-/// Executes turn settlement using an explicit `Collecting -> Resolving -> Collecting`
-/// state machine + SQLite `state_version` optimistic CAS (ZERO long-lived locks across `.await`).
 pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {
     let Some(room_check) = engine.store.get_room(channel_id)? else {
         return Ok(EngineResponse::Notice {
@@ -73,6 +73,10 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         });
     }
 
+    if let Some(limit_notice) = check_daily_budget(engine)? {
+        return Ok(limit_notice);
+    }
+
     let Some(lease) = engine.store.try_begin_resolving(channel_id)? else {
         return Ok(EngineResponse::Notice {
             title: "⏳ DM 正在结算本轮剧情".to_string(),
@@ -82,7 +86,6 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         });
     };
 
-    // Armed immediately upon acquiring the lease: guarantees rollback on ANY early `?`, cancel, or panic!
     let mut lease_guard = ResolvingLeaseGuard::new(
         engine.store.clone(),
         channel_id.to_string(),
@@ -132,10 +135,25 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         pending_actions: actions.clone(),
     };
 
+    // Reserve an ordered in-flight slot before LLM call so concurrent multi-room bursts
+    // respect daily limits without mutually rejecting each other.
+    let slot = InFlightLlmGuard::acquire(engine.in_flight_llm.clone());
+    if let Some(limit_notice) = check_daily_budget_for_slot(engine, slot.prior_in_flight())? {
+        return Ok(limit_notice);
+    }
+
     let turn_output = engine
         .llm
         .generate_turn(&scenario, &lease.room, &lease.players, &recent_turns, &actions)
         .await?;
+
+    let est_cny = engine.cfg.estimate_usage_cny(&turn_output.usage);
+    if let Err(err) = engine
+        .store
+        .record_usage(channel_id, &turn_output.usage, est_cny)
+    {
+        warn!(channel_id, error = %err, "记录 LLM 消费日志失败");
+    }
 
     info!(
         channel_id,
@@ -143,6 +161,7 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         prompt_tokens = turn_output.usage.prompt_tokens,
         completion_tokens = turn_output.usage.completion_tokens,
         cache_hit_tokens = turn_output.usage.cache_hit_tokens,
+        est_cny,
         "DM 回合生成完成"
     );
 
@@ -177,8 +196,8 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         &updated_players,
         &turn_record,
         lease.target_turn,
+        &effects.direct_messages,
     )?;
-    // Disarm only after commit_turn_cas returns cleanly (either committed or invalidated by newer version)
     lease_guard.disarm();
 
     if !committed {
@@ -196,7 +215,6 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         });
     }
 
-    // Offload rolling summary compression asynchronously so StoryTurn card returns immediately!
     schedule_background_summary(engine, scenario, updated_room.clone());
 
     engine.emit_event(RoomEvent::RoomUpdated {
@@ -216,61 +234,6 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         suggested_actions: dm_reply.suggested_actions,
         direct_messages: effects.direct_messages,
     })
-}
-
-fn schedule_background_summary(
-    engine: &GameEngine,
-    scenario: Scenario,
-    room: tavern_domain::RoomState,
-) {
-    let keep_recent = (engine.cfg.recent_turns_window / 2).max(2) as u32;
-    if room.turn_number < room.summary_upto_turn + engine.cfg.summary_interval_turns
-        || room.turn_number <= keep_recent
-    {
-        return;
-    }
-
-    let target_upto = room.turn_number - keep_recent;
-    if target_upto <= room.summary_upto_turn {
-        return;
-    }
-
-    let store = engine.store.clone();
-    let llm = engine.llm.clone();
-    engine.bg_runner.spawn(Box::pin(async move {
-        let Ok(to_summarize) =
-            store.list_turns_range(&room.channel_id, room.summary_upto_turn, target_upto)
-        else {
-            return;
-        };
-
-        match llm
-            .summarize_turns(&scenario, &room.summary, &to_summarize)
-            .await
-        {
-            Ok(new_summary) if !new_summary.trim().is_empty() => {
-                match store.update_summary_cas(
-                    &room.channel_id,
-                    room.state_version,
-                    &new_summary,
-                    target_upto,
-                ) {
-                    Ok(true) => info!(
-                        channel_id = %room.channel_id,
-                        upto = target_upto,
-                        "后台已自动压缩历史回合至前情提要"
-                    ),
-                    Ok(false) => warn!(
-                        channel_id = %room.channel_id,
-                        "后台摘要写入时房间版本已更新，跳过过时摘要"
-                    ),
-                    Err(err) => warn!(error = %err, "后台写入摘要失败"),
-                }
-            }
-            Ok(_) => {}
-            Err(err) => warn!(error = %err, "后台自动摘要压缩失败，不影响主线游玩"),
-        }
-    }));
 }
 
 pub fn cmd_undo(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {

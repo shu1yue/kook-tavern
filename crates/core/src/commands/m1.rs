@@ -1,0 +1,227 @@
+use anyhow::Result;
+use tavern_domain::{CardTheme, EngineResponse, IncomingMessage, NarrativeStyle, RoomEvent};
+
+use crate::commands::turn;
+use crate::engine::GameEngine;
+
+pub fn cmd_style(engine: &GameEngine, channel_id: &str, arg: &str) -> Result<EngineResponse> {
+    let Some(room) = engine.store.get_room(channel_id)? else {
+        return Ok(EngineResponse::Notice {
+            title: "ℹ️ 当前频道尚未开团".to_string(),
+            body: "请先 `/start` 开团后再切换叙事档位。".to_string(),
+            theme: CardTheme::Warning,
+            show_actions: false,
+        });
+    };
+    if !room.active {
+        return Ok(EngineResponse::Notice {
+            title: "ℹ️ 当前房间已归档".to_string(),
+            body: "请发送 `/start` 开启新团。".to_string(),
+            theme: CardTheme::Warning,
+            show_actions: false,
+        });
+    }
+
+    let Some(style) = NarrativeStyle::parse(arg) else {
+        return Ok(EngineResponse::Notice {
+            title: "🎙️ 当前叙事档位".to_string(),
+            body: format!(
+                "当前：**{}**\n\n可选切换：\n- `/style voice` — 语音开黑极简档（100~180字，边开麦边一眼扫完）\n- `/style prose` — 纯文字沉浸档（200~420字画面描写）",
+                room.narrative_style.display_label()
+            ),
+            theme: CardTheme::Info,
+            show_actions: false,
+        });
+    };
+
+    engine.store.update_narrative_style(channel_id, style)?;
+    engine.emit_event(RoomEvent::RoomUpdated {
+        channel_id: channel_id.to_string(),
+        turn_number: room.turn_number,
+    });
+
+    Ok(EngineResponse::Notice {
+        title: "✅ 叙事档位已切换".to_string(),
+        body: format!("已切换为：**{}**（下轮结算立刻生效）", style.display_label()),
+        theme: CardTheme::Success,
+        show_actions: true,
+    })
+}
+
+pub async fn cmd_afk(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResponse> {
+    let Some(room) = engine.store.get_room(&msg.channel_id)? else {
+        return Ok(EngineResponse::Notice {
+            title: "ℹ️ 当前频道尚未开团".to_string(),
+            body: "当前频道没有进行中的房间。".to_string(),
+            theme: CardTheme::Warning,
+            show_actions: false,
+        });
+    };
+    if !room.active {
+        return Ok(EngineResponse::Notice {
+            title: "ℹ️ 当前房间已归档".to_string(),
+            body: "请发送 `/start` 开启新团。".to_string(),
+            theme: CardTheme::Warning,
+            show_actions: false,
+        });
+    }
+    let Some(existing) = engine.store.get_player(&msg.channel_id, &msg.user_id)? else {
+        return Ok(EngineResponse::Notice {
+            title: "ℹ️ 你尚未入团".to_string(),
+            body: "你目前不在本局参团名单中。".to_string(),
+            theme: CardTheme::Info,
+            show_actions: false,
+        });
+    };
+
+    let next_afk = !existing.is_afk;
+    let Some(updated) = engine
+        .store
+        .set_player_afk(&msg.channel_id, &msg.user_id, next_afk)?
+    else {
+        return Ok(EngineResponse::Ignore);
+    };
+
+    engine.emit_event(RoomEvent::RoomUpdated {
+        channel_id: msg.channel_id.clone(),
+        turn_number: room.turn_number,
+    });
+
+    if next_afk {
+        // ONLY auto-resolve if room is currently Collecting; during Resolving, return clean AFK confirmation!
+        if room.turn_phase == tavern_domain::TurnPhase::Collecting
+            && engine.cfg.auto_resolve_all_ready
+        {
+            let all_players = engine.store.list_players(&msg.channel_id)?;
+            let active_players: Vec<_> = all_players.iter().filter(|p| !p.is_afk).collect();
+            let pending = engine
+                .store
+                .list_pending_actions(&msg.channel_id, room.turn_number + 1)?;
+            let ready = active_players
+                .iter()
+                .filter(|p| {
+                    pending
+                        .iter()
+                        .any(|a| a.user_id == p.user_id && !a.action_text.trim().is_empty())
+                })
+                .count();
+            if !active_players.is_empty() && ready >= active_players.len() {
+                return turn::resolve_turn(engine, &msg.channel_id).await;
+            }
+        }
+
+        Ok(EngineResponse::Notice {
+            title: format!("💤 【{}】已切换为暂离状态", updated.character_name),
+            body: "自动结算将跳过你的行动进度，不会卡住队友；回来后直接 `/act` 或再敲 `/afk` 即可自动归队！".to_string(),
+            theme: CardTheme::Info,
+            show_actions: true,
+        })
+    } else {
+        Ok(EngineResponse::Notice {
+            title: format!("✨ 【{}】欢迎归队！", updated.character_name),
+            body: "已恢复正常参团状态，现在可以继续提交 `/act` 行动啦。".to_string(),
+            theme: CardTheme::Success,
+            show_actions: true,
+        })
+    }
+}
+
+pub fn cmd_leave(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResponse> {
+    let Some(room) = engine.store.get_room(&msg.channel_id)? else {
+        return Ok(EngineResponse::Notice {
+            title: "ℹ️ 当前频道尚未开团".to_string(),
+            body: "当前没有可退出的房间。".to_string(),
+            theme: CardTheme::Info,
+            show_actions: false,
+        });
+    };
+    match engine.store.remove_player(&msg.channel_id, &msg.user_id)? {
+        Some(removed) => {
+            engine.emit_event(RoomEvent::RoomUpdated {
+                channel_id: msg.channel_id.clone(),
+                turn_number: room.turn_number,
+            });
+            Ok(EngineResponse::Notice {
+                title: format!("👋 【{}】已退出本局冒险", removed.character_name),
+                body: "已移除角色并清理待提交行动；随时可再发 `/join` 重新加入。".to_string(),
+                theme: CardTheme::Info,
+                show_actions: true,
+            })
+        }
+        None => Ok(EngineResponse::Notice {
+            title: "ℹ️ 你不在当前参团名单中".to_string(),
+            body: "无需重复退出。".to_string(),
+            theme: CardTheme::Info,
+            show_actions: false,
+        }),
+    }
+}
+
+pub fn cmd_whisper(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResponse> {
+    let whispers = engine
+        .store
+        .list_player_whispers(&msg.channel_id, &msg.user_id, 5)?;
+
+    let body = if whispers.is_empty() {
+        "你在本频道暂时还没有收到过 DM 的秘密纸条。".to_string()
+    } else {
+        whispers
+            .into_iter()
+            .map(|w| format!("**[第 {} 回合]**\n{}", w.turn_number, w.content))
+            .collect::<Vec<_>>()
+            .join("\n\n---\n\n")
+    };
+
+    Ok(EngineResponse::PrivateNotice {
+        user_id: msg.user_id.clone(),
+        title: "🤫 你的专属秘密纸条档案（仅本人可见）".to_string(),
+        body,
+    })
+}
+
+pub fn cmd_cost(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {
+    let room_usage = engine.store.get_room_usage(channel_id)?;
+    let today = engine.store.get_today_usage()?;
+
+    let call_limit_str = if engine.cfg.daily_max_llm_calls == 0 {
+        "不限".to_string()
+    } else {
+        engine.cfg.daily_max_llm_calls.to_string()
+    };
+    let cny_limit_str = if engine.cfg.daily_max_cny <= 0.0 {
+        "不限".to_string()
+    } else {
+        format!("{:.2} 元", engine.cfg.daily_max_cny)
+    };
+
+    let body = format!(
+        "**本频道累计统计**\n\
+         - 模型调用次数：**{}** 次\n\
+         - 输入 Tokens：**{}**（缓存命中 **{}** ｜ 未命中 **{}**）\n\
+         - 前缀缓存命中率：**{:.1}%**\n\
+         - 输出 Tokens：**{}**\n\
+         - 预估花费：**{:.4} 元**\n\n\
+         **今日全局安全配额（{} UTC）**\n\
+         - 今日调用：**{} / {}** 次\n\
+         - 今日预估花费：**{:.4} 元 / {}**",
+        room_usage.total_calls,
+        room_usage.prompt_tokens,
+        room_usage.cache_hit_tokens,
+        room_usage.cache_miss_tokens,
+        room_usage.cache_hit_ratio_pct(),
+        room_usage.completion_tokens,
+        room_usage.estimated_cny,
+        today.day_utc,
+        today.calls,
+        call_limit_str,
+        today.estimated_cny,
+        cny_limit_str
+    );
+
+    Ok(EngineResponse::Notice {
+        title: "💰 DeepSeek 消费与缓存命中看板".to_string(),
+        body,
+        theme: CardTheme::Info,
+        show_actions: false,
+    })
+}

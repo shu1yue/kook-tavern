@@ -2,7 +2,8 @@ use anyhow::Result;
 use tavern_core::{BoxFuture, LlmProvider};
 use tavern_domain::{
     DmStructuredReply, DmTurnOutput, LlmUsage, PendingAction, Player, PrivateWhisper, RoomState,
-    Scenario, StatePatch, TurnRecord, format_batched_actions, match_dynamic_worldbook,
+    Scenario, StatePatch, SummaryOutput, TurnRecord, format_batched_actions,
+    match_dynamic_worldbook,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -102,7 +103,12 @@ impl LlmProvider for MockLlmProvider {
 
             Ok(DmTurnOutput {
                 reply,
-                usage: LlmUsage::default(),
+                usage: LlmUsage {
+                    prompt_tokens: 1200,
+                    completion_tokens: 240,
+                    cache_hit_tokens: 800,
+                    cache_miss_tokens: 400,
+                },
             })
         })
     }
@@ -112,7 +118,7 @@ impl LlmProvider for MockLlmProvider {
         _scenario: &'a Scenario,
         existing_summary: &'a str,
         turns: &'a [TurnRecord],
-    ) -> BoxFuture<'a, Result<String>> {
+    ) -> BoxFuture<'a, Result<SummaryOutput>> {
         Box::pin(async move {
             let titles: Vec<String> = turns
                 .iter()
@@ -123,7 +129,10 @@ impl LlmProvider for MockLlmProvider {
                 out.push('\n');
             }
             out.push_str(&format!("【阶段摘要】历经：{}", titles.join(" → ")));
-            Ok(out)
+            Ok(SummaryOutput {
+                summary: out,
+                usage: LlmUsage::default(),
+            })
         })
     }
 }
