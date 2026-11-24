@@ -45,6 +45,7 @@ pub fn render_plain_fallback(resp: &EngineResponse, include_whispers: bool) -> S
     match resp {
         EngineResponse::Ignore => String::new(),
         EngineResponse::Notice { title, body, .. } => format!("**{title}**\n{body}"),
+        EngineResponse::PrivateNotice { title, body, .. } => format!("**{title}**\n{body}"),
         EngineResponse::StoryTurn {
             turn_number,
             scene_title,

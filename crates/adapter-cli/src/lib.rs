@@ -73,7 +73,7 @@ pub async fn run_local_cli(engine: GameEngine, channel_id: String, mock_mode: bo
                 stdout.flush().await?;
             }
             match engine
-                .handle_button(&channel_id, &uid, &current_speaker, &value)
+                .handle_button_in_guild(Some("local_guild"), &channel_id, &uid, &current_speaker, &value)
                 .await
             {
                 Ok(resp) => print_response(&mut stdout, &resp).await?,
@@ -167,6 +167,17 @@ async fn print_response(stdout: &mut io::Stdout, resp: &EngineResponse) -> Resul
         EngineResponse::Notice { title, body, .. } => {
             let out = format!(
                 "\n┌──────────────────────────────────────────────────────────\n│ {title}\n├──────────────────────────────────────────────────────────\n{}\n└──────────────────────────────────────────────────────────\n\n",
+                indent_lines(body)
+            );
+            stdout.write_all(out.as_bytes()).await?;
+        }
+        EngineResponse::PrivateNotice {
+            user_id,
+            title,
+            body,
+        } => {
+            let out = format!(
+                "\n┌── 🔒 仅对 {user_id} 可见 ─────────────────────────────────\n│ {title}\n├──────────────────────────────────────────────────────────\n{}\n└──────────────────────────────────────────────────────────\n\n",
                 indent_lines(body)
             );
             stdout.write_all(out.as_bytes()).await?;

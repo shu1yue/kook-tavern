@@ -3,9 +3,25 @@ use tavern_domain::EngineResponse;
 
 use crate::plain::format_party_block;
 
+pub fn thinking_placeholder_card_json() -> String {
+    json!([{
+        "type": "card",
+        "theme": "secondary",
+        "size": "lg",
+        "modules": [{
+            "type": "section",
+            "text": {
+                "type": "kmarkdown",
+                "content": "⏳ **DM 正在翻阅模组、推演本轮剧情，请稍候几秒喵…**"
+            }
+        }]
+    }])
+    .to_string()
+}
+
 pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String {
     match resp {
-        EngineResponse::Ignore => "[]".to_string(),
+        EngineResponse::Ignore | EngineResponse::PrivateNotice { .. } => "[]".to_string(),
         EngineResponse::Notice {
             title,
             body,

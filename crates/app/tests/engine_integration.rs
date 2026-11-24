@@ -6,7 +6,7 @@ use anyhow::Result;
 use tavern_core::{AppConfig, BoxFuture, GameEngine, LlmProvider, RoomStore, ScenarioCatalog};
 use tavern_domain::{
     CardTheme, DmStructuredReply, DmTurnOutput, EngineResponse, IncomingMessage, LlmUsage,
-    PendingAction, Player, RoomState, Scenario, TurnRecord,
+    PendingAction, Player, RoomState, Scenario, SummaryOutput, TurnRecord,
 };
 use tavern_infra_llm::MockLlmProvider;
 use tavern_infra_llm::prompts::build_dm_messages;
@@ -39,6 +39,14 @@ fn test_config() -> AppConfig {
         recent_turns_window: 6,
         summary_interval_turns: 4,
         auto_resolve_all_ready: true,
+        allowed_guild_ids: vec![],
+        allowed_channel_ids: vec![],
+        admin_user_ids: vec![],
+        daily_max_llm_calls: 200,
+        daily_max_cny: 20.0,
+        price_cache_hit_cny_per_m: 0.2,
+        price_cache_miss_cny_per_m: 2.0,
+        price_output_cny_per_m: 3.0,
     }
 }
 
@@ -94,9 +102,14 @@ impl LlmProvider for ControlledSlowLlm {
         _scenario: &'a Scenario,
         existing_summary: &'a str,
         _turns: &'a [TurnRecord],
-    ) -> BoxFuture<'a, Result<String>> {
+    ) -> BoxFuture<'a, Result<SummaryOutput>> {
         let s = existing_summary.to_string();
-        Box::pin(async move { Ok(s) })
+        Box::pin(async move {
+            Ok(SummaryOutput {
+                summary: s,
+                usage: LlmUsage::default(),
+            })
+        })
     }
 }
 
@@ -234,6 +247,7 @@ fn external_prompts_hot_load_from_disk() {
     let now = chrono::Utc::now();
     let room = RoomState {
         channel_id: "c1".into(),
+        guild_id: "g1".into(),
         scenario_id: "ember_tavern".into(),
         title: "余烬酒馆".into(),
         location: "大厅".into(),
@@ -243,6 +257,7 @@ fn external_prompts_hot_load_from_disk() {
         turn_phase: tavern_domain::TurnPhase::Collecting,
         chat_mode: tavern_domain::ChatMode::Strict,
         narrative_style: tavern_domain::NarrativeStyle::Voice,
+        gm_user_id: "u1".into(),
         web_token: "t".into(),
         clues: vec![],
         summary: String::new(),

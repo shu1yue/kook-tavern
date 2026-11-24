@@ -1,4 +1,5 @@
 pub mod exporter;
+pub mod m1_ops;
 pub mod mappers;
 pub mod migrations;
 pub mod repo;

@@ -164,6 +164,7 @@ mod tests {
         let now = Utc::now();
         let mut room = RoomState {
             channel_id: "c1".into(),
+            guild_id: "g1".into(),
             scenario_id: "s1".into(),
             title: "T".into(),
             location: "Loc".into(),
@@ -173,6 +174,7 @@ mod tests {
             turn_phase: TurnPhase::Collecting,
             chat_mode: ChatMode::Strict,
             narrative_style: NarrativeStyle::Prose,
+            gm_user_id: "u1".into(),
             web_token: "secret_tok".into(),
             clues: vec![],
             summary: String::new(),

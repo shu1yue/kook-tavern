@@ -113,7 +113,7 @@ pub fn roll_dice_with_rng<R: Rng + ?Sized>(
     };
     let sides: i32 = caps
         .get(2)
-        .unwrap()
+        .ok_or_else(|| DomainError::InvalidDice("缺少骰子面数".into()))?
         .as_str()
         .parse::<i32>()
         .map_err(|_| DomainError::InvalidDice("骰子面数超出范围".into()))?;

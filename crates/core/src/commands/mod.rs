@@ -1,15 +1,36 @@
 pub mod export;
+pub mod gm;
+pub mod m1;
 pub mod party;
 pub mod party_helpers;
 pub mod room;
 pub mod turn;
+pub mod turn_support;
 
 use anyhow::Result;
-use tavern_domain::{ChatMode, EngineResponse, IncomingMessage};
+use tavern_domain::{ChatMode, EngineResponse, IncomingMessage, TurnPhase};
+use tracing::debug;
 
 use crate::engine::GameEngine;
 
 pub async fn dispatch_message(engine: &GameEngine, msg: IncomingMessage) -> Result<EngineResponse> {
+    if msg.is_direct {
+        if !engine.cfg.is_dm_allowed(&msg.user_id) {
+            debug!(user_id = %msg.user_id, "私聊拦截：白名单开启时仅管理员允许私聊互动");
+            return Ok(EngineResponse::Ignore);
+        }
+    } else if !engine
+        .cfg
+        .is_scope_allowed(msg.guild_id.as_deref(), &msg.channel_id)
+    {
+        debug!(
+            guild_id = ?msg.guild_id,
+            channel_id = %msg.channel_id,
+            "白名单拦截：忽略非授权服务器/频道消息"
+        );
+        return Ok(EngineResponse::Ignore);
+    }
+
     let trimmed = msg.content.trim();
     if trimmed.is_empty() {
         return Ok(EngineResponse::Ignore);
@@ -33,8 +54,6 @@ pub async fn dispatch_message(engine: &GameEngine, msg: IncomingMessage) -> Resu
         if let Some(resp) = match_known_command(engine, &msg, &cmd, arg).await? {
             return Ok(resp);
         }
-        // Only hard-ignore unknown commands starting with `/` or `／`;
-        // in Roleplay mode, sentences starting with `...` / `！` / `。` / `、` fall through to IC!
         if strict_slash {
             return Ok(EngineResponse::Ignore);
         }
@@ -74,10 +93,16 @@ async fn match_known_command(
         "go" | "resolve" | "next" | "结算" => turn::resolve_turn(engine, &msg.channel_id).await?,
         "status" | "st" | "状态" => room::cmd_status(engine, &msg.channel_id)?,
         "mode" | "模式" => room::cmd_mode(engine, &msg.channel_id, arg)?,
+        "style" | "风格" | "档位" => m1::cmd_style(engine, &msg.channel_id, arg)?,
+        "afk" | "暂离" | "摸鱼" => m1::cmd_afk(engine, msg).await?,
+        "leave" | "quit" | "退团" => m1::cmd_leave(engine, msg)?,
+        "whisper" | "纸条" | "秘密" => m1::cmd_whisper(engine, msg)?,
+        "cost" | "账单" | "费用" => m1::cmd_cost(engine, &msg.channel_id)?,
+        "gm" | "房主" => gm::cmd_gm(engine, msg, arg)?,
         "undo" | "回档" => turn::cmd_undo(engine, &msg.channel_id)?,
         "summary" | "recap" | "前情" => room::cmd_summary(engine, &msg.channel_id)?,
         "export" | "log" | "导出" => export::cmd_export(engine, &msg.channel_id)?,
-        "reset" | "end" | "结团" => room::cmd_reset(engine, &msg.channel_id)?,
+        "reset" | "end" | "结团" => room::cmd_reset(engine, msg)?,
         _ => return Ok(None),
     };
     Ok(Some(resp))
@@ -85,14 +110,23 @@ async fn match_known_command(
 
 pub async fn dispatch_button(
     engine: &GameEngine,
+    guild_id: Option<&str>,
     channel_id: &str,
     value: &str,
 ) -> Result<EngineResponse> {
+    // KOOK `message_btn_click` omits `guild_id`; verify against the room's authoritative stored `guild_id`!
+    let effective_guild = resolve_authoritative_guild(engine, guild_id, channel_id)?;
+    if !engine
+        .cfg
+        .is_scope_allowed(effective_guild.as_deref(), channel_id)
+    {
+        return Ok(EngineResponse::Ignore);
+    }
+
     let parts: Vec<&str> = value.splitn(3, ':').collect();
     if parts.len() < 2 || parts[0] != "tavern" {
         return Ok(EngineResponse::Ignore);
     }
-    // Never allow forged button payloads from another channel to mutate a different channel's room!
     if let Some(payload_chan) = parts.get(2)
         && !payload_chan.is_empty()
         && *payload_chan != channel_id
@@ -108,14 +142,137 @@ pub async fn dispatch_button(
     }
 }
 
-/// Returns `(is_strict_slash, remaining_body)`.
+fn resolve_authoritative_guild(
+    engine: &GameEngine,
+    provided_guild: Option<&str>,
+    channel_id: &str,
+) -> Result<Option<String>> {
+    if let Some(g) = provided_guild.filter(|s| !s.is_empty()) {
+        return Ok(Some(g.to_string()));
+    }
+    Ok(engine
+        .store
+        .get_room(channel_id)?
+        .map(|r| r.guild_id)
+        .filter(|s| !s.is_empty()))
+}
+
+pub fn will_likely_resolve_turn(
+    engine: &GameEngine,
+    guild_id: Option<&str>,
+    channel_id: &str,
+    user_id: &str,
+    content: &str,
+    is_direct: bool,
+) -> bool {
+    if is_direct {
+        if !engine.cfg.is_dm_allowed(user_id) {
+            return false;
+        }
+    } else {
+        let eff_guild = resolve_authoritative_guild(engine, guild_id, channel_id)
+            .ok()
+            .flatten();
+        if !engine
+            .cfg
+            .is_scope_allowed(eff_guild.as_deref(), channel_id)
+        {
+            return false;
+        }
+    }
+
+    if turn_support::is_daily_budget_exhausted(engine) {
+        return false;
+    }
+
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let Ok(Some(room)) = engine.store.get_room(channel_id) else {
+        return false;
+    };
+    if !room.active || room.turn_phase == TurnPhase::Resolving {
+        return false;
+    }
+
+    let mut is_afk_toggle = false;
+    if let Some((_, body)) = strip_command_prefix(trimmed) {
+        let mut parts = body.splitn(2, char::is_whitespace);
+        let cmd = parts.next().unwrap_or("").to_ascii_lowercase();
+        let arg = parts.next().unwrap_or("").trim();
+        if matches!(cmd.as_str(), "go" | "resolve" | "next" | "结算") {
+            return engine
+                .store
+                .list_pending_actions(channel_id, room.turn_number + 1)
+                .map(|v| !v.is_empty())
+                .unwrap_or(false);
+        }
+        if matches!(cmd.as_str(), "afk" | "暂离" | "摸鱼") {
+            is_afk_toggle = true;
+        } else if matches!(cmd.as_str(), "act" | "a" | "行动") {
+            if arg.is_empty() {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    } else if let Some(rest) = trimmed
+        .strip_prefix('>')
+        .or_else(|| trimmed.strip_prefix('》'))
+    {
+        if rest.trim().is_empty() {
+            return false;
+        }
+    } else if room.chat_mode != ChatMode::Roleplay
+        || trimmed.starts_with('(')
+        || trimmed.starts_with('（')
+        || trimmed.starts_with("//")
+    {
+        return false;
+    }
+
+    if !engine.cfg.auto_resolve_all_ready {
+        return false;
+    }
+    let Ok(players) = engine.store.list_players(channel_id) else {
+        return false;
+    };
+    if is_afk_toggle {
+        // Only triggers auto-resolve if caller is currently non-AFK and all other active players are ready
+        let caller_active = players
+            .iter()
+            .any(|p| p.user_id == user_id && !p.is_afk);
+        if !caller_active {
+            return false;
+        }
+    }
+    let active_others: Vec<_> = players
+        .iter()
+        .filter(|p| !p.is_afk && p.user_id != user_id)
+        .collect();
+    if active_others.is_empty() {
+        return !is_afk_toggle;
+    }
+    let Ok(pending) = engine
+        .store
+        .list_pending_actions(channel_id, room.turn_number + 1)
+    else {
+        return false;
+    };
+    active_others.iter().all(|p| {
+        pending
+            .iter()
+            .any(|a| a.user_id == p.user_id && !a.action_text.trim().is_empty())
+    })
+}
+
 pub fn strip_command_prefix(input: &str) -> Option<(bool, &str)> {
     if let Some(rest) = input
         .strip_prefix('/')
         .or_else(|| input.strip_prefix('／'))
     {
         let body = rest.trim();
-        // Keep `//` as OOC comment rather than empty slash command
         if !body.is_empty() && !body.starts_with('/') {
             return Some((true, body));
         }

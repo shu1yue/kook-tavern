@@ -147,6 +147,8 @@ pub struct Scenario {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct RoomState {
     pub channel_id: String,
+    #[serde(default)]
+    pub guild_id: String,
     pub scenario_id: String,
     pub title: String,
     pub location: String,
@@ -160,6 +162,8 @@ pub struct RoomState {
     pub chat_mode: ChatMode,
     #[serde(default)]
     pub narrative_style: NarrativeStyle,
+    #[serde(default)]
+    pub gm_user_id: String,
     #[serde(default)]
     pub web_token: String,
     #[serde(default)]
@@ -186,6 +190,7 @@ impl fmt::Debug for RoomState {
             .field("turn_phase", &self.turn_phase)
             .field("chat_mode", &self.chat_mode)
             .field("narrative_style", &self.narrative_style)
+            .field("gm_user_id", &self.gm_user_id)
             .field("web_token", &"***REDACTED***")
             .field("clues_len", &self.clues.len())
             .field("active", &self.active)
@@ -246,6 +251,49 @@ pub struct RoomSnapshot {
     pub room: RoomState,
     pub players: Vec<Player>,
     pub pending_actions: Vec<PendingAction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhisperRecord {
+    pub id: i64,
+    pub channel_id: String,
+    pub turn_number: u32,
+    pub user_id: String,
+    pub player_name: String,
+    pub content: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UsageSummary {
+    pub total_calls: u64,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub cache_hit_tokens: u64,
+    pub cache_miss_tokens: u64,
+    pub estimated_cny: f64,
+}
+
+impl UsageSummary {
+    pub fn cache_hit_ratio_pct(&self) -> f64 {
+        let total = self.cache_hit_tokens + self.cache_miss_tokens;
+        if total == 0 {
+            if self.prompt_tokens == 0 {
+                0.0
+            } else {
+                (self.cache_hit_tokens as f64 / self.prompt_tokens as f64) * 100.0
+            }
+        } else {
+            (self.cache_hit_tokens as f64 / total as f64) * 100.0
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DailyUsage {
+    pub day_utc: String,
+    pub calls: u64,
+    pub estimated_cny: f64,
 }
 
 pub fn format_batched_actions(actions: &[PendingAction]) -> String {

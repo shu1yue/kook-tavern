@@ -88,11 +88,8 @@ pub fn build_dm_messages(
         content: system_prompt,
     }];
 
-    if recent_turns.is_empty() {
-        messages.push(ChatMessage {
-            role: "assistant".to_string(),
-            content: format!("【开场场景】\n{}", scenario.opening_scene.trim()),
-        });
+    let opening_recap = if recent_turns.is_empty() {
+        Some(scenario.opening_scene.trim())
     } else {
         for turn in recent_turns {
             messages.push(ChatMessage {
@@ -104,9 +101,11 @@ pub fn build_dm_messages(
                 content: format!("【{}】\n{}", turn.scene_title, turn.narrative),
             });
         }
-    }
+        None
+    };
 
-    let dynamic_block = format_dynamic_turn_prompt(room, players, &dynamic_lore, &batched_input);
+    let dynamic_block =
+        format_dynamic_turn_prompt(room, players, &dynamic_lore, &batched_input, opening_recap);
     messages.push(ChatMessage {
         role: "user".to_string(),
         content: dynamic_block,
@@ -157,6 +156,7 @@ fn format_dynamic_turn_prompt(
     players: &[Player],
     dynamic_lore: &[&tavern_domain::WorldbookEntry],
     batched_input: &str,
+    opening_recap: Option<&str>,
 ) -> String {
     let party_block = if players.is_empty() {
         "（暂无正式建卡角色，按冒险者小队统一描写）".to_string()
@@ -224,8 +224,12 @@ fn format_dynamic_turn_prompt(
         room.summary.clone()
     };
 
+    let opening_section = opening_recap
+        .map(|o| format!("【刚刚发生的开场场景】\n{o}\n\n"))
+        .unwrap_or_default();
+
     format!(
-        r#"【当前权威世界状态（只读快照）】
+        r#"{opening_section}【当前权威世界状态（只读快照）】
 - 即将结算：第 {next_turn} 回合
 - 当前地点：{location}
 - 当前时间：{world_time}

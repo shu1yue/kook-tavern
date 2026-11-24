@@ -22,12 +22,13 @@ pub fn cmd_help() -> EngineResponse {
         "- `/status` — 查看当前场景、全员 HP/SAN/背包、线索与本轮提交进度",
         "",
         "**秩序与工具**",
-        "- `/mode strict` — 严格模式：仅 `/act` 或 `>` 进入剧情，平时吹水全屏蔽",
-        "- `/mode rp` — 沉浸模式：直接打字即行动，以 `(`、`（` 或 `//` 开头视为场外 OOC",
-        "- `/undo` — 撤销上一轮结算并完整回档状态（防 AI 抽风）",
-        "- `/summary` — 查看当前前情提要",
-        "- `/export` — 导出整场跑团记录为 Markdown 文件",
-        "- `/reset` — 清空当前频道房间重新开团",
+        "- `/style voice` / `/style prose` — 切换语音开黑极简档（100~180字）或纯文字沉浸档",
+        "- `/mode strict` / `/mode rp` — 切换严格指令模式或沉浸 RP 模式（`(`/`（`/`//` 视为 OOC）",
+        "- `/afk` / `/leave` — 暂离不卡全队自动结算 / 退出本局",
+        "- `/whisper` — 仅本人可见地补领查看所有 DM 秘密纸条",
+        "- `/cost` — 查看本房 DeepSeek 前缀缓存命中率、估算费用与今日限额",
+        "- `/gm help` — 房主手动兜底修正血量/理智/道具/线索",
+        "- `/undo` / `/summary` / `/export` / `/reset` — 回档 / 前情 / 导出战报 / 结团",
     ]
     .join("\n");
 
@@ -109,6 +110,7 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
     let now = Utc::now();
     let room = RoomState {
         channel_id: msg.channel_id.clone(),
+        guild_id: msg.guild_id.clone().unwrap_or_default(),
         scenario_id: scenario.id.clone(),
         title: scenario.name.clone(),
         location: scenario.initial_location.clone(),
@@ -118,6 +120,7 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         turn_phase: TurnPhase::Collecting,
         chat_mode: ChatMode::Strict,
         narrative_style: NarrativeStyle::Prose,
+        gm_user_id: msg.user_id.clone(),
         web_token: generate_web_token(),
         clues: Vec::new(),
         summary: String::new(),
@@ -258,27 +261,33 @@ pub fn cmd_summary(engine: &GameEngine, channel_id: &str) -> Result<EngineRespon
     })
 }
 
-pub fn cmd_reset(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {
-    let deleted = engine.store.delete_room(channel_id)?;
-    if deleted {
-        engine.emit_event(RoomEvent::RoomReset {
-            channel_id: channel_id.to_string(),
-        });
-        Ok(EngineResponse::Notice {
-            title: "🧹 房间已结团清空".to_string(),
-            body: "当前频道的冒险档案已归档清空，随时可发 `/start [剧本ID]` 开启下一场故事！"
-                .to_string(),
-            theme: CardTheme::Success,
-            show_actions: false,
-        })
-    } else {
-        Ok(EngineResponse::Notice {
+pub fn cmd_reset(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResponse> {
+    let Some(room) = engine.store.get_room(&msg.channel_id)? else {
+        return Ok(EngineResponse::Notice {
             title: "ℹ️ 当前频道没有进行中的房间".to_string(),
             body: "直接发送 `/start` 即可开团。".to_string(),
             theme: CardTheme::Info,
             show_actions: false,
-        })
+        });
+    };
+    if !engine.cfg.is_gm_or_admin(&msg.user_id, &room.gm_user_id) {
+        return Ok(EngineResponse::Notice {
+            title: "🔒 权限不足".to_string(),
+            body: "只有本局房主（开团人）或管理员才能执行 `/reset` 结团清空房间喵。".to_string(),
+            theme: CardTheme::Danger,
+            show_actions: false,
+        });
     }
+    engine.store.delete_room(&msg.channel_id)?;
+    engine.emit_event(RoomEvent::RoomReset {
+        channel_id: msg.channel_id.clone(),
+    });
+    Ok(EngineResponse::Notice {
+        title: "🧹 房间已结团清空".to_string(),
+        body: "当前频道的冒险档案已归档清空，随时可发 `/start [剧本ID]` 开启下一场故事！".to_string(),
+        theme: CardTheme::Success,
+        show_actions: false,
+    })
 }
 
 fn generate_web_token() -> String {
