@@ -256,3 +256,198 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
         .unwrap();
     assert_eq!(dm_api.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn player_floating_hud_enforces_hmac_isolation_spoiler_safety_and_live_sse() {
+    let (addr, store, bus, state) = start_test_server().await;
+    let base = format!("http://{addr}");
+    let http = reqwest::Client::new();
+
+    let now = Utc::now();
+    let room = RoomState {
+        channel_id: "chan_hud_1".into(),
+        guild_id: "g_hud".into(),
+        scenario_id: "ember_tavern".into(),
+        title: "余烬酒馆与迷雾委托".into(),
+        location: "余烬酒馆大厅".into(),
+        world_time: "21:16".into(),
+        turn_number: 2,
+        state_version: 3,
+        turn_phase: TurnPhase::Collecting,
+        chat_mode: ChatMode::Roleplay,
+        narrative_style: NarrativeStyle::Prose,
+        gm_user_id: "gm_hud".into(),
+        web_token: "room_tok_hud_1".into(),
+        clues: vec!["老雷恩年轻时是旧钟楼守望团首席机械师".into()],
+        npc_states: vec![NpcState {
+            name: "老雷恩".into(),
+            attitude: "信任".into(),
+            status: "交出酒窖钥匙与防雾铜哨".into(),
+            location: "余烬酒馆大厅".into(),
+        }],
+        suggested_actions: vec![],
+        current_act: 1,
+        world_flags: vec!["已获得老雷恩信任".into()],
+        ended_id: None,
+        ended_title: None,
+        bulletins: vec![],
+        check_system: tavern_domain::CheckSystem::TwoD6,
+        last_rest_turn: 0,
+        summary: String::new(),
+        summary_upto_turn: 0,
+        active: true,
+        created_at: now,
+        updated_at: now,
+    };
+    store.upsert_room(&room).unwrap();
+
+    let mut seeded_players = Vec::new();
+    for (uid, name, role) in [
+        ("u_alice", "魂芳白", "星象神秘学者"),
+        ("u_bob", "铁手阿凯", "齿轮机械师"),
+    ] {
+        let p = Player {
+            channel_id: "chan_hud_1".into(),
+            user_id: uid.into(),
+            character_name: name.into(),
+            role_desc: role.into(),
+            traits: vec!["博学".into()],
+            hp: 12,
+            max_hp: 12,
+            san: 10,
+            max_san: 10,
+            inventory: vec!["星图黄铜罗盘".into()],
+            status_note: "精神集中".into(),
+            is_afk: false,
+            stats: Default::default(),
+            location: "余烬酒馆大厅".into(),
+            dnd: Default::default(),
+        };
+        store.upsert_player(&p).unwrap();
+        seeded_players.push(p);
+    }
+    let lease = store.try_begin_resolving("chan_hud_1").unwrap().unwrap();
+    let snap = tavern_domain::RoomSnapshot {
+        room: lease.room.clone(),
+        players: seeded_players.clone(),
+        pending_actions: vec![],
+    };
+    let mut updated_room = lease.room.clone();
+    updated_room.turn_number = 2;
+    updated_room.turn_phase = TurnPhase::Collecting;
+    let turn_rec = tavern_domain::TurnRecord {
+        id: 0,
+        channel_id: "chan_hud_1".into(),
+        turn_number: 2,
+        batched_input: "魂芳白：查看柜台".into(),
+        scene_title: "独眼酒保的实话".into(),
+        narrative: "老雷恩推过来一把黄铜钥匙，门外传来三声轻敲。".into(),
+        state_summary: "获得酒窖钥匙".into(),
+        location: "余烬酒馆大厅".into(),
+        world_time: "21:16".into(),
+        created_at: now,
+    };
+    let whispers = vec![
+        tavern_domain::DirectMessageOut {
+            user_id: "u_alice".into(),
+            player_name: "魂芳白".into(),
+            content: "ALICE_ONLY_BELLTOWER_SECRET".into(),
+        },
+        tavern_domain::DirectMessageOut {
+            user_id: "u_bob".into(),
+            player_name: "铁手阿凯".into(),
+            content: "BOB_ONLY_CELLAR_SECRET".into(),
+        },
+    ];
+    assert!(
+        store
+            .commit_turn_cas(
+                lease.expected_version,
+                &snap,
+                &updated_room,
+                &seeded_players,
+                &turn_rec,
+                2,
+                &whispers,
+            )
+            .unwrap()
+    );
+
+    let alice_tok = tavern_core::hud_token::sign_hud_token(
+        &state.hud_secret,
+        &room.web_token,
+        "chan_hud_1",
+        "u_alice",
+    );
+
+    // 1. Tampered user_id / raw room.web_token / missing ptoken MUST all get 403 Forbidden!
+    for bad in [
+        format!("{base}/hud/chan_hud_1?u=u_alice&ptoken=room_tok_hud_1"),
+        format!("{base}/api/hud/chan_hud_1?u=u_bob&ptoken={alice_tok}"),
+        format!("{base}/api/hud/chan_hud_1?u=u_alice&ptoken=00000000000000000000000000000000"),
+        format!("{base}/api/hud/chan_hud_1/events?u=u_bob&ptoken={alice_tok}"),
+    ] {
+        let r = http.get(&bad).send().await.unwrap();
+        assert_eq!(r.status(), StatusCode::FORBIDDEN, "expected 403 for {bad}");
+    }
+
+    // 2. Valid signed HUD page & API return Alice's whispers, cross-referenced NPC dossier,
+    //    spoiler-safe `always_active` glossary, and NEVER Bob's whisper or hidden worldbook secrets!
+    let hud_html = http
+        .get(format!("{base}/hud/chan_hud_1?u=u_alice&ptoken={alice_tok}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(hud_html.status(), StatusCode::OK);
+    assert!(hud_html.text().await.unwrap().contains("documentPictureInPicture"));
+
+    let hud_api = http
+        .get(format!("{base}/api/hud/chan_hud_1?u=u_alice&ptoken={alice_tok}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(hud_api.status(), StatusCode::OK);
+    let body = hud_api.text().await.unwrap();
+    assert!(body.contains("魂芳白"));
+    assert!(body.contains("铁手阿凯"));
+    assert!(body.contains("老雷恩"));
+    assert!(body.contains("\"attitude_tier\":\"ally\""));
+    assert!(body.contains("ALICE_ONLY_BELLTOWER_SECRET"));
+    assert!(body.contains("灰烬港与余烬酒馆常识"));
+    // Cross-player & spoiler isolation redlines!
+    assert!(!body.contains("BOB_ONLY_CELLAR_SECRET"));
+    assert!(!body.contains("艾琳的目标是直接炸毁旧钟楼"));
+    assert!(!body.contains("午夜潮汐星仪终局"));
+    assert!(!body.contains("u_alice"));
+    assert!(!body.contains("u_bob"));
+
+    // 3. HUD SSE stream pushes real-time updates cleanly
+    let mut sse = http
+        .get(format!("{base}/api/hud/chan_hud_1/events?u=u_alice&ptoken={alice_tok}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(sse.status(), StatusCode::OK);
+    bus.publish(RoomEvent::RoomUpdated {
+        channel_id: "chan_hud_1".into(),
+        turn_number: 3,
+    });
+    let ev = tokio::time::timeout(Duration::from_secs(3), sse.chunk())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&ev).contains("\"turn\":3"));
+    drop(sse);
+
+    // 4. Rotating `room.web_token` (as on `/reset`) immediately revokes Alice's old HUD token!
+    let mut rotated = room.clone();
+    rotated.web_token = "room_tok_hud_rotated".into();
+    store.upsert_room(&rotated).unwrap();
+    let revoked = http
+        .get(format!("{base}/api/hud/chan_hud_1?u=u_alice&ptoken={alice_tok}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(revoked.status(), StatusCode::FORBIDDEN);
+}

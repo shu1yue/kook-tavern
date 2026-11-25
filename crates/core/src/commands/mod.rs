@@ -146,6 +146,7 @@ async fn match_known_command(
         "whisper" | "纸条" | "秘密" => m1::cmd_whisper(engine, msg)?,
         "cost" | "账单" | "费用" => m1::cmd_cost(engine, &msg.channel_id)?,
         "web" | "看板" | "大屏" => m1::cmd_web(engine, &msg.channel_id)?,
+        "hud" | "浮窗" | "悬浮窗" => m1::cmd_hud(engine, msg)?,
         "reload" | "重载" | "重载剧本" => m1::cmd_reload(engine, msg)?,
         "gm" | "房主" => gm::cmd_gm(engine, msg, arg)?,
         "undo" | "回档" => turn::cmd_undo(engine, &msg.channel_id)?,
@@ -300,7 +301,7 @@ pub(crate) fn is_known_command_name(cmd: &str) -> bool {
             | "me" | "my" | "我的" | "角色卡" | "endings" | "图鉴" | "成就" | "结局"
             | "go" | "resolve" | "next" | "结算" | "status" | "st" | "状态" | "mode" | "模式"
             | "style" | "风格" | "档位" | "afk" | "暂离" | "摸鱼" | "leave" | "quit" | "退团"
-            | "whisper" | "纸条" | "秘密" | "cost" | "账单" | "费用" | "web" | "看板" | "大屏"
+            | "whisper" | "纸条" | "秘密" | "cost" | "账单" | "费用" | "web" | "看板" | "大屏" | "hud" | "浮窗" | "悬浮窗"
             | "reload" | "重载" | "重载剧本" | "gm" | "房主" | "undo" | "回档"
             | "summary" | "recap" | "前情" | "export" | "log" | "导出" | "战报"
             | "reset" | "end" | "结团"

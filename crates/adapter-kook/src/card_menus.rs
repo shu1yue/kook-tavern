@@ -32,7 +32,19 @@ pub fn render_private_card_json(title: &str, body: &str, actions: &[PrivateButto
         let btns: Vec<Value> = actions
             .iter()
             .take(4)
-            .map(|a| btn(a.theme.kook_str(), a.value.clone(), &a.label))
+            .map(|a| {
+                if a.value.starts_with("https://") || a.value.starts_with("http://") {
+                    json!({
+                        "type": "button",
+                        "theme": a.theme.kook_str(),
+                        "value": a.value,
+                        "click": "link",
+                        "text": { "type": "plain-text", "content": truncate_chars(&a.label, 32) }
+                    })
+                } else {
+                    btn(a.theme.kook_str(), a.value.clone(), &a.label)
+                }
+            })
             .collect();
         modules.push(action_group(btns));
     }

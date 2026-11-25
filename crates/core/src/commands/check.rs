@@ -282,22 +282,14 @@ pub fn cmd_me(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRespon
         }
     }
 
-    let whispers = engine
-        .store
-        .list_player_whispers(&msg.channel_id, &msg.user_id, 5)?;
+    let whispers = engine.store.list_player_whispers(&msg.channel_id, &msg.user_id, 5)?;
     if whispers.is_empty() {
         sections.push("🤫 **我的专属秘密纸条**：暂无（单独察觉暗线情报时会自动收进这里，队友不可见）".to_string());
     } else {
-        let w_lines = whispers
-            .iter()
-            .rev()
+        let w_lines = whispers.iter().rev()
             .map(|w| format!("- **第 {} 回合**：{}", w.turn_number, w.content.replace('\n', " ")))
-            .collect::<Vec<_>>()
-            .join("\n");
-        sections.push(format!(
-            "🤫 **我的专属秘密纸条（仅你可见，最近 {} 条）**\n{w_lines}",
-            whispers.len()
-        ));
+            .collect::<Vec<_>>().join("\n");
+        sections.push(format!("🤫 **我的专属秘密纸条（仅你可见，最近 {} 条）**\n{w_lines}", whispers.len()));
     }
 
     let mut actions = Vec::new();
@@ -326,6 +318,13 @@ pub fn cmd_me(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRespon
                 });
             }
         }
+    }
+
+    if let Some(hud_url) = crate::hud_token::build_player_hud_url(&engine.cfg, &room, &msg.user_id) {
+        if actions.len() < 4 {
+            actions.push(PrivateButton { label: "🪟 悬浮角色卡 HUD".into(), value: hud_url.clone(), theme: CardTheme::Info });
+        }
+        sections.push(format!("🪟 **个人实时悬浮 HUD**（含角色、人物关系图、线索与仅你可见的密语，1 秒自动同步）：\n{hud_url}"));
     }
 
     Ok(EngineResponse::PrivateNotice {

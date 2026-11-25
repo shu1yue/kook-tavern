@@ -190,16 +190,8 @@ pub fn cmd_cost(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse>
     let room_usage = engine.store.get_room_usage(channel_id)?;
     let today = engine.store.get_today_usage()?;
 
-    let call_limit_str = if engine.cfg.daily_max_llm_calls == 0 {
-        "不限".to_string()
-    } else {
-        engine.cfg.daily_max_llm_calls.to_string()
-    };
-    let cny_limit_str = if engine.cfg.daily_max_cny <= 0.0 {
-        "不限".to_string()
-    } else {
-        format!("{:.2} 元", engine.cfg.daily_max_cny)
-    };
+    let call_limit_str = if engine.cfg.daily_max_llm_calls == 0 { "不限".into() } else { engine.cfg.daily_max_llm_calls.to_string() };
+    let cny_limit_str = if engine.cfg.daily_max_cny <= 0.0 { "不限".into() } else { format!("{:.2} 元", engine.cfg.daily_max_cny) };
 
     let body = format!(
         "**本频道累计统计**\n\
@@ -321,5 +313,32 @@ pub fn cmd_web(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> 
         ),
         theme: CardTheme::Info,
         show_actions: false,
+    })
+}
+
+pub fn cmd_hud(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResponse> {
+    let Some(room) = engine.store.get_room(&msg.channel_id)? else {
+        return Ok(EngineResponse::PrivateNotice {
+            user_id: msg.user_id.clone(), title: "🪟 个人悬浮 HUD".into(),
+            body: "当前频道还没开团，先开一桌并选好职业再来打开专属悬浮窗喵！".into(), actions: vec![],
+        });
+    };
+    let Some(p) = engine.store.get_player(&msg.channel_id, &msg.user_id)? else {
+        return Ok(EngineResponse::PrivateNotice {
+            user_id: msg.user_id.clone(), title: format!("🪟 《{}》尚未入团", room.title),
+            body: "请先点剧情卡上的职业按钮入团，再开启你的专属悬浮角色卡 HUD 喵！".into(), actions: vec![],
+        });
+    };
+    let Some(url) = crate::hud_token::build_player_hud_url(&engine.cfg, &room, &msg.user_id) else {
+        return Ok(EngineResponse::PrivateNotice {
+            user_id: msg.user_id.clone(), title: "⚙️ 悬浮 HUD 尚未配置公网地址".into(),
+            body: "服务端需配置 `WEB_BIND_ADDR` 与 `WEB_PUBLIC_BASE_URL` 后才可生成专属浮窗链接喵。".into(), actions: vec![],
+        });
+    };
+    Ok(EngineResponse::PrivateNotice {
+        user_id: msg.user_id.clone(),
+        title: format!("🪟 {} 的个人实时悬浮 HUD", p.character_name),
+        body: format!("点下方按钮打开专属悬浮窗（实时同步你的血量/五维/背包/私密纸条 + 人物关系图 + 线索百科，绝不剧透，结团自动失效）：\n\n{url}"),
+        actions: vec![tavern_domain::PrivateButton { label: "🪟 打开悬浮 HUD".into(), value: url, theme: CardTheme::Success }],
     })
 }

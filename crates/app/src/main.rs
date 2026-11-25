@@ -242,7 +242,8 @@ fn build_runtime(cfg: AppConfig, mock_llm: bool) -> Result<BuiltRuntime> {
     let bg_runner = Arc::new(TokioBackgroundRunner::new(8));
     let event_bus = Arc::new(BroadcastEventBus::new(256));
     let web_bind = cfg.web_bind_addr.clone();
-    let web_state = WebState::new(store.clone(), scenarios.clone(), event_bus.sender());
+    let web_state = WebState::new(store.clone(), scenarios.clone(), event_bus.sender())
+        .with_hud_secret(cfg.hud_secret());
 
     let engine = GameEngine::new(cfg, store, scenarios, llm)
         .with_worldbooks(worldbooks)

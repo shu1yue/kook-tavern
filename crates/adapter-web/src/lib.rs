@@ -1,4 +1,5 @@
 mod handlers;
+mod hud_views;
 mod map_view;
 mod security;
 mod views;
@@ -47,6 +48,7 @@ pub struct WebState {
     pub store: Arc<dyn RoomStore>,
     pub scenarios: Arc<dyn ScenarioCatalog>,
     pub events: broadcast::Sender<RoomEvent>,
+    pub hud_secret: [u8; 32],
     pub(crate) rate_limiter: IpRateLimiter,
     pub(crate) sse_permits: Arc<Semaphore>,
 }
@@ -61,9 +63,15 @@ impl WebState {
             store,
             scenarios,
             events,
+            hud_secret: tavern_core::hud_token::derive_hud_secret(None, None, None),
             rate_limiter: IpRateLimiter::default(),
             sse_permits: Arc::new(Semaphore::new(MAX_SSE_CLIENTS)),
         }
+    }
+
+    pub fn with_hud_secret(mut self, secret: [u8; 32]) -> Self {
+        self.hud_secret = secret;
+        self
     }
 
     pub fn available_sse_permits(&self) -> usize {
@@ -79,6 +87,12 @@ pub fn build_router(state: WebState) -> Router {
         .route(
             "/api/room/{channel_id}/events",
             get(handlers::room_events_sse),
+        )
+        .route("/hud/{channel_id}", get(handlers::hud_page))
+        .route("/api/hud/{channel_id}", get(handlers::hud_api))
+        .route(
+            "/api/hud/{channel_id}/events",
+            get(handlers::hud_events_sse),
         )
         .with_state(state)
 }

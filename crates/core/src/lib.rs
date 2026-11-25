@@ -2,6 +2,7 @@ pub mod commands;
 pub mod config;
 pub mod dnd_ports;
 pub mod engine;
+pub mod hud_token;
 pub mod jev_config;
 pub mod ports;
 pub mod workshop_ports;

@@ -140,6 +140,15 @@ impl AppConfig {
         })
     }
 
+    pub fn hud_secret(&self) -> [u8; 32] {
+        let explicit = env_non_empty("HUD_SIGNING_SECRET");
+        crate::hud_token::derive_hud_secret(
+            explicit.as_deref(),
+            self.kook_bot_token.as_deref(),
+            self.llm_api_key.as_deref(),
+        )
+    }
+
     pub fn require_kook_token(&self) -> Result<&str> {
         self.kook_bot_token
             .as_deref()
