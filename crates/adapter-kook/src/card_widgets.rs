@@ -100,6 +100,7 @@ pub fn status_console_rows(channel_id: &str, room: &RoomState) -> [Value; 3] {
         btn("secondary", format!("tavern:menu:{channel_id}"), "📚 换剧本"),
     ]);
     let row3 = action_group(vec![
+        btn("primary", format!("tavern:web:{channel_id}"), "🌐 Web 看板"),
         btn("secondary", format!("tavern:cost:{channel_id}"), "💰 查账单"),
         btn("secondary", format!("tavern:help:{channel_id}"), "📖 玩法指南"),
     ]);

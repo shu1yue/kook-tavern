@@ -123,6 +123,10 @@ pub fn handle_pick_role(
                 &preset.traits,
             )?
             .unwrap_or(existing);
+        engine.emit_event(RoomEvent::RoomUpdated {
+            channel_id: msg.channel_id.clone(),
+            turn_number: room.turn_number,
+        });
         return Ok(EngineResponse::Notice {
             title: format!("🎭 职业已切换：{} · {}", updated.character_name, preset.name),
             body: format!(

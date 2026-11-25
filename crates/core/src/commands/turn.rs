@@ -91,6 +91,10 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         channel_id.to_string(),
         lease.expected_version,
     );
+    engine.emit_event(RoomEvent::RoomUpdated {
+        channel_id: channel_id.to_string(),
+        turn_number: lease.room.turn_number,
+    });
 
     let actions: Vec<PendingAction> = lease
         .actions

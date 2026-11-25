@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Result;
-use tavern_domain::{CardTheme, EngineResponse, RoomState, Scenario};
+use tavern_domain::{CardTheme, EngineResponse, RoomEvent, RoomState, Scenario};
 use tracing::{info, warn};
 
 use crate::engine::GameEngine;
@@ -133,6 +133,10 @@ pub fn schedule_background_summary(engine: &GameEngine, scenario: Scenario, room
                         upto = target_upto,
                         "后台已自动压缩历史回合至前情提要"
                     );
+                    engine_bg.emit_event(RoomEvent::RoomUpdated {
+                        channel_id: room.channel_id.clone(),
+                        turn_number: room.turn_number,
+                    });
                 }
             }
             Err(err) => warn!(error = %err, "后台自动摘要压缩失败，不影响主线游玩"),

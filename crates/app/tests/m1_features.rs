@@ -37,6 +37,8 @@ fn m1_config() -> AppConfig {
         allowed_channel_ids: vec![],
         admin_user_ids: vec!["admin_u".into()],
         export_channel_id: Some("wall_chan_1".into()),
+        web_bind_addr: Some("0.0.0.0:8787".into()),
+        web_public_base_url: Some("https://tavern.example.com".into()),
         daily_max_llm_calls: 2,
         daily_max_cny: 20.0,
         price_cache_hit_cny_per_m: 0.2,
@@ -559,4 +561,16 @@ async fn wave1_three_scenarios_preset_roles_anti_farm_npc_memory_and_wall_export
         .await
         .unwrap();
     assert!(store.get_room("m1_chan").unwrap().unwrap().npc_states.is_empty());
+
+    // M2 `/web` button returns tokenized read-only dashboard URL!
+    let web_resp = engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:web:m1_chan")
+        .await
+        .unwrap();
+    match web_resp {
+        EngineResponse::Notice { body, .. } => {
+            assert!(body.contains("https://tavern.example.com/room/m1_chan?token="));
+        }
+        other => panic!("expected web URL Notice, got {other:?}"),
+    }
 }

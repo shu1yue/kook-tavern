@@ -43,6 +43,8 @@ fn test_config() -> AppConfig {
         allowed_channel_ids: vec![],
         admin_user_ids: vec![],
         export_channel_id: None,
+        web_bind_addr: None,
+        web_public_base_url: None,
         daily_max_llm_calls: 200,
         daily_max_cny: 20.0,
         price_cache_hit_cny_per_m: 0.2,
