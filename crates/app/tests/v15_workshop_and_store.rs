@@ -444,5 +444,18 @@ async fn gate9_red_team_regressions_dos_cooldown_budget_and_menu_order() {
     let p2 = eng_ok.handle_message(msg("ch_g9", "u_pub", "作者", "/workshop publish")).await.unwrap();
     assert!(matches!(p2, EngineResponse::Notice { title, .. } if title.contains("还没有可上架")));
 
+    // 5. v1.6.1: Panel `reset_ask` (2-step RBAC confirm) + `reset_confirm` + `leave` buttons
+    let _ = eng_ok.handle_message(msg("ch_end", "u_gm", "房主", "/start ember_tavern")).await.unwrap();
+    let _ = eng_ok.handle_button_in_guild(Some("g_ws"), "ch_end", "u_p2", "路人", "tavern:pickrole:ch_end:0").await.unwrap();
+    let deny_ask = eng_ok.handle_button_in_guild(Some("g_ws"), "ch_end", "u_p2", "路人", "tavern:reset_ask:ch_end").await.unwrap();
+    assert!(matches!(deny_ask, EngineResponse::PrivateNotice { title, actions, .. } if title.contains("仅房主") && actions.iter().any(|a| a.value == "tavern:leave:ch_end")));
+    let leave_ok = eng_ok.handle_button_in_guild(Some("g_ws"), "ch_end", "u_p2", "路人", "tavern:leave:ch_end").await.unwrap();
+    assert!(matches!(leave_ok, EngineResponse::Notice { title, .. } if title.contains("已退出")));
+    let gm_ask = eng_ok.handle_button_in_guild(Some("g_ws"), "ch_end", "u_gm", "房主", "tavern:reset_ask:ch_end").await.unwrap();
+    assert!(matches!(gm_ask, EngineResponse::PrivateNotice { actions, .. } if actions.iter().any(|a| a.value == "tavern:reset_confirm:ch_end")));
+    let gm_reset = eng_ok.handle_button_in_guild(Some("g_ws"), "ch_end", "u_gm", "房主", "tavern:reset_confirm:ch_end").await.unwrap();
+    assert!(matches!(gm_reset, EngineResponse::Notice { title, .. } if title.contains("结团清空")));
+    assert!(store.get_room("ch_end").unwrap().is_none());
+
     let _ = fs::remove_dir_all(&tmp_dir);
 }

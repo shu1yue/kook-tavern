@@ -280,7 +280,7 @@ fn button_sync_mode(value: &str) -> InPlaceSyncMode {
         "pickrole" | "quickjoin" | "check" | "roll" | "skill" | "pick" | "afk" => {
             InPlaceSyncMode::SilentOnSuccess
         }
-        "lv" | "toggle_mode" | "toggle_style" => InPlaceSyncMode::TempToast,
+        "lv" | "leave" | "toggle_mode" | "toggle_style" => InPlaceSyncMode::TempToast,
         _ => InPlaceSyncMode::PublicCard,
     }
 }

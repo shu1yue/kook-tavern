@@ -175,8 +175,8 @@ pub fn status_console_rows(channel_id: &str, room: &RoomState) -> [Value; 3] {
     let row3 = action_group(vec![
         btn("primary", format!("tavern:web:{channel_id}"), "🌐 Web 看板"),
         btn("warning", format!("tavern:endings:{channel_id}"), "🏆 结局图鉴"),
-        btn("secondary", format!("tavern:cost:{channel_id}"), "💰 查账单"),
-        btn("secondary", format!("tavern:help:{channel_id}"), "📖 玩法指南"),
+        btn("warning", format!("tavern:leave:{channel_id}"), "🚪 退团离桌"),
+        btn("danger", format!("tavern:reset_ask:{channel_id}"), "🛑 结束本局"),
     ]);
     [row1, row2, row3]
 }

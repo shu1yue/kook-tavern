@@ -1,6 +1,7 @@
 use anyhow::Result;
 use tavern_domain::{
-    CardTheme, ChatMode, EngineResponse, IncomingMessage, NarrativeStyle, StatKind, TurnPhase,
+    CardTheme, ChatMode, EngineResponse, IncomingMessage, NarrativeStyle, PrivateButton, StatKind,
+    TurnPhase,
 };
 
 use crate::commands::{
@@ -81,6 +82,9 @@ pub async fn dispatch_button(
         }
         "whisper" => m1::cmd_whisper(engine, &mk_msg("/whisper".into())),
         "afk" => m1::cmd_afk(engine, &mk_msg("/afk".into())).await,
+        "leave" => m1::cmd_leave(engine, &mk_msg("/leave".into())),
+        "reset_ask" => handle_reset_ask(engine, &mk_msg("/reset".into())),
+        "reset_confirm" => room::cmd_reset(engine, &mk_msg("/reset".into())),
         "roll" => {
             let expr = parts.get(3).copied().unwrap_or("");
             if !matches!(expr, "2d6" | "1d100" | "1d20") {
@@ -268,4 +272,54 @@ fn handle_toggle_style(engine: &GameEngine, channel_id: &str) -> Result<EngineRe
         NarrativeStyle::Prose => "voice",
     };
     m1::cmd_style(engine, channel_id, next)
+}
+
+fn handle_reset_ask(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResponse> {
+    let Some(room) = engine.store.get_room(&msg.channel_id)? else {
+        return Ok(EngineResponse::PrivateNotice {
+            user_id: msg.user_id.clone(),
+            title: "ℹ️ 当前频道没有进行中的剧本".into(),
+            body: "房间本来就是空的，随时可以点「📚 换剧本」或发 `/start` 开新桌喵！".into(),
+            actions: vec![PrivateButton {
+                label: "📚 挑选新剧本".into(),
+                value: format!("tavern:menu:{}", msg.channel_id),
+                theme: CardTheme::Success,
+            }],
+        });
+    };
+    if !engine.cfg.is_gm_or_admin(&msg.user_id, &room.gm_user_id) {
+        return Ok(EngineResponse::PrivateNotice {
+            user_id: msg.user_id.clone(),
+            title: "🔒 仅房主或管理员可结束整局".into(),
+            body: format!(
+                "《{}》正在进行中，结束整局清空进度需要由开团房主或管理员操作。\n如果你本人有事想先撤，可以点下方按钮单独退团离桌，不影响队友继续玩喵！",
+                room.title
+            ),
+            actions: vec![PrivateButton {
+                label: "🚪 仅自己退团离桌".into(),
+                value: format!("tavern:leave:{}", msg.channel_id),
+                theme: CardTheme::Warning,
+            }],
+        });
+    }
+    Ok(EngineResponse::PrivateNotice {
+        user_id: msg.user_id.clone(),
+        title: format!("⚠️ 确认结束《{}》并清桌？", room.title),
+        body: format!(
+            "当前进度：第 **{}** 回合。\n确认后将清空本频道的当前冒险进度并撤掉旧卡按钮，随后可直接重新选本开局喵！（若想留纪念，可先点「📜 先发战报墙」）",
+            room.turn_number
+        ),
+        actions: vec![
+            PrivateButton {
+                label: "🛑 确认结束并清桌".into(),
+                value: format!("tavern:reset_confirm:{}", msg.channel_id),
+                theme: CardTheme::Danger,
+            },
+            PrivateButton {
+                label: "📜 先发战报墙".into(),
+                value: format!("tavern:export:{}", msg.channel_id),
+                theme: CardTheme::Success,
+            },
+        ],
+    })
 }
