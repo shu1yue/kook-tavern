@@ -151,6 +151,7 @@ async fn match_known_command(
         "gm" | "房主" => gm::cmd_gm(engine, msg, arg)?,
         "undo" | "回档" => turn::cmd_undo(engine, &msg.channel_id)?,
         "summary" | "recap" | "前情" => room::cmd_summary(engine, &msg.channel_id)?,
+        "resend" | "补发" | "重发" => turn_support::cmd_resend(engine, &msg.channel_id)?,
         "export" | "log" | "导出" | "战报" => {
             export::cmd_export(engine, &msg.channel_id, msg.is_direct)?
         }
@@ -303,7 +304,7 @@ pub(crate) fn is_known_command_name(cmd: &str) -> bool {
             | "style" | "风格" | "档位" | "afk" | "暂离" | "摸鱼" | "leave" | "quit" | "退团"
             | "whisper" | "纸条" | "秘密" | "cost" | "账单" | "费用" | "web" | "看板" | "大屏" | "hud" | "浮窗" | "悬浮窗"
             | "reload" | "重载" | "重载剧本" | "gm" | "房主" | "undo" | "回档"
-            | "summary" | "recap" | "前情" | "export" | "log" | "导出" | "战报"
+            | "summary" | "recap" | "前情" | "resend" | "补发" | "重发" | "export" | "log" | "导出" | "战报"
             | "reset" | "end" | "结团"
     )
 }

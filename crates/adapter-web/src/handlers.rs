@@ -50,7 +50,7 @@ pub async fn healthz() -> impl IntoResponse {
         Json(HealthResp {
             status: "ok",
             service: "kook-tavern-dm",
-            version: "1.7.0",
+            version: "1.7.1",
         }),
     )
 }

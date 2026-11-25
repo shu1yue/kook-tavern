@@ -199,3 +199,59 @@ pub fn record_ending_and_echo(
         newly_unlocked,
     }
 }
+
+/// Re-renders the room's latest saved StoryTurn card cleanly from SQLite (useful if a card was
+/// scrolled far away or blocked by transient platform hiccups).
+pub fn cmd_resend(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {
+    let Some(room) = engine.store.get_room(channel_id)? else {
+        return Ok(EngineResponse::Notice {
+            title: "ℹ️ 当前频道尚未开团".into(),
+            body: "先发 `/start` 或点「📚 换剧本」开启冒险吧喵！".into(),
+            theme: CardTheme::Info,
+            show_actions: false,
+        });
+    };
+    let scenario = engine.scenarios.get(&room.scenario_id);
+    let act_badge = crate::commands::check::format_act_badge(scenario.as_ref(), room.current_act);
+    let latest = engine.store.list_recent_turns(channel_id, 1)?.into_iter().next();
+    let (scene_title, narrative, state_changes, turn_number, location, world_time) = match latest {
+        Some(t) => {
+            let changes = if t.state_summary.trim().is_empty() {
+                Vec::new()
+            } else {
+                t.state_summary.split('；').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+            };
+            (t.scene_title, t.narrative, changes, t.turn_number, t.location, t.world_time)
+        }
+        None => (
+            format!("{} · 序幕", room.title),
+            scenario.as_ref().map(|s| s.opening_scene.trim().to_string()).unwrap_or_default(),
+            Vec::new(),
+            room.turn_number,
+            room.location.clone(),
+            room.world_time.clone(),
+        ),
+    };
+    let ending_reached = room.ended_id.as_ref().map(|eid| EndingBanner {
+        id: eid.clone(),
+        title: room.ended_title.clone().unwrap_or_else(|| eid.clone()),
+        kind: "normal".into(),
+        newly_unlocked: false,
+    });
+    Ok(EngineResponse::StoryTurn {
+        channel_id: room.channel_id,
+        turn_number,
+        scene_title,
+        location,
+        world_time,
+        act_badge,
+        narrative,
+        state_changes,
+        whisper_hints: Vec::new(),
+        suggested_actions: room.suggested_actions,
+        suggested_check: None,
+        world_bulletin: room.bulletins.last().filter(|b| b.turn_number == turn_number).cloned(),
+        ending_reached,
+        direct_messages: Vec::new(),
+    })
+}

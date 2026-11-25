@@ -10,6 +10,7 @@ use crate::card_menus::render_wall_report_card;
 use crate::cards::{chunk_kmarkdown, render_kook_card_json, render_private_card_json};
 use crate::live_cards::{ActiveStoryCard, render_story_turn_card};
 use crate::plain::render_plain_fallback;
+use crate::sanitize::{is_kook_moderation_error, safe_story_turn_fallback, soften_response};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InPlaceSyncMode {
@@ -120,13 +121,7 @@ impl KookClient {
         }
 
         // 4. Cohesive StoryTurn: archive old StoryTurn buttons, send new card with live HUD, cache msg_id!
-        if let EngineResponse::StoryTurn {
-            turn_number,
-            ref ending_reached,
-            ref direct_messages,
-            ..
-        } = resp
-        {
+        if let EngineResponse::StoryTurn { turn_number, ref ending_reached, ref direct_messages, .. } = resp {
             let dms = direct_messages.clone();
             let is_ended = ending_reached.is_some();
             if !is_dm_chan {
@@ -136,35 +131,39 @@ impl KookClient {
                         warn!(channel_id, error = %err, "归档上一张剧情卡按钮失败（不影响新卡发送）");
                     }
                 }
-                let hud_opt = match hud_sync {
-                    HudSync::Live(h) => h,
-                    HudSync::Skip => None,
-                };
+                let hud_opt = match hud_sync { HudSync::Live(h) => h, HudSync::Skip => None };
                 let card_json = render_story_turn_card(&resp, hud_opt, false);
-                match self.send_channel_card_returning_id(channel_id, &card_json).await {
-                    Ok(msg_id) => {
-                        if !msg_id.is_empty() && !is_ended {
-                            self.live_cards().replace(
-                                channel_id,
-                                ActiveStoryCard {
-                                    msg_id,
-                                    turn_number,
-                                    story: Box::new(resp),
-                                },
-                            );
+                let mut delivered = resp;
+                let mut send_res = self.send_channel_card_returning_id(channel_id, &card_json).await;
+                if let Err(ref err) = send_res && is_kook_moderation_error(err) {
+                    warn!(channel_id, error = %err, "剧情卡触发 KOOK 40011 审核，自动柔化措辞并重发完整卡片");
+                    let softened = soften_response(&delivered);
+                    send_res = self.send_channel_card_returning_id(channel_id, &render_story_turn_card(&softened, hud_opt, false)).await;
+                    if send_res.is_ok() { delivered = softened; }
+                }
+                match send_res {
+                    Ok(msg_id) if !msg_id.is_empty() && !is_ended => {
+                        self.live_cards().replace(channel_id, ActiveStoryCard { msg_id, turn_number, story: Box::new(delivered) });
+                    }
+                    Ok(_) => {}
+                    Err(err) if is_kook_moderation_error(&err) => {
+                        warn!(channel_id, error = %err, "柔化后仍触发 KOOK 40011，下发保底交互卡确保不断档");
+                        let safe_resp = safe_story_turn_fallback(&delivered);
+                        if let Ok(msg_id) = self.send_channel_card_returning_id(channel_id, &render_story_turn_card(&safe_resp, hud_opt, false)).await
+                            && !msg_id.is_empty() && !is_ended
+                        {
+                            self.live_cards().replace(channel_id, ActiveStoryCard { msg_id, turn_number, story: Box::new(safe_resp) });
                         }
                     }
                     Err(err) => {
                         warn!(channel_id, error = %err, "发送剧情卡片失败，自动降级为纯文本");
-                        self.send_plain_channel_fallback(channel_id, &resp).await;
+                        self.send_plain_channel_fallback(channel_id, &delivered).await;
                     }
                 }
             } else {
                 self.send_public_card_with_fallback(channel_id, &resp).await;
             }
-            if !dms.is_empty() {
-                self.spawn_whisper_delivery(channel_id.to_string(), dms);
-            }
+            if !dms.is_empty() { self.spawn_whisper_delivery(channel_id.to_string(), dms); }
             return;
         }
 
@@ -245,6 +244,13 @@ impl KookClient {
     async fn send_public_card_with_fallback(&self, channel_id: &str, resp: &EngineResponse) {
         let card_json = render_kook_card_json(channel_id, resp);
         if let Err(err) = self.send_channel_card(channel_id, &card_json).await {
+            if is_kook_moderation_error(&err) {
+                let soft = soften_response(resp);
+                let soft_json = render_kook_card_json(channel_id, &soft);
+                if self.send_channel_card(channel_id, &soft_json).await.is_ok() {
+                    return;
+                }
+            }
             warn!(channel_id, error = %err, "发送卡片消息失败，自动降级为分段 KMarkdown 发送");
             self.send_plain_channel_fallback(channel_id, resp).await;
         }
