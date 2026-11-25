@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use tavern_domain::LlmUsage;
 
+use crate::jev_config::JevConfig;
+
 #[derive(Clone)]
 pub struct AppConfig {
     pub kook_bot_token: Option<String>,
@@ -32,6 +34,7 @@ pub struct AppConfig {
     pub price_cache_hit_cny_per_m: f64,
     pub price_cache_miss_cny_per_m: f64,
     pub price_output_cny_per_m: f64,
+    pub jev: JevConfig,
 }
 
 impl fmt::Debug for AppConfig {
@@ -53,6 +56,7 @@ impl fmt::Debug for AppConfig {
             .field("admin_user_ids", &self.admin_user_ids.len())
             .field("daily_max_llm_calls", &self.daily_max_llm_calls)
             .field("daily_max_cny", &self.daily_max_cny)
+            .field("jev", &self.jev)
             .finish()
     }
 }
@@ -132,6 +136,7 @@ impl AppConfig {
             price_cache_hit_cny_per_m,
             price_cache_miss_cny_per_m,
             price_output_cny_per_m,
+            jev: JevConfig::from_env(),
         })
     }
 
@@ -280,6 +285,13 @@ mod tests {
             price_cache_hit_cny_per_m: 0.2,
             price_cache_miss_cny_per_m: 2.0,
             price_output_cny_per_m: 3.0,
+            jev: JevConfig {
+                api_key: Some("sk-secret-bailian-jev".into()),
+                google_endpoint: Some("https://proxy.example/v1/decisions?key=AIzaSecretQuery".into()),
+                google_api_key: Some("goog-secret-jev-key".into()),
+                google_proxy_secret: Some("proxy-secret-token".into()),
+                ..JevConfig::default()
+            },
         }
     }
 
@@ -289,6 +301,10 @@ mod tests {
         let rendered = format!("{cfg:?}");
         assert!(!rendered.contains("super-secret-kook-token"));
         assert!(!rendered.contains("sk-secret-deepseek-key"));
+        assert!(!rendered.contains("sk-secret-bailian-jev"));
+        assert!(!rendered.contains("goog-secret-jev-key"));
+        assert!(!rendered.contains("proxy-secret-token"));
+        assert!(!rendered.contains("AIzaSecretQuery"));
         assert!(rendered.contains("***REDACTED***"));
 
         assert!(cfg.is_scope_allowed(Some("guild_ok"), "ch1"));

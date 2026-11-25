@@ -4,11 +4,14 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use tavern_domain::{
     NarrativeStyle, PendingAction, Player, RoomState, Scenario, TurnRecord, WorldEcho,
-    always_active_worldbook, format_batched_actions, match_dynamic_worldbook,
+    always_active_worldbook, format_batched_actions,
 };
 use tracing::info;
 
-use crate::prompt_ext::{format_dynamic_director_sections, format_static_rules_and_map};
+use crate::prompt_ext::{
+    build_lore_corpus, format_act_progress, format_dynamic_director_sections,
+    format_static_rules_and_map, merge_dynamic_worldbook,
+};
 
 const DEFAULT_DM_SYSTEM: &str = include_str!("../../../prompts/dm_system.md");
 const DEFAULT_STYLE_PROSE: &str = include_str!("../../../prompts/style_prose.md");
@@ -41,6 +44,29 @@ pub fn build_dm_messages(
     recent_turns: &[TurnRecord],
     actions: &[PendingAction],
     world_echoes: &[WorldEcho],
+) -> Vec<ChatMessage> {
+    build_dm_messages_with_extra_lore(
+        prompts_dir,
+        scenario,
+        room,
+        players,
+        recent_turns,
+        actions,
+        world_echoes,
+        &[],
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_dm_messages_with_extra_lore(
+    prompts_dir: &Path,
+    scenario: &Scenario,
+    room: &RoomState,
+    players: &[Player],
+    recent_turns: &[TurnRecord],
+    actions: &[PendingAction],
+    world_echoes: &[WorldEcho],
+    extra_lore_ids: &[String],
 ) -> Vec<ChatMessage> {
     let sys_template = load_prompt_file(prompts_dir, "dm_system.md", DEFAULT_DM_SYSTEM);
     let style_guide = match room.narrative_style {
@@ -76,17 +102,12 @@ pub fn build_dm_messages(
     }
 
     let batched_input = format_batched_actions(actions);
-    let mut lore_corpus = format!("{}\n{}", room.location, batched_input);
-    for t in recent_turns.iter().rev().take(2) {
-        lore_corpus.push('\n');
-        lore_corpus.push_str(&t.batched_input);
-        lore_corpus.push('\n');
-        lore_corpus.push_str(&t.narrative);
-    }
-    let dynamic_lore = match_dynamic_worldbook(scenario, &lore_corpus, 5);
+    let lore_corpus = build_lore_corpus(room, recent_turns, actions);
+    let dynamic_lore = merge_dynamic_worldbook(scenario, &lore_corpus, extra_lore_ids, 7);
     info!(
         channel_id = %room.channel_id,
         matched_dynamic_lore = dynamic_lore.len(),
+        jev_extra_lore = extra_lore_ids.len(),
         style = room.narrative_style.as_str(),
         "组装 DM Prompt 完成"
     );
@@ -316,29 +337,5 @@ fn format_dynamic_turn_prompt(
         location = room.location,
         world_time = room.world_time,
         party_count = players.len(),
-    )
-}
-
-fn format_act_progress(scenario: &Scenario, room: &RoomState) -> String {
-    let flags = if room.world_flags.is_empty() {
-        "无".to_string()
-    } else {
-        room.world_flags.join("、")
-    };
-    if scenario.acts.is_empty() {
-        return format!("自由推进 ｜ 已触发节点：[{flags}]");
-    }
-    let total = scenario.acts.len();
-    let idx = (room.current_act.max(1) as usize)
-        .saturating_sub(1)
-        .min(total - 1);
-    let act = &scenario.acts[idx];
-    format!(
-        "第 {}/{} 幕【{}】｜ 本幕目标：{} ｜ 已触发节点：[{}]",
-        idx + 1,
-        total,
-        act.title,
-        act.goal,
-        flags
     )
 }

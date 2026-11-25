@@ -4,6 +4,7 @@ pub mod check;
 pub mod export;
 pub mod gm;
 pub mod m1;
+pub mod ooc;
 pub mod party;
 pub mod party_helpers;
 pub mod room;
@@ -15,23 +16,31 @@ use tavern_domain::{ChatMode, EngineResponse, IncomingMessage, TurnPhase};
 use tracing::debug;
 
 use crate::engine::GameEngine;
+pub use ooc::{OocPrecheck, is_plain_roleplay_ooc, precheck_roleplay_ooc};
 
-pub async fn dispatch_message(engine: &GameEngine, msg: IncomingMessage) -> Result<EngineResponse> {
+pub async fn dispatch_message(
+    engine: &GameEngine,
+    msg: IncomingMessage,
+    skip_ooc_gate: bool,
+) -> Result<EngineResponse> {
     if msg.is_direct {
         if !engine.cfg.is_dm_allowed(&msg.user_id) {
             debug!(user_id = %msg.user_id, "私聊拦截：白名单开启时仅管理员允许私聊互动");
             return Ok(EngineResponse::Ignore);
         }
-    } else if !engine
-        .cfg
-        .is_scope_allowed(msg.guild_id.as_deref(), &msg.channel_id)
-    {
-        debug!(
-            guild_id = ?msg.guild_id,
-            channel_id = %msg.channel_id,
-            "白名单拦截：忽略非授权服务器/频道消息"
-        );
-        return Ok(EngineResponse::Ignore);
+    } else {
+        let eff_guild = resolve_authoritative_guild(engine, msg.guild_id.as_deref(), &msg.channel_id)?;
+        if !engine
+            .cfg
+            .is_scope_allowed(eff_guild.as_deref(), &msg.channel_id)
+        {
+            debug!(
+                guild_id = ?eff_guild,
+                channel_id = %msg.channel_id,
+                "白名单拦截：忽略非授权服务器/频道消息"
+            );
+            return Ok(EngineResponse::Ignore);
+        }
     }
 
     let trimmed = msg.content.trim();
@@ -50,9 +59,10 @@ pub async fn dispatch_message(engine: &GameEngine, msg: IncomingMessage) -> Resu
         .or_else(|| trimmed.strip_prefix('》'))
     {
         let action = rest.trim();
-        if !action.is_empty() {
-            return party::cmd_act(engine, &msg, action).await;
+        if action.is_empty() {
+            return Ok(EngineResponse::Ignore);
         }
+        return party::cmd_act(engine, &msg, action).await;
     }
 
     if let Some((strict_slash, cmd_body)) = strip_command_prefix(trimmed) {
@@ -79,6 +89,12 @@ pub async fn dispatch_message(engine: &GameEngine, msg: IncomingMessage) -> Resu
         ChatMode::Strict => Ok(EngineResponse::Ignore),
         ChatMode::Roleplay => {
             if trimmed.starts_with('(') || trimmed.starts_with('（') || trimmed.starts_with("//") {
+                return Ok(EngineResponse::Ignore);
+            }
+            if !skip_ooc_gate
+                && !msg.is_direct
+                && ooc::evaluate_roleplay_ooc(engine, &room_state, &msg.user_name, trimmed).await
+            {
                 return Ok(EngineResponse::Ignore);
             }
             party::cmd_act(engine, &msg, trimmed).await
@@ -182,10 +198,7 @@ pub fn will_likely_resolve_turn(
     }
 
     let mut is_afk_toggle = false;
-    if let Some((_, body)) = strip_command_prefix(trimmed) {
-        let mut parts = body.splitn(2, char::is_whitespace);
-        let cmd = parts.next().unwrap_or("").to_ascii_lowercase();
-        let arg = parts.next().unwrap_or("").trim();
+    if let Some((_, cmd, arg)) = parse_known_or_strict_command(trimmed) {
         if matches!(cmd.as_str(), "go" | "resolve" | "next" | "结算") {
             return engine
                 .store
@@ -250,6 +263,37 @@ pub fn will_likely_resolve_turn(
             .iter()
             .any(|a| a.user_id == p.user_id && !a.action_text.trim().is_empty())
     })
+}
+
+pub(crate) fn is_known_command_name(cmd: &str) -> bool {
+    matches!(
+        cmd,
+        "help" | "h" | "帮助" | "scenarios" | "list" | "menu" | "大厅" | "剧本"
+            | "roles" | "职业" | "start" | "open" | "开团" | "join" | "card" | "车卡" | "入团"
+            | "act" | "a" | "行动" | "roll" | "r" | "掷骰" | "check" | "ck" | "检定" | "属性"
+            | "me" | "my" | "我的" | "角色卡" | "endings" | "图鉴" | "成就" | "结局"
+            | "go" | "resolve" | "next" | "结算" | "status" | "st" | "状态" | "mode" | "模式"
+            | "style" | "风格" | "档位" | "afk" | "暂离" | "摸鱼" | "leave" | "quit" | "退团"
+            | "whisper" | "纸条" | "秘密" | "cost" | "账单" | "费用" | "web" | "看板" | "大屏"
+            | "reload" | "重载" | "重载剧本" | "gm" | "房主" | "undo" | "回档"
+            | "summary" | "recap" | "前情" | "export" | "log" | "导出" | "战报"
+            | "reset" | "end" | "结团"
+    )
+}
+
+/// Returns `Some((strict_slash, lower_cmd, arg))` only when `input` uses a strict `/` prefix
+/// OR uses a soft prefix (`!`, `！`, `.`, `。`, `、`) with a recognized command name.
+/// Soft-prefixed natural speech (e.g. `...我退后`, `！笑死`) returns `None` so RP/OOC flows uniformly.
+pub(crate) fn parse_known_or_strict_command(input: &str) -> Option<(bool, String, &str)> {
+    let (strict_slash, body) = strip_command_prefix(input)?;
+    let mut parts = body.splitn(2, char::is_whitespace);
+    let cmd = parts.next().unwrap_or("").trim().to_ascii_lowercase();
+    let arg = parts.next().unwrap_or("").trim();
+    if strict_slash || is_known_command_name(&cmd) {
+        Some((strict_slash, cmd, arg))
+    } else {
+        None
+    }
 }
 
 pub fn strip_command_prefix(input: &str) -> Option<(bool, &str)> {

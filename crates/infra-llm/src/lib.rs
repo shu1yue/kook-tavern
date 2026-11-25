@@ -1,22 +1,43 @@
 pub mod generator;
+pub mod jev;
+pub mod jev_questions;
 pub mod mock;
 pub mod parser;
 pub mod prompt_ext;
 pub mod prompts;
 pub mod transport;
+mod wire;
 
 use std::sync::Arc;
 
 use anyhow::Result;
-use tavern_core::{AppConfig, LlmProvider};
+use tavern_core::{AppConfig, DecisionGate, LlmProvider, NoopDecisionGate};
 
 pub use generator::generate_scenario_with_llm;
+pub use jev::SystemOneJevGate;
 pub use mock::MockLlmProvider;
 pub use transport::OpenAiLlmProvider;
 
-pub fn build_llm_provider(cfg: &AppConfig, use_mock: bool) -> Result<Arc<dyn LlmProvider>> {
+pub fn build_decision_gate(cfg: &AppConfig, use_mock: bool) -> Arc<dyn DecisionGate> {
+    if use_mock {
+        return Arc::new(NoopDecisionGate);
+    }
+    match SystemOneJevGate::from_config(&cfg.jev) {
+        Some(gate) => Arc::new(gate),
+        None => Arc::new(NoopDecisionGate),
+    }
+}
+
+pub fn build_llm_provider(
+    cfg: &AppConfig,
+    use_mock: bool,
+    decision_gate: Arc<dyn DecisionGate>,
+) -> Result<Arc<dyn LlmProvider>> {
     if use_mock {
         return Ok(Arc::new(MockLlmProvider));
     }
-    Ok(Arc::new(OpenAiLlmProvider::from_config(cfg)?))
+    Ok(Arc::new(
+        OpenAiLlmProvider::from_config(cfg)?
+            .with_decision_gate(decision_gate, cfg.jev.audit_threshold),
+    ))
 }

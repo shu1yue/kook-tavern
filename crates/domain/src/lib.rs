@@ -1,4 +1,5 @@
 pub mod chronicle;
+pub mod decision;
 pub mod dice;
 pub mod guards;
 pub mod lorebook;
@@ -10,10 +11,11 @@ pub mod validate;
 pub mod world;
 
 pub use chronicle::{ChronicleEntry, WorldEcho, build_chronicle, distill_echo_text};
+pub use decision::{LoreCandidate, OocVerdict, ReplyAuditVerdict};
 pub use dice::{DiceRollResult, roll_dice, roll_dice_with_rng};
 pub use guards::{
     ConsistencyNudgePlan, DmPatchDelta, SpotlightGuidance, analyze_spotlight,
-    detect_consistency_nudge, merge_patch_delta,
+    detect_consistency_nudge, detect_consistency_nudge_with_audit, merge_patch_delta,
 };
 pub use lorebook::{always_active_worldbook, match_dynamic_worldbook, match_worldbook};
 pub use models::*;

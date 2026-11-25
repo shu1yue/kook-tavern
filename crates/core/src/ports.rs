@@ -4,9 +4,9 @@ use std::pin::Pin;
 use anyhow::Result;
 use tavern_domain::{
     CharacterStats, ChatMode, DailyUsage, DirectMessageOut, DmTurnOutput, EndingUnlock, LlmUsage,
-    NarrativeStyle, PendingAction, Player, PresetRole, RoomEvent, RoomSnapshot, RoomState,
-    Scenario, StarterCharacterDefaults, SummaryOutput, TurnRecord, UsageSummary, WhisperRecord,
-    WorldEcho,
+    LoreCandidate, NarrativeStyle, OocVerdict, PendingAction, Player, PresetRole,
+    ReplyAuditVerdict, RoomEvent, RoomSnapshot, RoomState, Scenario, StarterCharacterDefaults,
+    SummaryOutput, TurnRecord, UsageSummary, WhisperRecord, WorldEcho,
 };
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -239,4 +239,71 @@ pub struct NoopBackgroundRunner;
 
 impl BackgroundTaskRunner for NoopBackgroundRunner {
     fn spawn(&self, _fut: BoxFuture<'static, ()>) {}
+}
+
+/// Optional ultra-fast System One decision layer (e.g. Aliyun Bailian `decision-model-preview`
+/// or Google `gemini-decision-1`) with guaranteed zero-impact silent fallback.
+pub trait DecisionGate: Send + Sync {
+    fn is_enabled(&self) -> bool {
+        false
+    }
+
+    fn evaluate_ooc<'a>(
+        &'a self,
+        scenario_name: &'a str,
+        location: &'a str,
+        recent_scene: &'a str,
+        sender_name: &'a str,
+        message: &'a str,
+    ) -> BoxFuture<'a, Option<OocVerdict>>;
+
+    fn rank_hidden_lore<'a>(
+        &'a self,
+        location: &'a str,
+        action_corpus: &'a str,
+        candidates: &'a [LoreCandidate],
+    ) -> BoxFuture<'a, Vec<String>>;
+
+    fn audit_dm_reply<'a>(
+        &'a self,
+        narrative: &'a str,
+        whispers_summary: &'a str,
+        has_vitals_patch: bool,
+        has_item_patch: bool,
+    ) -> BoxFuture<'a, Option<ReplyAuditVerdict>>;
+}
+
+#[derive(Debug, Default)]
+pub struct NoopDecisionGate;
+
+impl DecisionGate for NoopDecisionGate {
+    fn evaluate_ooc<'a>(
+        &'a self,
+        _scenario_name: &'a str,
+        _location: &'a str,
+        _recent_scene: &'a str,
+        _sender_name: &'a str,
+        _message: &'a str,
+    ) -> BoxFuture<'a, Option<OocVerdict>> {
+        Box::pin(async { None })
+    }
+
+    fn rank_hidden_lore<'a>(
+        &'a self,
+        _location: &'a str,
+        _action_corpus: &'a str,
+        _candidates: &'a [LoreCandidate],
+    ) -> BoxFuture<'a, Vec<String>> {
+        Box::pin(async { Vec::new() })
+    }
+
+    fn audit_dm_reply<'a>(
+        &'a self,
+        _narrative: &'a str,
+        _whispers_summary: &'a str,
+        _has_vitals_patch: bool,
+        _has_item_patch: bool,
+    ) -> BoxFuture<'a, Option<ReplyAuditVerdict>> {
+        Box::pin(async { None })
+    }
 }

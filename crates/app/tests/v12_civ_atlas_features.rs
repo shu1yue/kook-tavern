@@ -44,6 +44,7 @@ fn v12_config() -> AppConfig {
         price_cache_hit_cny_per_m: 0.2,
         price_cache_miss_cny_per_m: 2.0,
         price_output_cny_per_m: 3.0,
+        jev: Default::default(),
     }
 }
 
@@ -335,6 +336,7 @@ async fn director_beats_spotlight_and_consistency_nudge_work_end_to_end() {
             }],
             location: Some("地下酿酒窖".into()),
             world_bulletin: None,
+            redacted_narrative: None,
         },
     );
     assert_eq!(reply.location.as_deref(), Some("地下酿酒窖"));

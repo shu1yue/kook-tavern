@@ -88,7 +88,8 @@ fn value_to_valid_delta(val: serde_json::Value) -> Option<DmPatchDelta> {
     let obj = val.as_object()?;
     let has_known_key = obj.contains_key("state_patches")
         || obj.contains_key("location")
-        || obj.contains_key("world_bulletin");
+        || obj.contains_key("world_bulletin")
+        || obj.contains_key("redacted_narrative");
     if !has_known_key {
         return None;
     }

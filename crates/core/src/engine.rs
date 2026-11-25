@@ -7,8 +7,8 @@ use tavern_domain::{EngineResponse, IncomingMessage, RoomEvent};
 use crate::commands;
 use crate::config::AppConfig;
 use crate::ports::{
-    BackgroundTaskRunner, EventBus, ExportWriter, LlmProvider, NoopBackgroundRunner, NoopEventBus,
-    NoopExportWriter, RoomStore, ScenarioCatalog,
+    BackgroundTaskRunner, DecisionGate, EventBus, ExportWriter, LlmProvider, NoopBackgroundRunner,
+    NoopDecisionGate, NoopEventBus, NoopExportWriter, RoomStore, ScenarioCatalog,
 };
 
 #[derive(Clone)]
@@ -17,6 +17,7 @@ pub struct GameEngine {
     pub(crate) store: Arc<dyn RoomStore>,
     pub(crate) scenarios: Arc<dyn ScenarioCatalog>,
     pub(crate) llm: Arc<dyn LlmProvider>,
+    pub(crate) decision: Arc<dyn DecisionGate>,
     pub(crate) events: Arc<dyn EventBus>,
     pub(crate) exporter: Arc<dyn ExportWriter>,
     pub(crate) bg_runner: Arc<dyn BackgroundTaskRunner>,
@@ -35,11 +36,21 @@ impl GameEngine {
             store,
             scenarios,
             llm,
+            decision: Arc::new(NoopDecisionGate),
             events: Arc::new(NoopEventBus),
             exporter: Arc::new(NoopExportWriter),
             bg_runner: Arc::new(NoopBackgroundRunner),
             in_flight_llm: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    pub fn with_decision_gate(mut self, decision: Arc<dyn DecisionGate>) -> Self {
+        self.decision = decision;
+        self
+    }
+
+    pub fn has_decision_gate(&self) -> bool {
+        self.decision.is_enabled()
     }
 
     pub fn with_ports(
@@ -80,7 +91,41 @@ impl GameEngine {
     }
 
     pub async fn handle_message(&self, msg: IncomingMessage) -> Result<EngineResponse> {
-        commands::dispatch_message(self, msg).await
+        commands::dispatch_message(self, msg, false).await
+    }
+
+    pub async fn handle_message_prechecked(
+        &self,
+        msg: IncomingMessage,
+        skip_ooc_gate: bool,
+    ) -> Result<EngineResponse> {
+        commands::dispatch_message(self, msg, skip_ooc_gate).await
+    }
+
+    pub async fn precheck_roleplay_ooc(
+        &self,
+        guild_id: Option<&str>,
+        channel_id: &str,
+        user_id: &str,
+        user_name: &str,
+        content: &str,
+        is_direct: bool,
+    ) -> commands::OocPrecheck {
+        commands::precheck_roleplay_ooc(self, guild_id, channel_id, user_id, user_name, content, is_direct)
+            .await
+    }
+
+    pub async fn is_plain_roleplay_ooc(
+        &self,
+        guild_id: Option<&str>,
+        channel_id: &str,
+        user_id: &str,
+        user_name: &str,
+        content: &str,
+        is_direct: bool,
+    ) -> bool {
+        commands::is_plain_roleplay_ooc(self, guild_id, channel_id, user_id, user_name, content, is_direct)
+            .await
     }
 
     pub async fn handle_button(

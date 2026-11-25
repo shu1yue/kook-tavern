@@ -35,6 +35,7 @@ fn build_m3_engine() -> (GameEngine, Arc<SqliteRoomStore>, Arc<FsScenarioCatalog
         price_cache_hit_cny_per_m: 0.2,
         price_cache_miss_cny_per_m: 2.0,
         price_output_cny_per_m: 3.0,
+        jev: Default::default(),
     };
     let store = Arc::new(SqliteRoomStore::open_in_memory().unwrap());
     let catalog = Arc::new(FsScenarioCatalog::load_from_dir(&cfg.scenarios_dir).unwrap());

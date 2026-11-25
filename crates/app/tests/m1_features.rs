@@ -44,6 +44,7 @@ fn m1_config() -> AppConfig {
         price_cache_hit_cny_per_m: 0.2,
         price_cache_miss_cny_per_m: 2.0,
         price_output_cny_per_m: 3.0,
+        jev: Default::default(),
     }
 }
 

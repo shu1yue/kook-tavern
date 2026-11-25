@@ -1,75 +1,26 @@
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use tavern_core::{AppConfig, BoxFuture, LlmProvider};
+use tavern_core::{AppConfig, BoxFuture, DecisionGate, LlmProvider, NoopDecisionGate};
 use tavern_domain::{
     DmTurnOutput, LlmUsage, PendingAction, Player, RoomState, Scenario, SummaryOutput, TurnRecord,
-    WorldEcho, detect_consistency_nudge, merge_patch_delta, should_trigger_bulletin,
+    WorldEcho, detect_consistency_nudge_with_audit, merge_patch_delta, should_trigger_bulletin,
 };
 use tokio::time::sleep;
 use tracing::{info, warn};
 
 use crate::parser::{parse_dm_reply_checked, parse_patch_delta};
-use crate::prompts::{ChatMessage, build_dm_messages, build_summary_messages};
+use crate::prompt_ext::{
+    build_lore_corpus, collect_unmatched_lore_candidates, summarize_whispers_for_audit,
+};
+use crate::prompts::{ChatMessage, build_dm_messages_with_extra_lore, build_summary_messages};
+use crate::wire::{ChatCompletionRequest, ChatCompletionResponse, ResponseFormat, extract_choice};
 
 const MAX_TRANSIENT_RETRIES: usize = 2;
-
-#[derive(Debug, Serialize)]
-struct ChatCompletionRequest {
-    model: String,
-    messages: Vec<ChatMessage>,
-    temperature: f32,
-    max_tokens: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<ResponseFormat>,
-}
-
-#[derive(Debug, Serialize)]
-struct ResponseFormat {
-    #[serde(rename = "type")]
-    kind: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ChatCompletionResponse {
-    choices: Vec<Choice>,
-    #[serde(default)]
-    usage: Option<RawUsage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Choice {
-    message: ChoiceMessage,
-}
-
-#[derive(Debug, Deserialize)]
-struct ChoiceMessage {
-    content: Option<String>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct RawPromptDetails {
-    #[serde(default)]
-    cached_tokens: Option<u64>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct RawUsage {
-    #[serde(default)]
-    prompt_tokens: Option<u64>,
-    #[serde(default)]
-    completion_tokens: Option<u64>,
-    #[serde(default)]
-    prompt_cache_hit_tokens: Option<u64>,
-    #[serde(default)]
-    prompt_cache_miss_tokens: Option<u64>,
-    #[serde(default)]
-    prompt_tokens_details: Option<RawPromptDetails>,
-}
 
 #[derive(Clone)]
 pub struct OpenAiLlmProvider {
@@ -81,6 +32,8 @@ pub struct OpenAiLlmProvider {
     temperature: f32,
     max_tokens: u32,
     prompts_dir: PathBuf,
+    decision_gate: Arc<dyn DecisionGate>,
+    audit_threshold: f64,
 }
 
 impl fmt::Debug for OpenAiLlmProvider {
@@ -90,6 +43,7 @@ impl fmt::Debug for OpenAiLlmProvider {
             .field("api_key", &"***REDACTED***")
             .field("model", &self.model)
             .field("summary_model", &self.summary_model)
+            .field("jev_enabled", &self.decision_gate.is_enabled())
             .finish()
     }
 }
@@ -111,7 +65,19 @@ impl OpenAiLlmProvider {
             temperature: cfg.llm_temperature,
             max_tokens: cfg.llm_max_tokens,
             prompts_dir: cfg.prompts_dir.clone(),
+            decision_gate: Arc::new(NoopDecisionGate),
+            audit_threshold: cfg.jev.audit_threshold,
         })
+    }
+
+    pub fn with_decision_gate(
+        mut self,
+        gate: Arc<dyn DecisionGate>,
+        audit_threshold: f64,
+    ) -> Self {
+        self.decision_gate = gate;
+        self.audit_threshold = audit_threshold.clamp(0.50, 0.98);
+        self
     }
 
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
@@ -229,32 +195,6 @@ impl OpenAiLlmProvider {
     }
 }
 
-fn extract_choice(resp: ChatCompletionResponse) -> Result<(String, LlmUsage)> {
-    let usage = resp
-        .usage
-        .map(|u| {
-            let prompt_tokens = u.prompt_tokens.unwrap_or(0);
-            let completion_tokens = u.completion_tokens.unwrap_or(0);
-            let hit = u.prompt_cache_hit_tokens.unwrap_or(0).max(
-                u.prompt_tokens_details.as_ref().and_then(|d| d.cached_tokens).unwrap_or(0),
-            );
-            let miss = u.prompt_cache_miss_tokens.unwrap_or_else(|| prompt_tokens.saturating_sub(hit));
-            LlmUsage { prompt_tokens, completion_tokens, cache_hit_tokens: hit, cache_miss_tokens: miss }
-        })
-        .unwrap_or_default();
-
-    let text = resp
-        .choices
-        .into_iter()
-        .next()
-        .and_then(|c| c.message.content)
-        .unwrap_or_default();
-    if text.trim().is_empty() {
-        bail!("LLM 返回了空内容");
-    }
-    Ok((text, usage))
-}
-
 impl LlmProvider for OpenAiLlmProvider {
     fn generate_turn<'a>(
         &'a self, scenario: &'a Scenario, room: &'a RoomState, players: &'a [Player],
@@ -262,31 +202,68 @@ impl LlmProvider for OpenAiLlmProvider {
         world_echoes: &'a [WorldEcho], allow_nudge: bool,
     ) -> BoxFuture<'a, Result<DmTurnOutput>> {
         Box::pin(async move {
-            let mut messages = build_dm_messages(
+            let extra_lore_ids = if self.decision_gate.is_enabled() {
+                let corpus = build_lore_corpus(room, recent_turns, actions);
+                let candidates = collect_unmatched_lore_candidates(scenario, &corpus);
+                if candidates.is_empty() {
+                    Vec::new()
+                } else {
+                    self.decision_gate
+                        .rank_hidden_lore(&room.location, &corpus, &candidates)
+                        .await
+                }
+            } else {
+                Vec::new()
+            };
+            let mut messages = build_dm_messages_with_extra_lore(
                 &self.prompts_dir, scenario, room, players, recent_turns, actions, world_echoes,
+                &extra_lore_ids,
             );
             let (raw, usage) = self.chat_completion(&self.model, messages.clone(), true, None).await?;
             let (mut reply, was_json) = parse_dm_reply_checked(&raw, room);
             let mut extra_usages = Vec::new();
 
             // One-shot `civ-atlas`-style consistency nudge: strictly budgeted (`allow_nudge`),
-            // scoped to omitted fields only, and recorded as its own HTTP call for daily limits.
+            // enhanced with optional System One semantic audit, scoped to omitted fields only.
             let bulletin_due = should_trigger_bulletin(scenario, room, room.turn_number + 1);
-            if allow_nudge
-                && was_json
-                && let Some(plan) = detect_consistency_nudge(scenario, room, players, &reply, bulletin_due)
-            {
-                messages.push(ChatMessage { role: "assistant".into(), content: raw });
-                messages.push(ChatMessage { role: "user".into(), content: plan.prompt.clone() });
-                match self.chat_completion(&self.model, messages, true, Some(400)).await {
-                    Ok((fix_raw, fix_usage)) => {
-                        extra_usages.push(fix_usage);
-                        if let Some(delta) = parse_patch_delta(&fix_raw) {
-                            info!(channel_id = %room.channel_id, "一次性状态一致性补齐生效");
-                            merge_patch_delta(&mut reply, &plan, delta);
+            if allow_nudge && was_json {
+                let audit = if self.decision_gate.is_enabled()
+                    && !players.is_empty()
+                    && !reply.narrative.trim().is_empty()
+                {
+                    let has_vitals = reply.state_patches.iter().any(|p| p.hp_delta != 0 || p.san_delta != 0);
+                    let has_item = reply.state_patches.iter().any(|p| !p.add_items.is_empty());
+                    let whispers = summarize_whispers_for_audit(&reply);
+                    self.decision_gate
+                        .audit_dm_reply(&reply.narrative, &whispers, has_vitals, has_item)
+                        .await
+                } else {
+                    None
+                };
+                if let Some(plan) = detect_consistency_nudge_with_audit(
+                    scenario, room, players, &reply, bulletin_due, audit.as_ref(), self.audit_threshold,
+                ) {
+                    let nudge_tokens = if plan.want_narrative_redact {
+                        self.max_tokens
+                    } else {
+                        self.max_tokens.min(400)
+                    };
+                    messages.push(ChatMessage { role: "assistant".into(), content: raw });
+                    messages.push(ChatMessage { role: "user".into(), content: plan.prompt.clone() });
+                    match self.chat_completion(&self.model, messages, true, Some(nudge_tokens)).await {
+                        Ok((fix_raw, fix_usage)) => {
+                            extra_usages.push(fix_usage);
+                            if let Some(delta) = parse_patch_delta(&fix_raw) {
+                                info!(
+                                    channel_id = %room.channel_id,
+                                    redact = plan.want_narrative_redact,
+                                    "一次性状态一致性补齐生效"
+                                );
+                                merge_patch_delta(&mut reply, &plan, delta);
+                            }
                         }
+                        Err(err) => warn!(channel_id = %room.channel_id, error = %err, "状态补齐校验失败，沿用原裁决"),
                     }
-                    Err(err) => warn!(channel_id = %room.channel_id, error = %err, "状态补齐校验失败，沿用原裁决"),
                 }
             }
             Ok(DmTurnOutput { reply, usage, extra_usages })
@@ -304,40 +281,5 @@ impl LlmProvider for OpenAiLlmProvider {
             let (summary, usage) = self.chat_completion(&self.summary_model, messages, false, None).await?;
             Ok(SummaryOutput { summary: summary.trim().to_string(), usage })
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn deserializes_explicit_null_usage_fields() {
-        let json = r#"{
-            "choices": [{"message": {"content": "hello"}}],
-            "usage": {
-                "prompt_tokens": 120,
-                "completion_tokens": null,
-                "prompt_cache_hit_tokens": null,
-                "prompt_cache_miss_tokens": null,
-                "prompt_tokens_details": {"cached_tokens": 80}
-            }
-        }"#;
-        let parsed: ChatCompletionResponse = serde_json::from_str(json).unwrap();
-        let (text, usage) = extract_choice(parsed).unwrap();
-        assert_eq!(text, "hello");
-        assert_eq!(usage.prompt_tokens, 120);
-        assert_eq!(usage.completion_tokens, 0);
-        assert_eq!(usage.cache_hit_tokens, 80);
-        assert_eq!(usage.cache_miss_tokens, 40);
-
-        let all_null = r#"{
-            "choices": [{"message": {"content": "ok"}}],
-            "usage": {"prompt_tokens": null, "prompt_tokens_details": {"cached_tokens": null}}
-        }"#;
-        let parsed2: ChatCompletionResponse = serde_json::from_str(all_null).unwrap();
-        let (_, usage2) = extract_choice(parsed2).unwrap();
-        assert_eq!(usage2.prompt_tokens, 0);
-        assert_eq!(usage2.cache_hit_tokens, 0);
     }
 }

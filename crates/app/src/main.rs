@@ -6,7 +6,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tavern_adapter_web::{BroadcastEventBus, WebState};
 use tavern_core::{AppConfig, BackgroundTaskRunner, BoxFuture, GameEngine, RoomStore};
-use tavern_infra_llm::{build_llm_provider, generate_scenario_with_llm};
+use tavern_infra_llm::{build_decision_gate, build_llm_provider, generate_scenario_with_llm};
 use tavern_infra_sqlite::{
     FsExportWriter, FsScenarioCatalog, SqliteRoomStore, import_sillytavern_file,
     write_scenario_yaml,
@@ -209,7 +209,8 @@ async fn shutdown_web(handle: Option<(oneshot::Sender<()>, tokio::task::JoinHand
 }
 
 fn build_runtime(cfg: AppConfig, mock_llm: bool) -> Result<BuiltRuntime> {
-    let llm = build_llm_provider(&cfg, mock_llm)?;
+    let decision_gate = build_decision_gate(&cfg, mock_llm);
+    let llm = build_llm_provider(&cfg, mock_llm, decision_gate.clone())?;
     let store = Arc::new(SqliteRoomStore::open(&cfg.db_path)?);
     let recovered = store.reset_stuck_resolving_on_startup()?;
     if recovered > 0 {
@@ -225,11 +226,9 @@ fn build_runtime(cfg: AppConfig, mock_llm: bool) -> Result<BuiltRuntime> {
     let web_bind = cfg.web_bind_addr.clone();
     let web_state = WebState::new(store.clone(), scenarios.clone(), event_bus.sender());
 
-    let engine = GameEngine::new(cfg, store, scenarios, llm).with_ports(
-        event_bus,
-        exporter,
-        bg_runner,
-    );
+    let engine = GameEngine::new(cfg, store, scenarios, llm)
+        .with_ports(event_bus, exporter, bg_runner)
+        .with_decision_gate(decision_gate);
     Ok(BuiltRuntime {
         engine,
         web_bind,

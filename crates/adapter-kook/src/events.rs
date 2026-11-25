@@ -2,7 +2,7 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 use serde_json::Value;
-use tavern_core::GameEngine;
+use tavern_core::{GameEngine, OocPrecheck};
 use tavern_domain::{CardTheme, EngineResponse, IncomingMessage};
 use tracing::{error, warn};
 
@@ -80,14 +80,44 @@ pub async fn handle_kook_event(d: Value, engine: GameEngine, client: KookClient)
     let raw_content = d.get("content").and_then(Value::as_str).unwrap_or("");
     let cleaned = strip_kook_mentions(raw_content);
 
-    let placeholder_id = if !is_direct
+    let mut will_resolve = !is_direct
         && engine.will_likely_resolve_turn(
             guild_id.as_deref(),
             &channel_id,
             &author_id,
             &cleaned,
             is_direct,
-        ) {
+        );
+    let mut prechecked_ooc = false;
+    if will_resolve && engine.has_decision_gate() {
+        match engine
+            .precheck_roleplay_ooc(
+                guild_id.as_deref(),
+                &channel_id,
+                &author_id,
+                &user_name,
+                &cleaned,
+                is_direct,
+            )
+            .await
+        {
+            OocPrecheck::IgnoreOoc => return,
+            OocPrecheck::Allow => {
+                prechecked_ooc = true;
+                // Re-verify after await in case room phase/mode changed while Jev was in-flight
+                will_resolve = engine.will_likely_resolve_turn(
+                    guild_id.as_deref(),
+                    &channel_id,
+                    &author_id,
+                    &cleaned,
+                    is_direct,
+                );
+            }
+            OocPrecheck::NotApplicable => {}
+        }
+    }
+
+    let placeholder_id = if will_resolve {
         client.send_thinking_placeholder(&reply_target).await
     } else {
         None
@@ -102,7 +132,9 @@ pub async fn handle_kook_event(d: Value, engine: GameEngine, client: KookClient)
         is_direct,
     };
 
-    let result = engine.handle_message(incoming).await;
+    let result = engine
+        .handle_message_prechecked(incoming, prechecked_ooc)
+        .await;
     if let Some(pid) = placeholder_id {
         client.delete_channel_message(&pid).await;
     }

@@ -1,7 +1,82 @@
 use tavern_domain::{
-    PendingAction, Player, RoomState, Scenario, TurnRecord, WorldEcho, analyze_spotlight,
-    due_director_beats, should_trigger_bulletin,
+    DmStructuredReply, LoreCandidate, PendingAction, Player, RoomState, Scenario, TurnRecord,
+    WorldEcho, WorldbookEntry, analyze_spotlight, due_director_beats, format_batched_actions,
+    match_dynamic_worldbook, should_trigger_bulletin,
 };
+
+pub fn build_lore_corpus(
+    room: &RoomState,
+    recent_turns: &[TurnRecord],
+    actions: &[PendingAction],
+) -> String {
+    let batched_input = format_batched_actions(actions);
+    let mut corpus = format!("{}\n{}", room.location, batched_input);
+    for t in recent_turns.iter().rev().take(2) {
+        corpus.push('\n');
+        corpus.push_str(&t.batched_input);
+        corpus.push('\n');
+        corpus.push_str(&t.narrative);
+    }
+    corpus
+}
+
+/// Collects non-always-active worldbook entries NOT already hit by deterministic keyword matching
+/// so System One semantic recall can complement keywords without duplicating hits.
+pub fn collect_unmatched_lore_candidates(scenario: &Scenario, corpus: &str) -> Vec<LoreCandidate> {
+    let kw_hits = match_dynamic_worldbook(scenario, corpus, 5);
+    let mut unmatched: Vec<_> = scenario
+        .worldbook
+        .iter()
+        .filter(|e| !e.always_active && !kw_hits.iter().any(|h| h.id == e.id))
+        .collect();
+    unmatched.sort_by_key(|a| std::cmp::Reverse(a.priority));
+    unmatched
+        .into_iter()
+        .take(8)
+        .map(|e| LoreCandidate {
+            id: e.id.clone(),
+            title: e.title.clone(),
+            snippet: e.content.trim().chars().take(120).collect(),
+        })
+        .collect()
+}
+
+/// Unions deterministic keyword worldbook hits (100% recall floor) with extra semantic IDs
+/// selected by System One, deduplicated and capped at `max_total`.
+pub fn merge_dynamic_worldbook<'a>(
+    scenario: &'a Scenario,
+    corpus: &str,
+    extra_ids: &[String],
+    max_total: usize,
+) -> Vec<&'a WorldbookEntry> {
+    let mut out = match_dynamic_worldbook(scenario, corpus, 5);
+    for id in extra_ids {
+        if out.len() >= max_total {
+            break;
+        }
+        if out.iter().any(|e| e.id == *id) {
+            continue;
+        }
+        if let Some(entry) = scenario
+            .worldbook
+            .iter()
+            .find(|e| !e.always_active && e.id == *id)
+        {
+            out.push(entry);
+        }
+    }
+    out
+}
+
+pub fn summarize_whispers_for_audit(reply: &DmStructuredReply) -> String {
+    reply
+        .private_whispers
+        .iter()
+        .filter(|w| !w.secret.trim().is_empty())
+        .map(|w| format!("给{}：{}", w.player_name.trim(), w.secret.trim()))
+        .collect::<Vec<_>>()
+        .join("；")
+}
 
 /// Formats scenario-static rules & map reference for the static `system` message
 /// (100% cache-stable per scenario for DeepSeek Prefix Caching).
@@ -107,4 +182,28 @@ pub fn format_dynamic_director_sections(
     } else {
         format!("\n\n{}", sections.join("\n\n"))
     }
+}
+
+pub fn format_act_progress(scenario: &Scenario, room: &RoomState) -> String {
+    let flags = if room.world_flags.is_empty() {
+        "无".to_string()
+    } else {
+        room.world_flags.join("、")
+    };
+    if scenario.acts.is_empty() {
+        return format!("自由推进 ｜ 已触发节点：[{flags}]");
+    }
+    let total = scenario.acts.len();
+    let idx = (room.current_act.max(1) as usize)
+        .saturating_sub(1)
+        .min(total - 1);
+    let act = &scenario.acts[idx];
+    format!(
+        "第 {}/{} 幕【{}】｜ 本幕目标：{} ｜ 已触发节点：[{}]",
+        idx + 1,
+        total,
+        act.title,
+        act.goal,
+        flags
+    )
 }
