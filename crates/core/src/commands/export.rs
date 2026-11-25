@@ -1,10 +1,14 @@
 use anyhow::Result;
 use chrono::Utc;
-use tavern_domain::{CardTheme, EngineResponse};
+use tavern_domain::{CardTheme, EngineResponse, Player, RoomState, TurnRecord, WallReport};
 
 use crate::engine::GameEngine;
 
-pub fn cmd_export(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {
+pub fn cmd_export(
+    engine: &GameEngine,
+    channel_id: &str,
+    is_direct: bool,
+) -> Result<EngineResponse> {
     let Some(room) = engine.store.get_room(channel_id)? else {
         return Ok(EngineResponse::Notice {
             title: "ℹ️ 当前频道尚未开团".to_string(),
@@ -53,6 +57,17 @@ pub fn cmd_export(engine: &GameEngine, channel_id: &str) -> Result<EngineRespons
     }
     md.push('\n');
 
+    if !room.npc_states.is_empty() {
+        md.push_str("## 🗣️ 关键 NPC 动向\n\n");
+        for npc in &room.npc_states {
+            md.push_str(&format!(
+                "- **{}**（{}）：{}\n",
+                npc.name, npc.attitude, npc.status
+            ));
+        }
+        md.push('\n');
+    }
+
     if let Some(sc) = scenario {
         md.push_str("## 🕯️ 序幕\n\n");
         md.push_str(sc.opening_scene.trim());
@@ -76,18 +91,94 @@ pub fn cmd_export(engine: &GameEngine, channel_id: &str) -> Result<EngineRespons
         }
     }
 
-    let saved_name = engine.exporter.write_markdown(&filename, &md)?;
+    let saved_file = engine.exporter.write_markdown(&filename, &md)?;
+    let wall_report = if !is_direct && !turns.is_empty() {
+        engine.cfg.export_channel_id.as_ref().map(|wall_chan| {
+            build_wall_report(wall_chan, &room, &players, &turns)
+        })
+    } else {
+        None
+    };
 
-    Ok(EngineResponse::Notice {
-        title: "📜 跑团战报已导出".to_string(),
-        body: format!(
-            "已导出共 **{} 个回合** 的完整 Markdown 战报：`{}`",
-            turns.len(),
-            saved_name
-        ),
-        theme: CardTheme::Success,
-        show_actions: false,
+    Ok(EngineResponse::ExportReport {
+        saved_file,
+        turn_count: turns.len(),
+        wall_report,
     })
+}
+
+fn build_wall_report(
+    target_channel_id: &str,
+    room: &RoomState,
+    players: &[Player],
+    turns: &[TurnRecord],
+) -> WallReport {
+    let roster = if players.is_empty() {
+        "神秘冒险者小队".to_string()
+    } else {
+        players
+            .iter()
+            .map(|p| {
+                format!(
+                    "**{}**（{}｜❤️{}/{} 🧠{}/{}）",
+                    p.character_name, p.role_desc, p.hp, p.max_hp, p.san, p.max_san
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n- ")
+    };
+
+    let mut sections = vec![
+        format!(
+            "📍 **定格场景**：{} ｜ 🕒 {} ｜ 🎲 共历 **{}** 回合",
+            room.location, room.world_time, turns.len()
+        ),
+        format!("**⚔️ 冒险阵容**\n- {roster}"),
+    ];
+
+    if !room.clues.is_empty() {
+        let top_clues = room
+            .clues
+            .iter()
+            .take(6)
+            .enumerate()
+            .map(|(i, c)| format!("{}. {c}", i + 1))
+            .collect::<Vec<_>>()
+            .join("\n");
+        sections.push(format!("**🔎 关键线索**\n{top_clues}"));
+    }
+
+    if !room.npc_states.is_empty() {
+        let npcs = room
+            .npc_states
+            .iter()
+            .take(6)
+            .map(|n| {
+                if n.status.trim().is_empty() {
+                    format!("- **{}**（{}）", n.name, n.attitude)
+                } else {
+                    format!("- **{}**（{}）— {}", n.name, n.attitude, n.status)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        sections.push(format!("**🗣️ 江湖传闻与 NPC 结局**\n{npcs}"));
+    }
+
+    if let Some(last) = turns.last() {
+        let excerpt: String = last.narrative.trim().chars().take(260).collect();
+        sections.push(format!(
+            "**🎬 最新一幕 · {}**\n> {}",
+            last.scene_title,
+            excerpt.replace('\n', "\n> ")
+        ));
+    }
+
+    WallReport {
+        target_channel_id: target_channel_id.to_string(),
+        title: format!("🏆 冒险战报 · 《{}》", room.title),
+        body: sections.join("\n\n"),
+    }
 }
 
 fn sanitize_filename_segment(raw: &str) -> String {

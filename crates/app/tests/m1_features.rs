@@ -36,6 +36,7 @@ fn m1_config() -> AppConfig {
         allowed_guild_ids: vec!["friend_guild".into()],
         allowed_channel_ids: vec![],
         admin_user_ids: vec!["admin_u".into()],
+        export_channel_id: Some("wall_chan_1".into()),
         daily_max_llm_calls: 2,
         daily_max_cny: 20.0,
         price_cache_hit_cny_per_m: 0.2,
@@ -466,4 +467,96 @@ async fn zero_code_full_button_gameplay_and_stale_pick_guard() {
         store.get_room("m1_chan").unwrap().unwrap().narrative_style,
         NarrativeStyle::Voice
     );
+}
+
+#[tokio::test]
+async fn wave1_three_scenarios_preset_roles_anti_farm_npc_memory_and_wall_export() {
+    let mut cfg = m1_config();
+    cfg.daily_max_llm_calls = 10;
+    let store = Arc::new(SqliteRoomStore::open_in_memory().unwrap());
+    let scenarios = Arc::new(FsScenarioCatalog::load_from_dir(&cfg.scenarios_dir).unwrap());
+    let engine = GameEngine::new(cfg, store.clone(), scenarios.clone(), Arc::new(MockLlmProvider));
+
+    // All 3 scenarios load with 10 lore entries, 4 preset roles, and 3 opening actions
+    for id in ["ember_tavern", "fog_manor", "midnight_metro"] {
+        let sc = scenarios.get(id).expect("built-in scenario exists");
+        assert_eq!(sc.worldbook.len(), 10, "{id} should have 10 lore entries");
+        assert_eq!(sc.preset_roles.len(), 4, "{id} should have 4 preset roles");
+        assert_eq!(sc.opening_actions.len(), 3, "{id} should have 3 opening actions");
+    }
+
+    // Start Midnight Metro and pick preset role #0 via button
+    engine
+        .handle_button_in_guild(
+            Some("friend_guild"),
+            "m1_chan",
+            "u1",
+            "小明",
+            "tavern:start:m1_chan:midnight_metro",
+        )
+        .await
+        .unwrap();
+    let picker = engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:rolemenu:m1_chan")
+        .await
+        .unwrap();
+    assert!(matches!(picker, EngineResponse::RolePicker { .. }));
+
+    let joined = engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:pickrole:m1_chan:0")
+        .await
+        .unwrap();
+    assert!(matches!(joined, EngineResponse::Notice { theme: CardTheme::Success, .. }));
+    let p_initial = store.get_player("m1_chan", "u1").unwrap().unwrap();
+    assert_eq!(p_initial.role_desc, "加班程序员");
+    assert!(p_initial.inventory.iter().any(|i| i.contains("降噪蓝牙耳机")));
+
+    // Damage player then re-pick another preset role -> MUST NOT restore HP or grant duplicate bonus items!
+    engine
+        .handle_message(gmsg("friend_guild", "u1", "小明", "/gm hp 小明 -3"))
+        .await
+        .unwrap();
+    engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:pickrole:m1_chan:2")
+        .await
+        .unwrap();
+    let p_switched = store.get_player("m1_chan", "u1").unwrap().unwrap();
+    assert_eq!(p_switched.role_desc, "地铁夜班值班员");
+    assert_eq!(p_switched.hp, p_initial.max_hp - 3);
+    assert!(!p_switched.inventory.iter().any(|i| i.contains("三角通用钥匙")));
+
+    // Trigger a turn that updates NPC state + secret whisper
+    engine
+        .handle_message(gmsg("friend_guild", "u1", "小明", "检查车厢里的钥匙"))
+        .await
+        .unwrap();
+    let room_after = store.get_room("m1_chan").unwrap().unwrap();
+    assert_eq!(room_after.npc_states.len(), 1);
+    assert_eq!(room_after.npc_states[0].name, "老雷恩");
+
+    // Export publishes highlight card to wall_chan_1 and NEVER leaks whispers!
+    let exp = engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:export:m1_chan")
+        .await
+        .unwrap();
+    match exp {
+        EngineResponse::ExportReport {
+            turn_count,
+            wall_report: Some(wall),
+            ..
+        } => {
+            assert_eq!(turn_count, 1);
+            assert_eq!(wall.target_channel_id, "wall_chan_1");
+            assert!(wall.body.contains("老雷恩"));
+            assert!(!wall.body.contains("霰弹枪"));
+        }
+        other => panic!("expected ExportReport with WallReport, got {other:?}"),
+    }
+
+    // Undo restores NPC states cleanly to empty!
+    engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:undo:m1_chan")
+        .await
+        .unwrap();
+    assert!(store.get_room("m1_chan").unwrap().unwrap().npc_states.is_empty());
 }

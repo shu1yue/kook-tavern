@@ -183,6 +183,34 @@ async fn print_response(stdout: &mut io::Stdout, resp: &EngineResponse) -> Resul
             buf.push_str("└──────────────────────────────────────────────────────────\n\n");
             stdout.write_all(buf.as_bytes()).await?;
         }
+        EngineResponse::RolePicker {
+            scenario_name,
+            roles,
+            ..
+        } => {
+            let mut buf = format!("\n┌────────── 🎭 《{scenario_name}》可选职业 ──────────\n");
+            for (i, r) in roles.iter().enumerate() {
+                buf.push_str(&format!(
+                    "│ {}. {}（{}）｜装备：{}\n",
+                    i + 1,
+                    r.name,
+                    r.traits.join("/"),
+                    r.bonus_items.join("、")
+                ));
+            }
+            buf.push_str("└──────────────────────────────────────────────────────────\n\n");
+            stdout.write_all(buf.as_bytes()).await?;
+        }
+        EngineResponse::ExportReport {
+            saved_file,
+            turn_count,
+            ..
+        } => {
+            let out = format!(
+                "\n📜 已导出 {turn_count} 回合战报：`{saved_file}`\n\n"
+            );
+            stdout.write_all(out.as_bytes()).await?;
+        }
         EngineResponse::PrivateNotice {
             user_id,
             title,

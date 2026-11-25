@@ -1,7 +1,10 @@
 use anyhow::Result;
 use tavern_domain::{CardTheme, ChatMode, EngineResponse, IncomingMessage, NarrativeStyle, TurnPhase};
 
-use crate::commands::{m1, party, resolve_authoritative_guild, room, turn, will_likely_resolve_turn};
+use crate::commands::{
+    button_roles, export, m1, party, resolve_authoritative_guild, room, turn,
+    will_likely_resolve_turn,
+};
 use crate::engine::GameEngine;
 
 pub async fn dispatch_button(
@@ -46,12 +49,19 @@ pub async fn dispatch_button(
         "cost" => m1::cmd_cost(engine, channel_id),
         "help" => Ok(room::cmd_help()),
         "menu" => Ok(room::cmd_list_scenarios(engine, channel_id)),
+        "rolemenu" => button_roles::cmd_role_menu(engine, channel_id),
+        "export" => export::cmd_export(engine, channel_id, false),
         "start" => {
             let scenario_id = parts.get(3).copied().unwrap_or("").trim();
-            let msg = mk_msg(format!("/start {scenario_id}"));
-            room::cmd_start(engine, &msg, scenario_id)
+            room::cmd_start(engine, &mk_msg(format!("/start {scenario_id}")), scenario_id)
         }
-        "quickjoin" => handle_quick_join(engine, &mk_msg("/join".into())),
+        "quickjoin" => button_roles::handle_quick_join(engine, &mk_msg("/join".into())),
+        "pickrole" => {
+            let Some(idx) = parts.get(3).and_then(|s| s.parse::<usize>().ok()) else {
+                return Ok(EngineResponse::Ignore);
+            };
+            button_roles::handle_pick_role(engine, &mk_msg("/join".into()), idx)
+        }
         "whisper" => m1::cmd_whisper(engine, &mk_msg("/whisper".into())),
         "afk" => m1::cmd_afk(engine, &mk_msg("/afk".into())).await,
         "roll" => {
@@ -113,67 +123,6 @@ pub fn will_button_likely_resolve_turn(
     }
 }
 
-fn handle_quick_join(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResponse> {
-    let Some(room) = engine.store.get_room(&msg.channel_id)? else {
-        return Ok(EngineResponse::Notice {
-            title: "ℹ️ 还没开团呢".to_string(),
-            body: "先点上方的「▶️ 开启剧本」按钮开一桌，再点快速入团喵！".to_string(),
-            theme: CardTheme::Info,
-            show_actions: false,
-        });
-    };
-    if !room.active {
-        return Ok(EngineResponse::Notice {
-            title: "ℹ️ 当前房间已归档".to_string(),
-            body: "请点「📚 换剧本」开启新冒险喵！".to_string(),
-            theme: CardTheme::Info,
-            show_actions: false,
-        });
-    }
-
-    if let Some(existing) = engine.store.get_player(&msg.channel_id, &msg.user_id)? {
-        if existing.is_afk {
-            let _ = engine
-                .store
-                .set_player_afk(&msg.channel_id, &msg.user_id, false);
-        }
-        return Ok(EngineResponse::Notice {
-            title: format!("⚔️ 你已在队伍中：{}", existing.character_name),
-            body: format!(
-                "职业：**{}** ｜ ❤️ HP {}/{} ｜ 🧠 SAN {}/{}\n\n想换角色名或特质，随时发 `/join 新名字 新身份 | 特质1,特质2` 即可（不会清零血量和背包喵）！",
-                existing.role_desc, existing.hp, existing.max_hp, existing.san, existing.max_san
-            ),
-            theme: CardTheme::Info,
-            show_actions: true,
-        });
-    }
-
-    let existing_players = engine.store.list_players(&msg.channel_id)?;
-    let base_name: String = msg
-        .user_name
-        .chars()
-        .filter(|c| !c.is_whitespace() && *c != '|' && *c != '｜')
-        .take(16)
-        .collect();
-    let base = if base_name.is_empty() {
-        "冒险者".to_string()
-    } else {
-        base_name
-    };
-    let mut candidate = base.clone();
-    let mut suffix = 2usize;
-    while existing_players
-        .iter()
-        .any(|p| p.character_name.eq_ignore_ascii_case(&candidate))
-    {
-        candidate = format!("{base}#{suffix}");
-        suffix += 1;
-    }
-
-    let join_arg = format!("{candidate} 旅途冒险者 | 机警,果断");
-    party::cmd_join(engine, msg, &join_arg)
-}
-
 async fn handle_pick_action(
     engine: &GameEngine,
     msg: &IncomingMessage,
@@ -183,7 +132,7 @@ async fn handle_pick_action(
     let Some(room) = engine.store.get_room(&msg.channel_id)? else {
         return Ok(EngineResponse::Notice {
             title: "ℹ️ 当前频道尚未开团".to_string(),
-            body: "先点「📚 选剧本开团」开启冒险吧喵！".to_string(),
+            body: "先点「📚 换剧本」开启冒险吧喵！".to_string(),
             theme: CardTheme::Warning,
             show_actions: false,
         });
@@ -224,7 +173,6 @@ async fn handle_pick_action(
             show_actions: false,
         });
     };
-
     party::cmd_act(engine, msg, &action_text).await
 }
 

@@ -1,3 +1,4 @@
+pub mod button_roles;
 pub mod buttons;
 pub mod export;
 pub mod gm;
@@ -89,6 +90,7 @@ async fn match_known_command(
         "scenarios" | "list" | "menu" | "大厅" | "剧本" => {
             room::cmd_list_scenarios(engine, &msg.channel_id)
         }
+        "roles" | "职业" => button_roles::cmd_role_menu(engine, &msg.channel_id)?,
         "start" | "open" | "开团" => room::cmd_start(engine, msg, arg)?,
         "join" | "card" | "车卡" | "入团" => party::cmd_join(engine, msg, arg)?,
         "act" | "a" | "行动" => party::cmd_act(engine, msg, arg).await?,
@@ -104,7 +106,9 @@ async fn match_known_command(
         "gm" | "房主" => gm::cmd_gm(engine, msg, arg)?,
         "undo" | "回档" => turn::cmd_undo(engine, &msg.channel_id)?,
         "summary" | "recap" | "前情" => room::cmd_summary(engine, &msg.channel_id)?,
-        "export" | "log" | "导出" => export::cmd_export(engine, &msg.channel_id)?,
+        "export" | "log" | "导出" | "战报" => {
+            export::cmd_export(engine, &msg.channel_id, msg.is_direct)?
+        }
         "reset" | "end" | "结团" => room::cmd_reset(engine, msg)?,
         _ => return Ok(None),
     };

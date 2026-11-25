@@ -1,5 +1,5 @@
 use serde_json::{Value, json};
-use tavern_domain::{ChatMode, NarrativeStyle, PendingAction, Player, RoomState, ScenarioSummary};
+use tavern_domain::{ChatMode, NarrativeStyle, NpcState, PendingAction, Player, RoomState};
 
 pub fn btn(theme: &str, value: String, label: &str) -> Value {
     json!({
@@ -78,7 +78,7 @@ pub fn story_toolbar(channel_id: &str) -> Value {
     ])
 }
 
-pub fn status_console_rows(channel_id: &str, room: &RoomState) -> [Value; 2] {
+pub fn status_console_rows(channel_id: &str, room: &RoomState) -> [Value; 3] {
     let style_label = match room.narrative_style {
         NarrativeStyle::Voice => "📖 切文字沉浸",
         NarrativeStyle::Prose => "🎙️ 切语音极简",
@@ -88,7 +88,7 @@ pub fn status_console_rows(channel_id: &str, room: &RoomState) -> [Value; 2] {
         ChatMode::Strict => "💬 切直接说话",
     };
     let row1 = action_group(vec![
-        btn("success", format!("tavern:quickjoin:{channel_id}"), "⚔️ 快速入团"),
+        btn("success", format!("tavern:rolemenu:{channel_id}"), "🎭 选职业入团"),
         btn("secondary", format!("tavern:roll:{channel_id}:1d100"), "🎲 掷 d100"),
         btn("warning", format!("tavern:afk:{channel_id}"), "💤 暂离/归队"),
         btn("danger", format!("tavern:undo:{channel_id}"), "↩️ 回档上轮"),
@@ -96,10 +96,14 @@ pub fn status_console_rows(channel_id: &str, room: &RoomState) -> [Value; 2] {
     let row2 = action_group(vec![
         btn("info", format!("tavern:toggle_style:{channel_id}"), style_label),
         btn("info", format!("tavern:toggle_mode:{channel_id}"), mode_label),
-        btn("secondary", format!("tavern:cost:{channel_id}"), "💰 查账单"),
+        btn("success", format!("tavern:export:{channel_id}"), "📜 发战报墙"),
         btn("secondary", format!("tavern:menu:{channel_id}"), "📚 换剧本"),
     ]);
-    [row1, row2]
+    let row3 = action_group(vec![
+        btn("secondary", format!("tavern:cost:{channel_id}"), "💰 查账单"),
+        btn("secondary", format!("tavern:help:{channel_id}"), "📖 玩法指南"),
+    ]);
+    [row1, row2, row3]
 }
 
 pub fn push_party_cards(
@@ -112,14 +116,14 @@ pub fn push_party_cards(
             "type": "section",
             "text": {
                 "type": "kmarkdown",
-                "content": "🪑 **酒馆长桌空着呢** — 点下方 **「⚔️ 快速入团」** 一键上桌，或发 `/join 角色名 职业 | 特质` 捏人喵！"
+                "content": "🪑 **酒馆长桌空着呢** — 点下方 **「🎭 选职业入团」** 一键挑角色拿专属装备，或直接打人话上桌喵！"
             }
         }));
         return;
     }
 
     for p in players {
-        if modules.len() >= 36 {
+        if modules.len() >= 30 {
             break;
         }
         let badge = if p.is_afk {
@@ -146,12 +150,12 @@ pub fn push_party_cards(
         };
         let content = format!(
             "**{}**（{}） `{}`\n❤️ {}　｜　🧠 {}\n🏷️ {}　｜　🎒 {}",
-            p.character_name,
-            p.role_desc,
+            truncate_chars(&p.character_name, 24),
+            truncate_chars(&p.role_desc, 24),
             badge,
             hp_bar,
             san_bar,
-            status_txt,
+            truncate_chars(status_txt, 40),
             truncate_chars(&inv, 140)
         );
         modules.push(json!({
@@ -161,56 +165,39 @@ pub fn push_party_cards(
     }
 }
 
-pub fn render_scenario_menu_card(channel_id: &str, scenarios: &[ScenarioSummary]) -> String {
-    let mut modules = vec![
-        json!({
-            "type": "header",
-            "text": { "type": "plain-text", "content": "🍺 群酒馆 · 选择冒险剧本" }
-        }),
-        json!({
-            "type": "context",
-            "elements": [{
-                "type": "kmarkdown",
-                "content": "✨ **零代码开玩**：直接点下方绿色按钮在本频道开桌，全员直接打人话或点选项按钮即可推进剧情喵！"
-            }]
-        }),
-    ];
-
-    for s in scenarios {
-        if modules.len() >= 40 {
-            break;
-        }
-        modules.push(json!({ "type": "divider" }));
-        modules.push(json!({
-            "type": "section",
-            "text": {
-                "type": "kmarkdown",
-                "content": format!(
-                    "**《{}》**  `{}`\n> {}\n> 🗂️ 内置世界书词条 **{}** 条",
-                    s.name, s.genre, s.tagline, s.worldbook_count
-                )
-            }
-        }));
-        modules.push(action_group(vec![btn(
-            "success",
-            format!("tavern:start:{channel_id}:{}", s.id),
-            &format!("▶️ 开启《{}》", truncate_chars(&s.name, 12)),
-        )]));
+pub fn push_npc_section(modules: &mut Vec<Value>, npcs: &[NpcState]) {
+    if npcs.is_empty() || modules.len() >= 36 {
+        return;
     }
-
+    let lines = npcs
+        .iter()
+        .take(8)
+        .map(|n| {
+            let icon = if n.attitude.contains("信任")
+                || n.attitude.contains("友好")
+                || n.attitude.contains("信赖")
+            {
+                "🤝"
+            } else if n.attitude.contains("敌对") || n.attitude.contains("愤怒") {
+                "⚔️"
+            } else {
+                "👀"
+            };
+            format!(
+                "- {} **{}** `{}` — {}",
+                icon,
+                truncate_chars(&n.name, 20),
+                truncate_chars(&n.attitude, 12),
+                truncate_chars(&n.status, 60)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     modules.push(json!({ "type": "divider" }));
-    modules.push(action_group(vec![
-        btn("info", format!("tavern:status:{channel_id}"), "📊 当前战局"),
-        btn("secondary", format!("tavern:help:{channel_id}"), "📖 玩法指南"),
-    ]));
-
-    json!([{
-        "type": "card",
-        "theme": "primary",
-        "size": "lg",
-        "modules": modules
-    }])
-    .to_string()
+    modules.push(json!({
+        "type": "section",
+        "text": { "type": "kmarkdown", "content": format!("🗣️ **关键 NPC 动向与态度**\n{lines}") }
+    }));
 }
 
 pub fn truncate_chars(s: &str, max_chars: usize) -> String {
@@ -219,4 +206,51 @@ pub fn truncate_chars(s: &str, max_chars: usize) -> String {
     } else {
         s.chars().take(max_chars.saturating_sub(1)).collect::<String>() + "…"
     }
+}
+
+pub fn chunk_kmarkdown(text: &str, max_chars: usize) -> Vec<String> {
+    let mut chunks = Vec::new();
+    let mut current = String::new();
+    let mut current_len = 0usize;
+
+    for paragraph in text.split('\n') {
+        let p_len = paragraph.chars().count();
+        if current_len + p_len + 1 > max_chars && !current.is_empty() {
+            chunks.push(current);
+            current = String::new();
+            current_len = 0;
+        }
+        if p_len > max_chars {
+            let mut slice = String::new();
+            let mut slice_len = 0usize;
+            for ch in paragraph.chars() {
+                slice.push(ch);
+                slice_len += 1;
+                if slice_len >= max_chars {
+                    chunks.push(slice);
+                    slice = String::new();
+                    slice_len = 0;
+                }
+            }
+            if !slice.is_empty() {
+                current = slice;
+                current_len = slice_len;
+            }
+        } else {
+            if !current.is_empty() {
+                current.push('\n');
+                current_len += 1;
+            }
+            current.push_str(paragraph);
+            current_len += p_len;
+        }
+    }
+
+    if !current.is_empty() {
+        chunks.push(current);
+    }
+    if chunks.is_empty() {
+        chunks.push(" ".to_string());
+    }
+    chunks
 }

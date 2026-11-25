@@ -136,6 +136,11 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
         Ok(())
     })?;
 
+    apply_if_needed(conn, 6, "0006_m1_npc_states", |tx| {
+        add_column_if_missing(tx, "rooms", "npc_states_json", "TEXT NOT NULL DEFAULT '[]'")?;
+        Ok(())
+    })?;
+
     Ok(())
 }
 
