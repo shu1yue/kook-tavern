@@ -23,7 +23,10 @@ pub fn build_decision_gate(cfg: &AppConfig, use_mock: bool) -> Arc<dyn DecisionG
         return Arc::new(NoopDecisionGate);
     }
     match SystemOneJevGate::from_config(&cfg.jev) {
-        Some(gate) => Arc::new(gate),
+        Some(gate) => {
+            tracing::info!(?gate, "Jev System One 潜意识反射层已启用");
+            Arc::new(gate)
+        }
         None => Arc::new(NoopDecisionGate),
     }
 }

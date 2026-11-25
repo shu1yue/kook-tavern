@@ -396,7 +396,7 @@ async fn system_one_jev_gate_wire_format_fallback_and_hard_timeout() {
             let (mut sock, _) = bailian_listener.accept().await.unwrap();
             let raw = read_http_request(&mut sock).await;
             captured.push(raw);
-            let body = r#"{"answers":{"is_ooc_chat":{"probabilities":{"yes":0.91,"no":0.09},"noul":null}},"latency_ms":123.5}"#;
+            let body = r#"{"answers":{"is_in_game_action":{"probabilities":{"yes":0.09,"no":0.91},"noul":null}},"latency_ms":123.5}"#;
             write_http_json(&mut sock, "200 OK", body).await;
         }
         captured
@@ -451,7 +451,7 @@ async fn system_one_jev_gate_wire_format_fallback_and_hard_timeout() {
     let json: Value = serde_json::from_str(body_part).unwrap();
     assert_eq!(json["model"], "decision-model-preview");
     assert!(json["state"].as_str().unwrap().contains("哈哈外卖到了"));
-    assert!(json["questions"]["is_ooc_chat"]["criteria"]["yes"].is_string());
+    assert!(json["questions"]["is_in_game_action"]["criteria"]["yes"].is_string());
 
     // 3. Hard timeout fail-open test (server sleeps 1.6s, client timeout = 500ms)
     let slow_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -645,7 +645,7 @@ async fn gate7_red_team_regressions_null_fields_bounds_soft_prefix_and_partial_f
         // Req 1: Out-of-range prob 5.0 (must NOT clamp to 1.0 -> triggers fallback!)
         let (mut s1, _) = google_listener.accept().await.unwrap();
         let _ = read_http_request(&mut s1).await;
-        write_http_json(&mut s1, "200 OK", r#"{"answers":{"is_ooc_chat":{"probabilities":{"yes":5.0}}},"latency_ms":null}"#).await;
+        write_http_json(&mut s1, "200 OK", r#"{"answers":{"is_in_game_action":{"probabilities":{"yes":5.0}}},"latency_ms":null}"#).await;
         // Req 2: Partial lore response (only lore_0, missing lore_1 -> triggers fallback!)
         let (mut s2, _) = google_listener.accept().await.unwrap();
         let _ = read_http_request(&mut s2).await;
@@ -655,10 +655,10 @@ async fn gate7_red_team_regressions_null_fields_bounds_soft_prefix_and_partial_f
     let bailian_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let bailian_addr = bailian_listener.local_addr().unwrap();
     tokio::spawn(async move {
-        // Req 1: Valid response with explicit nulls (latency_ms: null, no: null)
+        // Req 1: Valid response with explicit nulls (latency_ms: null, no: null) -> yes: 0.88 => prob_ooc: 0.12
         let (mut s1, _) = bailian_listener.accept().await.unwrap();
         let _ = read_http_request(&mut s1).await;
-        write_http_json(&mut s1, "200 OK", r#"{"answers":{"is_ooc_chat":{"probabilities":{"yes":0.12,"no":null}}},"latency_ms":null}"#).await;
+        write_http_json(&mut s1, "200 OK", r#"{"answers":{"is_in_game_action":{"probabilities":{"yes":0.88,"no":null}}},"latency_ms":null}"#).await;
         // Req 2: Complete lore_0 + lore_1 response
         let (mut s2, _) = bailian_listener.accept().await.unwrap();
         let _ = read_http_request(&mut s2).await;

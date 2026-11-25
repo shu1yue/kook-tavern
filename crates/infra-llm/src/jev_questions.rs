@@ -62,21 +62,36 @@ pub(crate) fn build_ooc_state_and_questions(
     sender_name: &str,
     message: &str,
 ) -> (String, Value) {
+    let scene_tail = clip_chars(recent_scene, 90);
+    let scene_note = if scene_tail.is_empty() {
+        format!(
+            "（当前跑团场景：{} - {}）",
+            clip_chars(scenario_name, 32),
+            clip_chars(location, 36)
+        )
+    } else {
+        format!(
+            "（当前跑团场景：{} - {}；近期：{}）",
+            clip_chars(scenario_name, 32),
+            clip_chars(location, 36),
+            scene_tail
+        )
+    };
     let state = format!(
-        "【正在进行的文字冒险剧本】{}（当前地点：{}）\n【最近剧情摘要】{}\n【群友最新发言】{}: {}",
-        clip_chars(scenario_name, 40),
-        clip_chars(location, 48),
-        clip_chars(recent_scene, 360),
+        "群友「{}」发了一条消息：{}\n{}",
         clip_chars(sender_name, 24),
         clip_chars(message, 400),
+        scene_note,
     );
+    // Empirically calibrated positive-polarity framing on Bailian `decision-model-preview`:
+    // yields crisp ~0.90+ OOC (`1 - P(yes)`) vs ~0.00-0.04 IC separation.
     let questions = json!({
-        "is_ooc_chat": {
+        "is_in_game_action": {
             "type": "choice",
-            "instructions": "判断这条群聊发言是否属于纯粹的【场外闲聊 OOC】（与推进剧情或扮演角色无关的现实琐事、打招呼、笑声感叹、议论机器人或等我一下）？只要有一点角色行动、观察环境、对NPC说话、使用道具或推进故事的意图，一律判 no。",
+            "instructions": "群里正在玩文字跑团游戏。判断上面这条群友最新发言，是不是在扮演游戏角色（做出角色动作、调查环境、对NPC说话、推进游戏剧情）？",
             "criteria": {
-                "yes": "纯粹现实场外闲聊、拿外卖/上厕所/等一下、纯笑声(哈哈/笑死/666)、讨论机器人头像或系统指令，完全没有角色行动或台词",
-                "no": "操控角色行动、检查调查物品、移动地点、对NPC或队友说剧情台词、提问故事细节或任何跑团推进意图"
+                "yes": "是游戏内扮演：操控角色行动、调查物品、移动地点、对NPC/队友说剧情台词或推进故事",
+                "no": "不是游戏扮演：纯粹现实场外闲聊（拿外卖、上厕所、等一下、笑死/哈哈/666、聊机器人或生活琐事）"
             }
         }
     });

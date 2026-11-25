@@ -212,9 +212,10 @@ impl DecisionGate for SystemOneJevGate {
                 scenario_name, location, recent_scene, sender_name, message,
             );
             let (parsed, latency_ms, provider) =
-                self.query(state, questions, &["is_ooc_chat"]).await?;
-            let prob_ooc = extract_yes_prob(&parsed, "is_ooc_chat")?;
-            debug!(provider, latency_ms, prob_ooc, "Jev OOC 吹水门卫判定完成");
+                self.query(state, questions, &["is_in_game_action"]).await?;
+            let prob_ic = extract_yes_prob(&parsed, "is_in_game_action")?;
+            let prob_ooc = (1.0 - prob_ic).clamp(0.0, 1.0);
+            debug!(provider, latency_ms, prob_ic, prob_ooc, "Jev OOC 吹水门卫判定完成");
             Some(OocVerdict { prob_ooc, provider, latency_ms })
         })
     }
