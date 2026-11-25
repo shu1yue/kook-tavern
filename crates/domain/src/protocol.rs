@@ -86,6 +86,15 @@ pub enum RoomEvent {
 }
 
 #[derive(Debug, Clone)]
+pub struct ScenarioSummary {
+    pub id: String,
+    pub name: String,
+    pub genre: String,
+    pub tagline: String,
+    pub worldbook_count: usize,
+}
+
+#[derive(Debug, Clone)]
 pub enum EngineResponse {
     Ignore,
     Notice {
@@ -93,6 +102,11 @@ pub enum EngineResponse {
         body: String,
         theme: CardTheme,
         show_actions: bool,
+    },
+    /// Interactive scenario lobby card with clickable start buttons.
+    ScenarioMenu {
+        channel_id: String,
+        scenarios: Vec<ScenarioSummary>,
     },
     /// Delivered privately to a single user (DM or KOOK `temp_target_id`), NEVER public!
     PrivateNotice {

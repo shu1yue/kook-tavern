@@ -336,3 +336,134 @@ async fn red_team_regressions_dm_whitelist_button_auth_join_preservation_and_res
     ));
     assert!(store.get_room("m1_chan").unwrap().is_none());
 }
+
+#[tokio::test]
+async fn zero_code_full_button_gameplay_and_stale_pick_guard() {
+    let mut cfg = m1_config();
+    cfg.daily_max_llm_calls = 10;
+    let store = Arc::new(SqliteRoomStore::open_in_memory().unwrap());
+    let scenarios = Arc::new(FsScenarioCatalog::load_from_dir(&cfg.scenarios_dir).unwrap());
+    let engine = GameEngine::new(cfg, store.clone(), scenarios, Arc::new(MockLlmProvider));
+
+    // 1. Open scenario menu via button (brand-new channel with resolved guild_id)
+    let menu = engine
+        .handle_button_in_guild(
+            Some("friend_guild"),
+            "m1_chan",
+            "u1",
+            "小明",
+            "tavern:menu:m1_chan",
+        )
+        .await
+        .unwrap();
+    assert!(matches!(menu, EngineResponse::ScenarioMenu { .. }));
+
+    // 2. Start ember_tavern via button -> defaults to Roleplay mode + opening_actions saved!
+    let start = engine
+        .handle_button_in_guild(
+            Some("friend_guild"),
+            "m1_chan",
+            "u1",
+            "小明",
+            "tavern:start:m1_chan:ember_tavern",
+        )
+        .await
+        .unwrap();
+    assert!(matches!(start, EngineResponse::StoryTurn { turn_number: 0, .. }));
+    let room0 = store.get_room("m1_chan").unwrap().unwrap();
+    assert_eq!(room0.chat_mode, tavern_domain::ChatMode::Roleplay);
+    assert_eq!(room0.suggested_actions.len(), 3);
+
+    // Accidental re-click of start button MUST NOT wipe active room!
+    let dup_start = engine
+        .handle_button_in_guild(
+            Some("friend_guild"),
+            "m1_chan",
+            "u2",
+            "路人",
+            "tavern:start:m1_chan:fog_manor",
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        dup_start,
+        EngineResponse::Notice { theme: CardTheme::Warning, .. }
+    ));
+    assert_eq!(store.get_room("m1_chan").unwrap().unwrap().scenario_id, "ember_tavern");
+
+    // 3. Quick-join with colliding nicknames automatically suffixes `#2`
+    let qj1 = engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:quickjoin:m1_chan")
+        .await
+        .unwrap();
+    assert!(matches!(qj1, EngineResponse::Notice { theme: CardTheme::Success, .. }));
+    let qj2 = engine
+        .handle_button_in_guild(None, "m1_chan", "u2", "小明", "tavern:quickjoin:m1_chan")
+        .await
+        .unwrap();
+    assert!(matches!(qj2, EngineResponse::Notice { theme: CardTheme::Success, .. }));
+    assert_eq!(store.get_player("m1_chan", "u2").unwrap().unwrap().character_name, "小明#2");
+
+    // 4. Button roll 2d6 works; forged bad roll expression is ignored
+    let roll_ok = engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:roll:m1_chan:2d6")
+        .await
+        .unwrap();
+    assert!(matches!(roll_ok, EngineResponse::Notice { .. }));
+    let roll_bad = engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:roll:m1_chan:999d999")
+        .await
+        .unwrap();
+    assert!(matches!(roll_bad, EngineResponse::Ignore));
+
+    // 5. Player 1 clicks suggestion button ①, Player 2 speaks plain text (zero slash commands!)
+    //    -> auto-resolves Turn 1!
+    assert!(!engine.will_button_likely_resolve_turn(None, "m1_chan", "u1", "tavern:pick:m1_chan:0:0"));
+    let pick1 = engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:pick:m1_chan:0:0")
+        .await
+        .unwrap();
+    assert!(matches!(pick1, EngineResponse::Notice { .. }));
+
+    // Player 2 clicking pick button now WOULD trigger auto-resolve!
+    assert!(engine.will_button_likely_resolve_turn(None, "m1_chan", "u2", "tavern:pick:m1_chan:0:1"));
+    let plain_act = engine
+        .handle_message(gmsg("friend_guild", "u2", "小明", "我也凑过去检查信使的钥匙"))
+        .await
+        .unwrap();
+    assert!(matches!(plain_act, EngineResponse::StoryTurn { turn_number: 1, .. }));
+
+    // 6. Stale Turn 0 pick button is rejected cleanly!
+    let stale_pick = engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:pick:m1_chan:0:0")
+        .await
+        .unwrap();
+    assert!(matches!(
+        stale_pick,
+        EngineResponse::Notice { theme: CardTheme::Info, .. }
+    ));
+
+    // 7. Whisper button returns PrivateNotice ONLY for caller; toggle mode & style buttons flip state
+    let wb = engine
+        .handle_button_in_guild(None, "m1_chan", "u2", "小明", "tavern:whisper:m1_chan")
+        .await
+        .unwrap();
+    assert!(matches!(wb, EngineResponse::PrivateNotice { .. }));
+
+    engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:toggle_mode:m1_chan")
+        .await
+        .unwrap();
+    assert_eq!(
+        store.get_room("m1_chan").unwrap().unwrap().chat_mode,
+        tavern_domain::ChatMode::Strict
+    );
+    engine
+        .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:toggle_style:m1_chan")
+        .await
+        .unwrap();
+    assert_eq!(
+        store.get_room("m1_chan").unwrap().unwrap().narrative_style,
+        NarrativeStyle::Voice
+    );
+}

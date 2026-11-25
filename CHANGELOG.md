@@ -2,6 +2,13 @@
 
 > 每次版本上线前，用大白话记录“这次改了什么”以及“万一线上出状况怎么 10 秒回滚”。
 
+## [0.3.1] - M1.1 KOOK 卡片 UI 焕新与零代码全按钮交互
+### 本次改动
+- **零代码全按钮操控**：新增 `crates/core/src/commands/buttons.rs`，支持一键选本开团（`start` / `menu`）、一键快速入团（`quickjoin`，自动避重名）、直接点击 DM 剧情灵感按钮提交行动（`pick`，绑定回合号防误点旧卡）、一键掷骰（`2d6` / `1d100`）、一键查秘密纸条（`whisper`，仅本人可见）、一键暂离/归队（`afk`）、一键切换语音/文字档与直接说话/指令前缀模式（`toggle_style` / `toggle_mode`）、一键查账单（`cost`）。
+- **开团体验优化**：`/start` 默认开启 `Roleplay`（直接打人话即行动，括号/双斜杠跳过场外闲聊），内置双剧本新增开场可点击行动灵感 `opening_actions`，新增 SQLite 增量迁移 `0005_m1_ux_suggested_actions`。
+- **卡片颜值升级**：新增 `crates/adapter-kook/src/card_widgets.rs`，战局面板加入红蓝可视化 HP/SAN 进度条与双行控制台；严格遵守 KOOK 每个 `action-group` 最多 4 按钮、单卡最多 50 模块约束。
+- **未开团频道白名单权威校验**：`KookClient` 新增 `channel_guild_cache` + `GET /api/v3/channel/view` 权威反查，确保在未建房频道点击置顶“一键开团”按钮同样严守 `ALLOWED_GUILD_IDS` 白名单。
+
 ## [0.3.0] - M1 DeepSeek 优化 + KOOK 语音开黑版
 ### 本次改动
 - DeepSeek 客户端新增 429/5xx 晚高峰指数退避重试与 `Retry-After` 支持，单次 60s 超时不级联锁房，兼容显式 `null` 用量字段；优化首回合消息序列保证静态 System 前缀稳定命中缓存；新增 `usage_logs` 表与 `/cost` 消费/缓存命中率看板。

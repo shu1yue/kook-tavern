@@ -63,6 +63,11 @@ pub async fn handle_kook_event(d: Value, engine: GameEngine, client: KookClient)
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
         .map(String::from);
+    if !is_direct
+        && let Some(ref gid) = guild_id
+    {
+        client.cache_channel_guild(&channel_id, gid);
+    }
 
     let user_name = d
         .pointer("/extra/author/nickname")
@@ -146,26 +151,40 @@ async fn handle_button_event(d: &Value, engine: GameEngine, client: KookClient) 
         .and_then(Value::as_str)
         .unwrap_or("");
 
-    if channel_id.is_empty() || value.is_empty() {
+    if channel_id.is_empty()
+        || user_id.is_empty()
+        || value.is_empty()
+        || !value.starts_with("tavern:")
+    {
         return;
     }
 
-    let expected_resolve = format!("tavern:resolve:{channel_id}");
-    let placeholder_id = if value == expected_resolve
-        && engine.will_likely_resolve_turn(
-            guild_id.as_deref(),
-            &channel_id,
-            &user_id,
-            "/go",
-            false,
-        ) {
+    // KOOK `message_btn_click` omits `guild_id`; resolve authoritatively via cached channel/view
+    // so clickable start buttons in brand-new channels still respect `ALLOWED_GUILD_IDS`.
+    let resolved_guild = match guild_id {
+        Some(g) => Some(g),
+        None => client.resolve_channel_guild(&channel_id).await,
+    };
+
+    let placeholder_id = if engine.will_button_likely_resolve_turn(
+        resolved_guild.as_deref(),
+        &channel_id,
+        &user_id,
+        value,
+    ) {
         client.send_thinking_placeholder(&channel_id).await
     } else {
         None
     };
 
     let result = engine
-        .handle_button_in_guild(guild_id.as_deref(), &channel_id, &user_id, &user_name, value)
+        .handle_button_in_guild(
+            resolved_guild.as_deref(),
+            &channel_id,
+            &user_id,
+            &user_name,
+            value,
+        )
         .await;
     if let Some(pid) = placeholder_id {
         client.delete_channel_message(&pid).await;

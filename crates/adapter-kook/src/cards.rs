@@ -1,7 +1,10 @@
 use serde_json::{Value, json};
-use tavern_domain::EngineResponse;
+use tavern_domain::{ChatMode, EngineResponse, NarrativeStyle};
 
-use crate::plain::format_party_block;
+use crate::card_widgets::{
+    notice_action_bar, push_party_cards, render_scenario_menu_card, status_console_rows,
+    story_suggestion_buttons, story_toolbar, truncate_chars,
+};
 
 pub fn thinking_placeholder_card_json() -> String {
     json!([{
@@ -22,6 +25,10 @@ pub fn thinking_placeholder_card_json() -> String {
 pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String {
     match resp {
         EngineResponse::Ignore | EngineResponse::PrivateNotice { .. } => "[]".to_string(),
+        EngineResponse::ScenarioMenu {
+            channel_id: menu_chan,
+            scenarios,
+        } => render_scenario_menu_card(menu_chan, scenarios),
         EngineResponse::Notice {
             title,
             body,
@@ -35,7 +42,7 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
             push_chunked_sections(&mut modules, body, 3200);
             if *show_actions {
                 modules.push(json!({ "type": "divider" }));
-                modules.push(action_buttons_module(channel_id));
+                modules.push(notice_action_bar(channel_id));
             }
             json!([{
                 "type": "card",
@@ -67,7 +74,7 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
                     "elements": [{
                         "type": "kmarkdown",
                         "content": truncate_chars(
-                            &format!("📍 **{}** ｜ 🕒 {} ｜ 🎲 第 **{}** 回合", location, world_time, turn_number),
+                            &format!("📍 **{}**　｜　🕒 {}　｜　🎲 第 **{}** 回合", location, world_time, turn_number),
                             500
                         )
                     }]
@@ -80,30 +87,38 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
             if !state_changes.is_empty() || !whisper_hints.is_empty() {
                 modules.push(json!({ "type": "divider" }));
                 let mut lines = Vec::new();
-                lines.extend(state_changes.iter().cloned());
-                lines.extend(whisper_hints.iter().cloned());
+                lines.extend(state_changes.iter().map(|s| format!("> {s}")));
+                lines.extend(whisper_hints.iter().map(|s| format!("> {s}")));
                 push_chunked_sections(&mut modules, &lines.join("\n"), 3200);
             }
 
-            if !suggested_actions.is_empty() {
+            if let Some(pick_row) =
+                story_suggestion_buttons(turn_chan, *turn_number, suggested_actions)
+            {
+                let badges = ["①", "②", "③"];
                 let hints = suggested_actions
                     .iter()
-                    .take(4)
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .take(3)
                     .enumerate()
-                    .map(|(i, s)| format!("{}. {}", i + 1, truncate_chars(s, 60)))
+                    .map(|(i, s)| format!("{} {}", badges[i], truncate_chars(s, 45)))
                     .collect::<Vec<_>>()
                     .join("　");
+                modules.push(json!({ "type": "divider" }));
                 modules.push(json!({
                     "type": "context",
                     "elements": [{
                         "type": "kmarkdown",
-                        "content": truncate_chars(&format!("💡 **行动灵感**：{hints}"), 500)
+                        "content": truncate_chars(&format!("✨ **点按钮直接行动**（或直接打人话）：{hints}"), 500)
                     }]
                 }));
+                modules.push(pick_row);
+            } else {
+                modules.push(json!({ "type": "divider" }));
             }
 
-            modules.push(json!({ "type": "divider" }));
-            modules.push(action_buttons_module(turn_chan));
+            modules.push(story_toolbar(turn_chan));
 
             json!([{
                 "type": "card",
@@ -119,10 +134,18 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
             players,
             pending_actions,
         } => {
+            let mode_badge = match room.chat_mode {
+                ChatMode::Roleplay => "💬 直接说话",
+                ChatMode::Strict => "⌨️ 指令前缀",
+            };
+            let style_badge = match room.narrative_style {
+                NarrativeStyle::Voice => "🎙️ 语音极简",
+                NarrativeStyle::Prose => "📖 文字沉浸",
+            };
             let mut modules = vec![
                 json!({
                     "type": "header",
-                    "text": { "type": "plain-text", "content": truncate_chars(&format!("📊 《{}》当前战局面板", room.title), 100) }
+                    "text": { "type": "plain-text", "content": truncate_chars(&format!("📊 《{}》战局与控制台", room.title), 100) }
                 }),
                 json!({
                     "type": "context",
@@ -130,12 +153,8 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
                         "type": "kmarkdown",
                         "content": truncate_chars(
                             &format!(
-                                "📍 {} ｜ 🕒 {} ｜ 🎲 第 {} 回合 ｜ 模式：`{}` ｜ 档位：`{}`",
-                                room.location,
-                                room.world_time,
-                                room.turn_number,
-                                room.chat_mode.as_str(),
-                                room.narrative_style.as_str()
+                                "📍 {} ｜ 🕒 {} ｜ 🎲 第 {} 回合 ｜ {} ｜ {}",
+                                room.location, room.world_time, room.turn_number, mode_badge, style_badge
                             ),
                             500
                         )
@@ -144,8 +163,7 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
                 json!({ "type": "divider" }),
             ];
 
-            let party_text = format_party_block(players, pending_actions);
-            push_chunked_sections(&mut modules, &party_text, 3200);
+            push_party_cards(&mut modules, players, pending_actions);
 
             if !room.clues.is_empty() {
                 modules.push(json!({ "type": "divider" }));
@@ -160,7 +178,9 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
             }
 
             modules.push(json!({ "type": "divider" }));
-            modules.push(action_buttons_module(board_chan));
+            let [row1, row2] = status_console_rows(board_chan, room);
+            modules.push(row1);
+            modules.push(row2);
 
             json!([{
                 "type": "card",
@@ -175,7 +195,7 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
 
 fn push_chunked_sections(modules: &mut Vec<Value>, text: &str, max_chars: usize) {
     for chunk in chunk_kmarkdown(text, max_chars) {
-        if modules.len() >= 42 {
+        if modules.len() >= 40 {
             break;
         }
         modules.push(json!({
@@ -185,62 +205,41 @@ fn push_chunked_sections(modules: &mut Vec<Value>, text: &str, max_chars: usize)
     }
 }
 
-fn action_buttons_module(channel_id: &str) -> Value {
-    json!({
-        "type": "action-group",
-        "elements": [
-            {
-                "type": "button",
-                "theme": "primary",
-                "value": format!("tavern:resolve:{channel_id}"),
-                "click": "return-val",
-                "text": { "type": "plain-text", "content": "⚡ 立刻结算本轮" }
-            },
-            {
-                "type": "button",
-                "theme": "info",
-                "value": format!("tavern:status:{channel_id}"),
-                "click": "return-val",
-                "text": { "type": "plain-text", "content": "📊 查看状态" }
-            },
-            {
-                "type": "button",
-                "theme": "warning",
-                "value": format!("tavern:undo:{channel_id}"),
-                "click": "return-val",
-                "text": { "type": "plain-text", "content": "↩️ 回档上轮" }
-            }
-        ]
-    })
-}
-
 pub fn chunk_kmarkdown(text: &str, max_chars: usize) -> Vec<String> {
     let mut chunks = Vec::new();
     let mut current = String::new();
+    let mut current_len = 0usize;
 
     for paragraph in text.split('\n') {
-        if current.chars().count() + paragraph.chars().count() + 1 > max_chars && !current.is_empty()
-        {
+        let p_len = paragraph.chars().count();
+        if current_len + p_len + 1 > max_chars && !current.is_empty() {
             chunks.push(current);
             current = String::new();
+            current_len = 0;
         }
-        if paragraph.chars().count() > max_chars {
+        if p_len > max_chars {
             let mut slice = String::new();
+            let mut slice_len = 0usize;
             for ch in paragraph.chars() {
                 slice.push(ch);
-                if slice.chars().count() >= max_chars {
+                slice_len += 1;
+                if slice_len >= max_chars {
                     chunks.push(slice);
                     slice = String::new();
+                    slice_len = 0;
                 }
             }
             if !slice.is_empty() {
                 current = slice;
+                current_len = slice_len;
             }
         } else {
             if !current.is_empty() {
                 current.push('\n');
+                current_len += 1;
             }
             current.push_str(paragraph);
+            current_len += p_len;
         }
     }
 
@@ -253,21 +252,31 @@ pub fn chunk_kmarkdown(text: &str, max_chars: usize) -> Vec<String> {
     chunks
 }
 
-fn truncate_chars(s: &str, max_chars: usize) -> String {
-    if s.chars().count() <= max_chars {
-        s.to_string()
-    } else {
-        s.chars().take(max_chars.saturating_sub(1)).collect::<String>() + "…"
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::plain::render_plain_fallback;
+    use tavern_domain::ScenarioSummary;
+
+    fn assert_valid_kook_card(raw: &str) {
+        let v: Value = serde_json::from_str(raw).expect("valid json array");
+        assert!(v.is_array());
+        let modules = v[0]["modules"].as_array().expect("modules array");
+        assert!(modules.len() <= 50, "KOOK max 50 modules per card");
+        for m in modules {
+            if m["type"] == "action-group" {
+                let elems = m["elements"].as_array().expect("elements array");
+                assert!(
+                    elems.len() <= 4,
+                    "KOOK max 4 buttons per action-group, got {}",
+                    elems.len()
+                );
+            }
+        }
+    }
 
     #[test]
-    fn builds_valid_kook_card_json_with_buttons() {
+    fn builds_valid_kook_cards_with_interactive_buttons_and_zero_whisper_leak() {
         let resp = EngineResponse::StoryTurn {
             channel_id: "ch_99".into(),
             turn_number: 2,
@@ -277,7 +286,7 @@ mod tests {
             narrative: "老雷恩推过来一杯麦酒。".into(),
             state_changes: vec!["**陆沉**：🎒 获得「钥匙」".into()],
             whisper_hints: vec!["🤫 DM 悄悄给 **陆沉** 递了一张秘密纸条".into()],
-            suggested_actions: vec!["追问白鸦".into()],
+            suggested_actions: vec!["追问白鸦下落".into(), "潜入地下酒窖".into()],
             direct_messages: vec![tavern_domain::DirectMessageOut {
                 user_id: "u1".into(),
                 player_name: "陆沉".into(),
@@ -285,11 +294,26 @@ mod tests {
             }],
         };
         let raw = render_kook_card_json("ch_99", &resp);
-        let v: Value = serde_json::from_str(&raw).expect("valid json array");
-        assert!(v.is_array());
-        assert_eq!(v[0]["type"], "card");
-        assert!(raw.contains("tavern:resolve:ch_99"));
+        assert_valid_kook_card(&raw);
+        assert!(raw.contains("tavern:pick:ch_99:2:0"));
+        assert!(raw.contains("tavern:pick:ch_99:2:1"));
+        assert!(raw.contains("tavern:roll:ch_99:2d6"));
+        assert!(raw.contains("tavern:whisper:ch_99"));
         assert!(!raw.contains("绝密暗格密码0317"));
+
+        let menu = EngineResponse::ScenarioMenu {
+            channel_id: "ch_99".into(),
+            scenarios: vec![ScenarioSummary {
+                id: "ember_tavern".into(),
+                name: "余烬酒馆".into(),
+                genre: "奇幻".into(),
+                tagline: "暴雪夜悬赏".into(),
+                worldbook_count: 5,
+            }],
+        };
+        let menu_raw = render_kook_card_json("ch_99", &menu);
+        assert_valid_kook_card(&menu_raw);
+        assert!(menu_raw.contains("tavern:start:ch_99:ember_tavern"));
 
         let public_fallback = render_plain_fallback(&resp, false);
         assert!(public_fallback.contains("获得「钥匙」"));

@@ -69,6 +69,16 @@ impl GameEngine {
         commands::will_likely_resolve_turn(self, guild_id, channel_id, user_id, content, is_direct)
     }
 
+    pub fn will_button_likely_resolve_turn(
+        &self,
+        guild_id: Option<&str>,
+        channel_id: &str,
+        user_id: &str,
+        value: &str,
+    ) -> bool {
+        commands::buttons::will_button_likely_resolve_turn(self, guild_id, channel_id, user_id, value)
+    }
+
     pub async fn handle_message(&self, msg: IncomingMessage) -> Result<EngineResponse> {
         commands::dispatch_message(self, msg).await
     }
@@ -88,11 +98,12 @@ impl GameEngine {
         &self,
         guild_id: Option<&str>,
         channel_id: &str,
-        _user_id: &str,
-        _user_name: &str,
+        user_id: &str,
+        user_name: &str,
         value: &str,
     ) -> Result<EngineResponse> {
-        commands::dispatch_button(self, guild_id, channel_id, value).await
+        commands::buttons::dispatch_button(self, guild_id, channel_id, user_id, user_name, value)
+            .await
     }
 
     pub async fn resolve_turn(&self, channel_id: &str) -> Result<EngineResponse> {

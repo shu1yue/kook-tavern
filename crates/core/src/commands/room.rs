@@ -3,44 +3,36 @@ use chrono::Utc;
 use rand::Rng;
 use tavern_domain::{
     CardTheme, ChatMode, EngineResponse, IncomingMessage, NarrativeStyle, RoomEvent, RoomState,
-    TurnPhase,
+    ScenarioSummary, TurnPhase,
 };
 
 use crate::engine::GameEngine;
 
 pub fn cmd_help() -> EngineResponse {
     let body = [
-        "**开团与准备**",
-        "- `/scenarios` — 查看所有可选剧本",
-        "- `/start [剧本ID]` — 在当前频道开新团（默认《余烬酒馆》）",
-        "- `/join 角色名 身份 | 特质1,特质2` — 建卡入团（如 `/join 陆沉 流浪机械师 | 眼尖,手巧`）",
+        "**✨ 零代码游玩方式（推荐！全程点按钮 + 说人话）**",
+        "1. 点卡片上的 **「▶️ 开启剧本」** 开桌，新人点 **「⚔️ 快速入团」** 立刻参战",
+        "2. 行动阶段：**直接点剧情卡上的 ①②③ 行动按钮**，或者**直接在频道打人话**即可提交行动（场外闲聊请加括号 `（我去倒水）` 或 `//` 跳过）",
+        "3. 掷骰、查私密纸条、暂离、结算、回档、切语音档——全部都在卡片底部一键点击喵！",
         "",
-        "**游玩与回合推进**",
-        "- `/act 你的行动` 或 `> 你的行动` — 提交本轮行动（结算中提交会自动暂存至下一轮）",
-        "- `/roll 2d6+1 [原因]` 或 `.r d100 侦查` — 真随机掷骰，自动附带到本轮行动交给 DM 裁决",
-        "- `/go`（或点卡片按钮 `⚡ 立刻结算本轮`）— 立刻打包全员行动交由 AI DM 结算",
-        "- `/status` — 查看当前场景、全员 HP/SAN/背包、线索与本轮提交进度",
-        "",
-        "**秩序与工具**",
-        "- `/style voice` / `/style prose` — 切换语音开黑极简档（100~180字）或纯文字沉浸档",
-        "- `/mode strict` / `/mode rp` — 切换严格指令模式或沉浸 RP 模式（`(`/`（`/`//` 视为 OOC）",
-        "- `/afk` / `/leave` — 暂离不卡全队自动结算 / 退出本局",
-        "- `/whisper` — 仅本人可见地补领查看所有 DM 秘密纸条",
-        "- `/cost` — 查看本房 DeepSeek 前缀缓存命中率、估算费用与今日限额",
-        "- `/gm help` — 房主手动兜底修正血量/理智/道具/线索",
-        "- `/undo` / `/summary` / `/export` / `/reset` — 回档 / 前情 / 导出战报 / 结团",
+        "**⌨️ 进阶文字快捷键（想精细定制时再用）**",
+        "- `/menu` 或 `/scenarios` — 弹出带开团按钮的剧本大厅",
+        "- `/join 角色名 职业 | 特质1,特质2` — 自定义角色人设（不清空血量和背包）",
+        "- `.r 2d6+1 侦查` 或 `.r d100` — 自定义加值掷骰",
+        "- `/gm help` — 房主手动微调血量/理智/背包/线索",
+        "- `/export` / `/reset` — 导出 Markdown 战报 / 房主结团清空",
     ]
     .join("\n");
 
     EngineResponse::Notice {
-        title: "🍺 群酒馆 AI DM 指令手册".to_string(),
+        title: "🍺 群酒馆 AI DM 玩法指南".to_string(),
         body,
         theme: CardTheme::Primary,
         show_actions: false,
     }
 }
 
-pub fn cmd_list_scenarios(engine: &GameEngine) -> EngineResponse {
+pub fn cmd_list_scenarios(engine: &GameEngine, channel_id: &str) -> EngineResponse {
     let list = engine.scenarios.list();
     if list.is_empty() {
         return EngineResponse::Notice {
@@ -51,27 +43,20 @@ pub fn cmd_list_scenarios(engine: &GameEngine) -> EngineResponse {
         };
     }
 
-    let body = list
+    let scenarios = list
         .into_iter()
-        .map(|s| {
-            format!(
-                "**{}** (`{}`)\n> {}｜{}\n> 世界书词条：{} 条｜开团指令：`/start {}`",
-                s.name,
-                s.id,
-                s.genre,
-                s.tagline,
-                s.worldbook.len(),
-                s.id
-            )
+        .map(|s| ScenarioSummary {
+            id: s.id,
+            name: s.name,
+            genre: s.genre,
+            tagline: s.tagline,
+            worldbook_count: s.worldbook.len(),
         })
-        .collect::<Vec<_>>()
-        .join("\n\n");
+        .collect();
 
-    EngineResponse::Notice {
-        title: "📚 可选冒险剧本列表".to_string(),
-        body,
-        theme: CardTheme::Info,
-        show_actions: false,
+    EngineResponse::ScenarioMenu {
+        channel_id: channel_id.to_string(),
+        scenarios,
     }
 }
 
@@ -107,6 +92,20 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         engine.store.delete_room(&msg.channel_id)?;
     }
 
+    let mut opening_actions: Vec<String> = scenario
+        .opening_actions
+        .iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .take(3)
+        .collect();
+    if opening_actions.is_empty() {
+        opening_actions = vec![
+            "观察四周环境并寻找关键人物".to_string(),
+            "向面前最可疑的人搭话打听消息".to_string(),
+        ];
+    }
+
     let now = Utc::now();
     let room = RoomState {
         channel_id: msg.channel_id.clone(),
@@ -118,11 +117,12 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         turn_number: 0,
         state_version: 1,
         turn_phase: TurnPhase::Collecting,
-        chat_mode: ChatMode::Strict,
+        chat_mode: ChatMode::Roleplay,
         narrative_style: NarrativeStyle::Prose,
         gm_user_id: msg.user_id.clone(),
         web_token: generate_web_token(),
         clues: Vec::new(),
+        suggested_actions: opening_actions.clone(),
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,
@@ -136,9 +136,9 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
     });
 
     let mode_hint = if msg.is_direct {
-        "🕯️ 当前为私聊单人冒险模式（支持随时 `/act` 单人推进）".to_string()
+        "🕯️ 当前为私聊单人冒险模式（直接发消息或点按钮即可推进）".to_string()
     } else {
-        format!("🎛️ 发言模式：{}", room.chat_mode.display_label())
+        "💬 已默认开启「直接说人话」模式：直接打字或点下方 ①②③ 按钮即行动！场外闲聊请加括号（）或 //，点「🎛️ 面板/设置」可随时切换。".to_string()
     };
 
     Ok(EngineResponse::StoryTurn {
@@ -150,13 +150,10 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         narrative: scenario.opening_scene.trim().to_string(),
         state_changes: vec![
             mode_hint,
-            "✨ 请各位玩家发送 `/join 角色名 身份 | 特质1,特质2` 建卡入团，再用 `/act 行动内容` 提交第 1 轮行动！".to_string(),
+            "✨ 想快速开玩？直接点下面的 ①②③ 行动按钮（自动入团），或点「🎛️ 面板/设置」里的「⚔️ 快速入团」；想自定义人设再发 `/join 角色名 职业 | 特质` 喵！".to_string(),
         ],
         whisper_hints: Vec::new(),
-        suggested_actions: vec![
-            "/join 你的角色名 职业身份 | 特质1,特质2".to_string(),
-            "/act 观察四周并向附近的人打听情况".to_string(),
-        ],
+        suggested_actions: opening_actions,
         direct_messages: Vec::new(),
     })
 }

@@ -1,26 +1,27 @@
+use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use tavern_domain::{CardTheme, EngineResponse};
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
-use tracing::{error, warn};
+use tracing::warn;
 
-use crate::cards::{chunk_kmarkdown, render_kook_card_json, thinking_placeholder_card_json};
-use crate::plain::render_plain_fallback;
+use crate::cards::thinking_placeholder_card_json;
 
 const KOOK_API_BASE: &str = "https://www.kookapp.cn/api/v3";
+const MAX_CHANNEL_GUILD_CACHE: usize = 1024;
 
 #[derive(Clone)]
 pub struct KookClient {
     http: Client,
     token: String,
     whisper_permits: Arc<Semaphore>,
+    channel_guild_cache: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl fmt::Debug for KookClient {
@@ -48,6 +49,12 @@ struct MsgCreateData {
     msg_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct ChannelViewData {
+    #[serde(default)]
+    guild_id: Option<String>,
+}
+
 impl KookClient {
     pub fn new(token: String) -> Result<Self> {
         let http = Client::builder()
@@ -59,11 +66,77 @@ impl KookClient {
             http,
             token,
             whisper_permits: Arc::new(Semaphore::new(16)),
+            channel_guild_cache: Arc::new(RwLock::new(HashMap::new())),
         })
+    }
+
+    pub(crate) fn whisper_permits_handle(&self) -> Arc<Semaphore> {
+        self.whisper_permits.clone()
     }
 
     fn auth_header(&self) -> String {
         format!("Bot {}", self.token)
+    }
+
+    pub fn cache_channel_guild(&self, channel_id: &str, guild_id: &str) {
+        if channel_id.is_empty() || guild_id.is_empty() {
+            return;
+        }
+        if let Ok(mut map) = self.channel_guild_cache.write() {
+            if map.len() >= MAX_CHANNEL_GUILD_CACHE && !map.contains_key(channel_id) {
+                map.clear();
+            }
+            map.insert(channel_id.to_string(), guild_id.to_string());
+        }
+    }
+
+    /// Authoritatively resolves a KOOK channel's owning `guild_id` (cached, falling back to
+    /// `GET /api/v3/channel/view`), so button clicks in brand-new rooms still pass whitelist checks.
+    pub async fn resolve_channel_guild(&self, channel_id: &str) -> Option<String> {
+        if channel_id.is_empty() {
+            return None;
+        }
+        if let Ok(map) = self.channel_guild_cache.read()
+            && let Some(g) = map.get(channel_id)
+        {
+            return Some(g.clone());
+        }
+        let url = format!("{KOOK_API_BASE}/channel/view");
+        let resp = match self
+            .http
+            .get(&url)
+            .query(&[("target_id", channel_id)])
+            .header("Authorization", self.auth_header())
+            .send()
+            .await
+        {
+            Ok(r) if r.status().is_success() => r,
+            Ok(r) => {
+                warn!(channel_id, status = %r.status(), "查询 KOOK 频道所属服务器状态异常");
+                return None;
+            }
+            Err(err) => {
+                warn!(channel_id, error = %err, "查询 KOOK 频道所属服务器失败");
+                return None;
+            }
+        };
+        let parsed: KookApiResp<ChannelViewData> = match resp.json().await {
+            Ok(v) => v,
+            Err(err) => {
+                warn!(channel_id, error = %err, "解析 KOOK channel/view 响应失败");
+                return None;
+            }
+        };
+        if parsed.code != 0 {
+            warn!(channel_id, code = parsed.code, "KOOK channel/view 返回非零错误码");
+            return None;
+        }
+        let guild_id = parsed.data?.guild_id.unwrap_or_default();
+        if guild_id.trim().is_empty() {
+            return None;
+        }
+        self.cache_channel_guild(channel_id, &guild_id);
+        Some(guild_id)
     }
 
     pub async fn get_gateway_url(&self) -> Result<String> {
@@ -224,112 +297,5 @@ impl KookClient {
             return Ok(resp.data.unwrap_or(Value::Null));
         }
         bail!("{op}在 429 重试后仍然失败")
-    }
-
-    pub async fn dispatch_response(&self, channel_id: &str, resp: EngineResponse) {
-        if matches!(resp, EngineResponse::Ignore) {
-            return;
-        }
-
-        // PrivateNotice MUST NEVER be sent to the public channel!
-        if let EngineResponse::PrivateNotice {
-            user_id,
-            title,
-            body,
-        } = resp
-        {
-            let content = format!("**{title}**\n{body}");
-            let mut dm_failed = false;
-            for (idx, chunk) in chunk_kmarkdown(&content, 3500).into_iter().enumerate() {
-                if idx > 0 {
-                    sleep(Duration::from_millis(250)).await;
-                }
-                if !dm_failed {
-                    if let Err(dm_err) = self.send_direct_kmarkdown(&user_id, &chunk).await {
-                        warn!(user_id, error = %dm_err, "私信发送专属纸条失败，自动降级为频道仅本人可见临时消息");
-                        dm_failed = true;
-                    } else {
-                        continue;
-                    }
-                }
-                if let Err(tmp_err) = self
-                    .send_channel_temp_kmarkdown(channel_id, &user_id, &chunk)
-                    .await
-                {
-                    warn!(user_id, error = %tmp_err, "专属纸条临时消息降级同样失败");
-                    break;
-                }
-            }
-            return;
-        }
-
-        // 1. Send public channel card FIRST for low latency
-        let card_json = render_kook_card_json(channel_id, &resp);
-        if let Err(err) = self.send_channel_card(channel_id, &card_json).await {
-            warn!(channel_id, error = %err, "发送卡片消息失败，自动降级为分段 KMarkdown 发送");
-            let plain = render_plain_fallback(&resp, false);
-            for chunk in chunk_kmarkdown(&plain, 3500) {
-                if let Err(fb_err) = self.send_channel_kmarkdown(channel_id, &chunk).await {
-                    error!(channel_id, error = %fb_err, "降级发送频道消息同样失败");
-                    break;
-                }
-            }
-        }
-
-        // 2. Deliver private whispers asynchronously with pacing + 3-tier fallback callback
-        if let EngineResponse::StoryTurn {
-            direct_messages, ..
-        } = resp
-            && !direct_messages.is_empty()
-        {
-            let client = self.clone();
-            let chan = channel_id.to_string();
-            let permits = self.whisper_permits.clone();
-            tokio::spawn(async move {
-                let Ok(_permit) = permits.acquire_owned().await else {
-                    return;
-                };
-                let mut undelivered_names = Vec::new();
-                for (idx, dm) in direct_messages.into_iter().enumerate() {
-                    if idx > 0 {
-                        sleep(Duration::from_millis(400)).await;
-                    }
-                    if let Err(dm_err) = client.send_direct_kmarkdown(&dm.user_id, &dm.content).await
-                    {
-                        warn!(
-                            user_id = %dm.user_id,
-                            player = %dm.player_name,
-                            error = %dm_err,
-                            "私信递纸条失败，降级为频道仅本人可见临时消息"
-                        );
-                        if let Err(tmp_err) = client
-                            .send_channel_temp_kmarkdown(&chan, &dm.user_id, &dm.content)
-                            .await
-                        {
-                            warn!(
-                                user_id = %dm.user_id,
-                                player = %dm.player_name,
-                                error = %tmp_err,
-                                "临时消息降级同样失败，记入公屏补领提醒"
-                            );
-                            undelivered_names.push(dm.player_name);
-                        }
-                    }
-                }
-                if !undelivered_names.is_empty() {
-                    let notice = EngineResponse::Notice {
-                        title: "⚠️ 秘密纸条送达提醒".to_string(),
-                        body: format!(
-                            "给 **{}** 的秘密纸条未能直接送达（可能关闭了私信或遇临时限流）。\n请随时在频道发送 `/whisper`（仅本人可见）补领查看喵！",
-                            undelivered_names.join("、")
-                        ),
-                        theme: CardTheme::Warning,
-                        show_actions: false,
-                    };
-                    let card = render_kook_card_json(&chan, &notice);
-                    let _ = client.send_channel_card(&chan, &card).await;
-                }
-            });
-        }
     }
 }

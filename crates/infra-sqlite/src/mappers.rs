@@ -11,8 +11,8 @@ pub fn query_room(conn: &Connection, channel_id: &str) -> Result<Option<RoomStat
             r#"
             SELECT channel_id, guild_id, scenario_id, title, location, world_time,
                    turn_number, state_version, turn_phase, chat_mode, narrative_style,
-                   gm_user_id, web_token, clues_json, summary, summary_upto_turn,
-                   active, created_at, updated_at
+                   gm_user_id, web_token, clues_json, suggested_actions_json, summary,
+                   summary_upto_turn, active, created_at, updated_at
             FROM rooms WHERE channel_id = ?1
             "#,
             params![channel_id],
@@ -33,11 +33,13 @@ pub fn query_room(conn: &Connection, channel_id: &str) -> Result<Option<RoomStat
                     gm_user_id: r.get(11)?,
                     web_token: r.get(12)?,
                     clues: serde_json::from_str(&r.get::<_, String>(13)?).unwrap_or_default(),
-                    summary: r.get(14)?,
-                    summary_upto_turn: r.get(15)?,
-                    active: r.get::<_, i32>(16)? != 0,
-                    created_at: parse_dt(&r.get::<_, String>(17)?),
-                    updated_at: parse_dt(&r.get::<_, String>(18)?),
+                    suggested_actions: serde_json::from_str(&r.get::<_, String>(14)?)
+                        .unwrap_or_default(),
+                    summary: r.get(15)?,
+                    summary_upto_turn: r.get(16)?,
+                    active: r.get::<_, i32>(17)? != 0,
+                    created_at: parse_dt(&r.get::<_, String>(18)?),
+                    updated_at: parse_dt(&r.get::<_, String>(19)?),
                 })
             },
         )
@@ -47,14 +49,15 @@ pub fn query_room(conn: &Connection, channel_id: &str) -> Result<Option<RoomStat
 
 pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
     let clues_json = serde_json::to_string(&room.clues)?;
+    let suggested_json = serde_json::to_string(&room.suggested_actions)?;
     conn.execute(
         r#"
         INSERT INTO rooms (
             channel_id, guild_id, scenario_id, title, location, world_time,
             turn_number, state_version, turn_phase, chat_mode, narrative_style,
-            gm_user_id, web_token, clues_json, summary, summary_upto_turn,
-            active, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+            gm_user_id, web_token, clues_json, suggested_actions_json, summary,
+            summary_upto_turn, active, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
         ON CONFLICT(channel_id) DO UPDATE SET
             guild_id = excluded.guild_id, scenario_id = excluded.scenario_id, title = excluded.title,
             location = excluded.location, world_time = excluded.world_time,
@@ -62,6 +65,7 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
             turn_phase = excluded.turn_phase, chat_mode = excluded.chat_mode,
             narrative_style = excluded.narrative_style, gm_user_id = excluded.gm_user_id,
             web_token = excluded.web_token, clues_json = excluded.clues_json,
+            suggested_actions_json = excluded.suggested_actions_json,
             summary = excluded.summary, summary_upto_turn = excluded.summary_upto_turn,
             active = excluded.active, updated_at = excluded.updated_at
         "#,
@@ -69,8 +73,8 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
             room.channel_id, room.guild_id, room.scenario_id, room.title,
             room.location, room.world_time, room.turn_number, room.state_version as i64,
             room.turn_phase.as_str(), room.chat_mode.as_str(), room.narrative_style.as_str(),
-            room.gm_user_id, room.web_token, clues_json, room.summary, room.summary_upto_turn,
-            if room.active { 1 } else { 0 },
+            room.gm_user_id, room.web_token, clues_json, suggested_json, room.summary,
+            room.summary_upto_turn, if room.active { 1 } else { 0 },
             room.created_at.to_rfc3339(), room.updated_at.to_rfc3339(),
         ],
     )?;

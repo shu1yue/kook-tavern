@@ -162,24 +162,19 @@ pub fn commit_turn_cas_tx(
     let tx = conn.transaction()?;
 
     let clues_json = serde_json::to_string(&updated_room.clues)?;
+    let suggested_json = serde_json::to_string(&updated_room.suggested_actions)?;
     let affected = tx.execute(
         r#"
         UPDATE rooms SET
             location = ?3, world_time = ?4, turn_number = ?5, state_version = ?6,
-            turn_phase = 'collecting', clues_json = ?7, summary = ?8,
-            summary_upto_turn = ?9, updated_at = ?10
+            turn_phase = 'collecting', clues_json = ?7, suggested_actions_json = ?8,
+            summary = ?9, summary_upto_turn = ?10, updated_at = ?11
         WHERE channel_id = ?1 AND state_version = ?2 AND turn_phase = 'resolving'
         "#,
         params![
-            updated_room.channel_id,
-            expected_version as i64,
-            updated_room.location,
-            updated_room.world_time,
-            updated_room.turn_number,
-            updated_room.state_version as i64,
-            clues_json,
-            updated_room.summary,
-            updated_room.summary_upto_turn,
+            updated_room.channel_id, expected_version as i64, updated_room.location,
+            updated_room.world_time, updated_room.turn_number, updated_room.state_version as i64,
+            clues_json, suggested_json, updated_room.summary, updated_room.summary_upto_turn,
             updated_room.updated_at.to_rfc3339(),
         ],
     )?;
@@ -284,30 +279,24 @@ pub fn pop_and_restore_snapshot_tx(
         .unwrap_or(1);
 
     let clues_json = serde_json::to_string(&snapshot.room.clues)?;
+    let suggested_json = serde_json::to_string(&snapshot.room.suggested_actions)?;
     tx.execute(
         r#"
         UPDATE rooms SET
             scenario_id = ?2, title = ?3, location = ?4, world_time = ?5,
             turn_number = ?6, state_version = ?7, turn_phase = 'collecting',
             chat_mode = ?8, narrative_style = ?9, clues_json = ?10,
-            summary = ?11, summary_upto_turn = ?12, active = ?13, updated_at = ?14
+            suggested_actions_json = ?11, summary = ?12, summary_upto_turn = ?13,
+            active = ?14, updated_at = ?15
         WHERE channel_id = ?1
         "#,
         params![
-            snapshot.room.channel_id,
-            snapshot.room.scenario_id,
-            snapshot.room.title,
-            snapshot.room.location,
-            snapshot.room.world_time,
-            snapshot.room.turn_number,
-            current_version + 1,
-            snapshot.room.chat_mode.as_str(),
-            snapshot.room.narrative_style.as_str(),
-            clues_json,
-            snapshot.room.summary,
-            snapshot.room.summary_upto_turn,
-            if snapshot.room.active { 1 } else { 0 },
-            Utc::now().to_rfc3339(),
+            snapshot.room.channel_id, snapshot.room.scenario_id, snapshot.room.title,
+            snapshot.room.location, snapshot.room.world_time, snapshot.room.turn_number,
+            current_version + 1, snapshot.room.chat_mode.as_str(),
+            snapshot.room.narrative_style.as_str(), clues_json, suggested_json,
+            snapshot.room.summary, snapshot.room.summary_upto_turn,
+            if snapshot.room.active { 1 } else { 0 }, Utc::now().to_rfc3339(),
         ],
     )?;
 

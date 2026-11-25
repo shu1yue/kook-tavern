@@ -169,10 +169,19 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
     let mut updated_room = lease.room;
     let mut updated_players = lease.players;
 
+    let clean_suggestions: Vec<String> = dm_reply
+        .suggested_actions
+        .iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .take(3)
+        .collect();
+
     let effects = apply_dm_reply(&mut updated_room, &mut updated_players, &dm_reply);
     updated_room.turn_number = lease.target_turn;
     updated_room.turn_phase = TurnPhase::Collecting;
     updated_room.state_version = lease.expected_version + 1;
+    updated_room.suggested_actions = clean_suggestions.clone();
     updated_room.updated_at = Utc::now();
 
     let batched_input = format_batched_actions(&actions);
@@ -231,7 +240,7 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         narrative: dm_reply.narrative,
         state_changes: effects.state_changes,
         whisper_hints: effects.whisper_hints,
-        suggested_actions: dm_reply.suggested_actions,
+        suggested_actions: clean_suggestions,
         direct_messages: effects.direct_messages,
     })
 }

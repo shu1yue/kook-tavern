@@ -75,6 +75,7 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
         gm_user_id: "u1".into(),
         web_token: "tok123".into(),
         clues: vec![],
+        suggested_actions: vec![],
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,
