@@ -2,6 +2,12 @@
 
 > 每次版本上线前，用大白话记录“这次改了什么”以及“万一线上出状况怎么 10 秒回滚”。
 
+## [1.6.3] - 空响应自动重试 + 报错保护活卡不收按钮 + 检定/掷骰即时私密反馈
+### 本次改动
+- **上游偶发空内容自愈重试**：`crates/infra-llm/src/transport.rs` 与 `wire.rs` 记录 `finish_reason`，遇 HTTP 200 空内容自动退避重试（末次重试放宽 `response_format`），大幅降低 DeepSeek 高峰期偶发空回包中断体验的概率。
+- **报错绝不误收当前剧情卡**：`crates/adapter-kook/src/dispatcher.rs` 区分 `HudSync::Skip` 与 `HudSync::Live`，报错卡片不再把上一张正常剧情卡的按钮误撤掉，且报错卡本身自带 **「⚡ 立刻结算」** 一键重试。
+- **检定 / 掷骰 / 放技能即时爽感反馈**：`events.rs` 将 `check / roll / skill` 改为原地刷新剧情卡 + 底部立即弹出**仅本人可见**的轻量骰子结果提示，并修正实时栏重复 `🎲` 图标。
+
 ## [1.6.2] - DeepSeek JSON 容错自愈（修复多余闭合括号/尾逗号 + 严禁原始 JSON 泄密）
 ### 本次改动
 - 升级 `crates/infra-llm/src/parser.rs` 为 3 级容错解析：① 严格 JSON；② 括号栈自愈修复器（自动剔除大模型偶发吐出的多余 `]]` / `}}` 与尾逗号，完整恢复全部剧情、背包、线索、NPC 与私密纸条）；③ 零原始 JSON 泄密兜底（即便极端截断也只提取 `scene_title` 与 `narrative`，绝不把含 `private_whispers` 的原始 JSON 吐到公屏）。

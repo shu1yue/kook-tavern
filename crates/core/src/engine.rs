@@ -225,9 +225,15 @@ impl GameEngine {
                         .last()
                         .map(|s| s.chars().take(110).collect::<String>());
                     match (has_act, last_note) {
-                        (true, Some(n)) => turn_progress.push(format!("✅ **{}** 已行动 · {n}", p.character_name)),
+                        (true, Some(n)) => {
+                            let clean = n.trim_start_matches('🎲').trim();
+                            turn_progress.push(format!("✅ **{}** 已行动 · {clean}", p.character_name));
+                        }
                         (true, None) => turn_progress.push(format!("✅ **{}** 已行动", p.character_name)),
-                        (false, Some(n)) => turn_progress.push(format!("🎲 **{}**：{n}（待行动）", p.character_name)),
+                        (false, Some(n)) => {
+                            let clean = n.trim_start_matches('🎲').trim();
+                            turn_progress.push(format!("🎲 **{}**：{clean}（待行动）", p.character_name));
+                        }
                         (false, None) => turn_progress.push(format!("⏳ **{}** 待行动", p.character_name)),
                     }
                 } else {

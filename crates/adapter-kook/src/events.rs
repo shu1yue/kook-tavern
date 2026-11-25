@@ -158,11 +158,11 @@ pub async fn handle_kook_event(d: Value, engine: GameEngine, client: KookClient)
         Err(err) => {
             error!(channel_id, is_direct, error = %format!("{err:#}"), "游戏引擎处理消息失败");
             let err_resp = EngineResponse::Notice {
-                title: "❌ DM 刚刚打了个盹（处理失败）".to_string(),
-                body: "服务或大模型接口刚刚出现短暂异常，房间状态安全无损，请稍后重试 `/go`（详情已记录服务器日志）。"
+                title: "❌ DM 刚刚打了个盹（上游接口波动）".to_string(),
+                body: "大模型接口刚刚偶发波动或返回空内容，**你的行动和房间进度完好无损**！直接点下方 **「⚡ 立刻结算」**（或发 `/go`）重试即可喵～"
                     .to_string(),
                 theme: CardTheme::Danger,
-                show_actions: false,
+                show_actions: !is_direct,
             };
             if is_direct {
                 send_direct_reply(&client, &reply_target, err_resp).await;
@@ -250,11 +250,11 @@ async fn handle_button_event(d: &Value, engine: GameEngine, client: KookClient) 
         Err(err) => {
             error!(channel_id, error = %format!("{err:#}"), "处理 KOOK 按钮事件失败");
             let err_resp = EngineResponse::Notice {
-                title: "❌ 处理操作时出了点状况".to_string(),
-                body: "操作暂时失败，房间状态安全无损，请稍后重试（详情已记录服务器日志）。"
+                title: "❌ DM 刚刚打了个盹（上游接口波动）".to_string(),
+                body: "大模型接口刚刚偶发波动或返回空内容，**你的行动和房间进度完好无损**！直接点下方 **「⚡ 立刻结算」** 重试即可喵～"
                     .to_string(),
                 theme: CardTheme::Danger,
-                show_actions: false,
+                show_actions: true,
             };
             client.dispatch_response(&channel_id, err_resp).await;
         }
@@ -277,10 +277,10 @@ async fn send_direct_reply(client: &KookClient, user_id: &str, resp: EngineRespo
 fn button_sync_mode(value: &str) -> InPlaceSyncMode {
     let action = value.split(':').nth(1).unwrap_or("");
     match action {
-        "pickrole" | "quickjoin" | "check" | "roll" | "skill" | "pick" | "afk" => {
-            InPlaceSyncMode::SilentOnSuccess
+        "pickrole" | "quickjoin" | "pick" | "afk" => InPlaceSyncMode::SilentOnSuccess,
+        "check" | "roll" | "skill" | "lv" | "leave" | "toggle_mode" | "toggle_style" => {
+            InPlaceSyncMode::TempToast
         }
-        "lv" | "leave" | "toggle_mode" | "toggle_style" => InPlaceSyncMode::TempToast,
         _ => InPlaceSyncMode::PublicCard,
     }
 }
@@ -299,18 +299,19 @@ fn message_sync_mode(content: &str) -> InPlaceSyncMode {
         let cmd = parts.next().unwrap_or("").to_ascii_lowercase();
         let has_arg = parts.next().is_some();
         return match cmd.as_str() {
-            "join" | "card" | "车卡" | "入团" | "roll" | "r" | "掷骰" | "afk" | "暂离" | "摸鱼" => {
+            "join" | "card" | "车卡" | "入团" | "afk" | "暂离" | "摸鱼" => {
                 InPlaceSyncMode::SilentOnSuccess
             }
-            "act" | "a" | "行动" | "check" | "ck" | "检定" | "属性"
-            | "skill" | "sk" | "技能" | "绝活" | "assist" | "协助" => {
+            "act" | "a" | "行动" | "assist" | "协助" => {
                 if has_arg {
                     InPlaceSyncMode::SilentOnSuccess
                 } else {
                     InPlaceSyncMode::TempToast
                 }
             }
-            "levelup" | "lv" | "升级" | "成长" | "mode" | "模式" | "style" | "风格" | "档位" => {
+            "roll" | "r" | "掷骰" | "check" | "ck" | "检定" | "属性"
+            | "skill" | "sk" | "技能" | "绝活"
+            | "levelup" | "lv" | "升级" | "成长" | "mode" | "模式" | "style" | "风格" | "档位" => {
                 InPlaceSyncMode::TempToast
             }
             _ => InPlaceSyncMode::PublicCard,

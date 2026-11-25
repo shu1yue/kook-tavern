@@ -30,6 +30,8 @@ pub(crate) struct ChatCompletionResponse {
 #[derive(Debug, Deserialize)]
 pub(crate) struct Choice {
     pub message: ChoiceMessage,
+    #[serde(default)]
+    pub finish_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,14 +83,12 @@ pub(crate) fn extract_choice(resp: ChatCompletionResponse) -> Result<(String, Ll
         })
         .unwrap_or_default();
 
-    let text = resp
-        .choices
-        .into_iter()
-        .next()
-        .and_then(|c| c.message.content)
-        .unwrap_or_default();
+    let first = resp.choices.into_iter().next();
+    let finish_reason = first.as_ref().and_then(|c| c.finish_reason.clone());
+    let text = first.and_then(|c| c.message.content).unwrap_or_default();
     if text.trim().is_empty() {
-        bail!("LLM 返回了空内容");
+        let reason = finish_reason.as_deref().unwrap_or("unknown");
+        bail!("LLM 返回了空内容 (finish_reason={reason})");
     }
     Ok((text, usage))
 }

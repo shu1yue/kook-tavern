@@ -21,10 +21,24 @@ pub enum InPlaceSyncMode {
     PublicCard,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum HudSync<'a> {
+    /// Do NOT touch or archive the active StoryTurn card (e.g. error notices or standalone cards).
+    Skip,
+    /// Authoritative HUD fetched from the engine; `None` means the room was genuinely reset/ended.
+    Live(Option<&'a LiveStoryHud>),
+}
+
 impl KookClient {
     pub async fn dispatch_response(&self, channel_id: &str, resp: EngineResponse) {
-        self.dispatch_response_inner(channel_id, None, InPlaceSyncMode::PublicCard, resp, None)
-            .await;
+        self.dispatch_response_inner(
+            channel_id,
+            None,
+            InPlaceSyncMode::PublicCard,
+            resp,
+            HudSync::Skip,
+        )
+        .await;
     }
 
     /// Cohesive v1.6 delivery pipeline:
@@ -39,8 +53,12 @@ impl KookClient {
         resp: EngineResponse,
         engine: &GameEngine,
     ) {
-        let hud = engine.get_live_story_hud(channel_id).ok().flatten();
-        self.dispatch_response_inner(channel_id, caller_user_id, sync_mode, resp, hud.as_ref())
+        let hud_owned = engine.get_live_story_hud(channel_id).ok();
+        let hud_sync = match hud_owned.as_ref() {
+            Some(opt) => HudSync::Live(opt.as_ref()),
+            None => HudSync::Skip,
+        };
+        self.dispatch_response_inner(channel_id, caller_user_id, sync_mode, resp, hud_sync)
             .await;
     }
 
@@ -50,7 +68,7 @@ impl KookClient {
         caller_user_id: Option<&str>,
         sync_mode: InPlaceSyncMode,
         resp: EngineResponse,
-        hud: Option<&LiveStoryHud>,
+        hud_sync: HudSync<'_>,
     ) {
         if matches!(resp, EngineResponse::Ignore) {
             return;
@@ -118,7 +136,11 @@ impl KookClient {
                         warn!(channel_id, error = %err, "归档上一张剧情卡按钮失败（不影响新卡发送）");
                     }
                 }
-                let card_json = render_story_turn_card(&resp, hud, false);
+                let hud_opt = match hud_sync {
+                    HudSync::Live(h) => h,
+                    HudSync::Skip => None,
+                };
+                let card_json = render_story_turn_card(&resp, hud_opt, false);
                 match self.send_channel_card_returning_id(channel_id, &card_json).await {
                     Ok(msg_id) => {
                         if !msg_id.is_empty() && !is_ended {
@@ -146,9 +168,11 @@ impl KookClient {
             return;
         }
 
-        // 5. Notice responses: sync active StoryTurn card in-place when live state changed!
+        // 5. Notice responses: sync active StoryTurn card in-place ONLY when `HudSync::Live`!
+        //    `HudSync::Skip` (e.g. error cards) MUST NEVER archive or strip buttons from live cards.
         if let EngineResponse::Notice { ref title, ref body, theme, .. } = resp
             && !is_dm_chan
+            && let HudSync::Live(hud) = hud_sync
         {
             let inplace_ok = self.sync_active_story_hud(channel_id, hud).await;
             let is_non_error = matches!(
@@ -160,7 +184,7 @@ impl KookClient {
                 return;
             }
             if sync_mode != InPlaceSyncMode::PublicCard
-                && (inplace_ok || !is_non_error)
+                && (sync_mode == InPlaceSyncMode::TempToast || inplace_ok || !is_non_error)
                 && let Some(uid) = caller_user_id
             {
                 let toast_resp = EngineResponse::Notice {

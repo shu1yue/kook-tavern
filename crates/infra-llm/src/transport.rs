@@ -150,7 +150,27 @@ impl OpenAiLlmProvider {
             if status.is_success() {
                 let parsed: ChatCompletionResponse =
                     resp.json().await.context("解析 LLM 响应 JSON 失败")?;
-                return extract_choice(parsed);
+                match extract_choice(parsed) {
+                    Ok(ok) => return Ok(ok),
+                    Err(err) if attempt < MAX_TRANSIENT_RETRIES => {
+                        attempt += 1;
+                        if prefer_json && !downgraded_json && attempt == MAX_TRANSIENT_RETRIES {
+                            downgraded_json = true;
+                            req_body.response_format = None;
+                        }
+                        let delay_ms = 1200 * attempt as u64;
+                        warn!(
+                            attempt,
+                            delay_ms,
+                            downgraded_json,
+                            error = %err,
+                            "LLM 返回空内容，正在自动退避重试"
+                        );
+                        sleep(Duration::from_millis(delay_ms)).await;
+                        continue;
+                    }
+                    Err(err) => return Err(err),
+                }
             }
 
             let err_text = resp.text().await.unwrap_or_default();
