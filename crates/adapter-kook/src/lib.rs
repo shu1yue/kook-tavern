@@ -6,6 +6,7 @@ pub mod cards;
 mod dispatcher;
 pub mod events;
 pub mod gateway;
+pub mod live_cards;
 pub mod plain;
 
 pub use gateway::run_kook_bot;

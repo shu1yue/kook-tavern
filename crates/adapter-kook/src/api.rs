@@ -12,6 +12,7 @@ use tokio::time::sleep;
 use tracing::warn;
 
 use crate::cards::thinking_placeholder_card_json;
+use crate::live_cards::LiveCardRegistry;
 
 const KOOK_API_BASE: &str = "https://www.kookapp.cn/api/v3";
 const MAX_CHANNEL_GUILD_CACHE: usize = 1024;
@@ -22,6 +23,7 @@ pub struct KookClient {
     token: String,
     whisper_permits: Arc<Semaphore>,
     channel_guild_cache: Arc<RwLock<HashMap<String, String>>>,
+    live_cards: LiveCardRegistry,
 }
 
 impl fmt::Debug for KookClient {
@@ -67,7 +69,12 @@ impl KookClient {
             token,
             whisper_permits: Arc::new(Semaphore::new(16)),
             channel_guild_cache: Arc::new(RwLock::new(HashMap::new())),
+            live_cards: LiveCardRegistry::default(),
         })
+    }
+
+    pub(crate) fn live_cards(&self) -> &LiveCardRegistry {
+        &self.live_cards
     }
 
     pub(crate) fn whisper_permits_handle(&self) -> Arc<Semaphore> {
@@ -202,30 +209,30 @@ impl KookClient {
         channel_id: &str,
         card_json: &str,
     ) -> Result<String> {
-        let url = format!("{KOOK_API_BASE}/message/create");
-        let payload = json!({
-            "type": 10,
-            "target_id": channel_id,
-            "content": card_json,
-        });
+        let payload = json!({ "type": 10, "target_id": channel_id, "content": card_json });
         let data = self
-            .post_checked(&url, &payload, "发送 KOOK 频道卡片")
+            .post_checked(&format!("{KOOK_API_BASE}/message/create"), &payload, "发送 KOOK 频道卡片")
             .await?;
-        let parsed: MsgCreateData = serde_json::from_value(data).unwrap_or(MsgCreateData {
-            msg_id: String::new(),
-        });
+        let parsed: MsgCreateData = serde_json::from_value(data).unwrap_or(MsgCreateData { msg_id: String::new() });
         Ok(parsed.msg_id)
     }
 
-    pub async fn send_channel_kmarkdown(&self, channel_id: &str, content: &str) -> Result<()> {
-        let url = format!("{KOOK_API_BASE}/message/create");
-        let payload = json!({
-            "type": 9,
-            "target_id": channel_id,
-            "content": content,
-        });
+    /// Updates an existing public KOOK CardMessage in-place via `POST /api/v3/message/update`.
+    pub async fn update_channel_card(&self, msg_id: &str, card_json: &str) -> Result<()> {
+        if msg_id.trim().is_empty() {
+            bail!("msg_id 为空，无法原地刷新卡片");
+        }
+        let payload = json!({ "msg_id": msg_id, "content": card_json });
         let _ = self
-            .post_checked(&url, &payload, "发送 KOOK 频道文本")
+            .post_checked(&format!("{KOOK_API_BASE}/message/update"), &payload, "原地更新 KOOK 频道卡片")
+            .await?;
+        Ok(())
+    }
+
+    pub async fn send_channel_kmarkdown(&self, channel_id: &str, content: &str) -> Result<()> {
+        let payload = json!({ "type": 9, "target_id": channel_id, "content": content });
+        let _ = self
+            .post_checked(&format!("{KOOK_API_BASE}/message/create"), &payload, "发送 KOOK 频道文本")
             .await?;
         Ok(())
     }

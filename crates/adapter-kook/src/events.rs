@@ -8,6 +8,7 @@ use tracing::{error, warn};
 
 use crate::api::KookClient;
 use crate::cards::chunk_kmarkdown;
+use crate::dispatcher::InPlaceSyncMode;
 use crate::plain::render_plain_fallback;
 
 pub async fn handle_kook_event(d: Value, engine: GameEngine, client: KookClient) {
@@ -123,10 +124,15 @@ pub async fn handle_kook_event(d: Value, engine: GameEngine, client: KookClient)
         None
     };
 
+    let sync_mode = if is_direct {
+        InPlaceSyncMode::PublicCard
+    } else {
+        message_sync_mode(&cleaned)
+    };
     let incoming = IncomingMessage {
         guild_id,
         channel_id: channel_id.clone(),
-        user_id: author_id,
+        user_id: author_id.clone(),
         user_name,
         content: cleaned,
         is_direct,
@@ -140,7 +146,15 @@ pub async fn handle_kook_event(d: Value, engine: GameEngine, client: KookClient)
     }
 
     match result {
-        Ok(resp) => send_reply(&client, &reply_target, is_direct, resp).await,
+        Ok(resp) => {
+            if is_direct {
+                send_direct_reply(&client, &reply_target, resp).await;
+            } else {
+                client
+                    .dispatch_response_live(&reply_target, Some(&author_id), sync_mode, resp, &engine)
+                    .await;
+            }
+        }
         Err(err) => {
             error!(channel_id, is_direct, error = %format!("{err:#}"), "游戏引擎处理消息失败");
             let err_resp = EngineResponse::Notice {
@@ -148,9 +162,13 @@ pub async fn handle_kook_event(d: Value, engine: GameEngine, client: KookClient)
                 body: "服务或大模型接口刚刚出现短暂异常，房间状态安全无损，请稍后重试 `/go`（详情已记录服务器日志）。"
                     .to_string(),
                 theme: CardTheme::Danger,
-                show_actions: true,
+                show_actions: false,
             };
-            send_reply(&client, &reply_target, is_direct, err_resp).await;
+            if is_direct {
+                send_direct_reply(&client, &reply_target, err_resp).await;
+            } else {
+                client.dispatch_response(&reply_target, err_resp).await;
+            }
         }
     }
 }
@@ -222,8 +240,13 @@ async fn handle_button_event(d: &Value, engine: GameEngine, client: KookClient) 
         client.delete_channel_message(&pid).await;
     }
 
+    let sync_mode = button_sync_mode(value);
     match result {
-        Ok(resp) => client.dispatch_response(&channel_id, resp).await,
+        Ok(resp) => {
+            client
+                .dispatch_response_live(&channel_id, Some(&user_id), sync_mode, resp, &engine)
+                .await;
+        }
         Err(err) => {
             error!(channel_id, error = %format!("{err:#}"), "处理 KOOK 按钮事件失败");
             let err_resp = EngineResponse::Notice {
@@ -238,21 +261,62 @@ async fn handle_button_event(d: &Value, engine: GameEngine, client: KookClient) 
     }
 }
 
-async fn send_reply(client: &KookClient, channel_id: &str, is_direct: bool, resp: EngineResponse) {
+async fn send_direct_reply(client: &KookClient, user_id: &str, resp: EngineResponse) {
     if matches!(resp, EngineResponse::Ignore) {
         return;
     }
-    if is_direct {
-        let text = render_plain_fallback(&resp, true);
-        for chunk in chunk_kmarkdown(&text, 3500) {
-            if let Err(err) = client.send_direct_kmarkdown(channel_id, &chunk).await {
-                warn!(user_id = channel_id, error = %err, "回复 KOOK 私信失败");
-                break;
-            }
+    let text = render_plain_fallback(&resp, true);
+    for chunk in chunk_kmarkdown(&text, 3500) {
+        if let Err(err) = client.send_direct_kmarkdown(user_id, &chunk).await {
+            warn!(user_id, error = %err, "回复 KOOK 私信失败");
+            break;
         }
-    } else {
-        client.dispatch_response(channel_id, resp).await;
     }
+}
+
+fn button_sync_mode(value: &str) -> InPlaceSyncMode {
+    let action = value.split(':').nth(1).unwrap_or("");
+    match action {
+        "pickrole" | "quickjoin" | "check" | "roll" | "skill" | "pick" | "afk" => {
+            InPlaceSyncMode::SilentOnSuccess
+        }
+        "lv" | "toggle_mode" | "toggle_style" => InPlaceSyncMode::TempToast,
+        _ => InPlaceSyncMode::PublicCard,
+    }
+}
+
+fn message_sync_mode(content: &str) -> InPlaceSyncMode {
+    let t = content.trim();
+    if t.starts_with('>') || t.starts_with('》') {
+        return InPlaceSyncMode::SilentOnSuccess;
+    }
+    if let Some(rest) = t.strip_prefix('/').or_else(|| t.strip_prefix('／'))
+        .or_else(|| t.strip_prefix('!')).or_else(|| t.strip_prefix('！'))
+        .or_else(|| t.strip_prefix('.')).or_else(|| t.strip_prefix('。'))
+        .or_else(|| t.strip_prefix('、'))
+    {
+        let mut parts = rest.split_whitespace();
+        let cmd = parts.next().unwrap_or("").to_ascii_lowercase();
+        let has_arg = parts.next().is_some();
+        return match cmd.as_str() {
+            "join" | "card" | "车卡" | "入团" | "roll" | "r" | "掷骰" | "afk" | "暂离" | "摸鱼" => {
+                InPlaceSyncMode::SilentOnSuccess
+            }
+            "act" | "a" | "行动" | "check" | "ck" | "检定" | "属性"
+            | "skill" | "sk" | "技能" | "绝活" | "assist" | "协助" => {
+                if has_arg {
+                    InPlaceSyncMode::SilentOnSuccess
+                } else {
+                    InPlaceSyncMode::TempToast
+                }
+            }
+            "levelup" | "lv" | "升级" | "成长" | "mode" | "模式" | "style" | "风格" | "档位" => {
+                InPlaceSyncMode::TempToast
+            }
+            _ => InPlaceSyncMode::PublicCard,
+        };
+    }
+    InPlaceSyncMode::SilentOnSuccess
 }
 
 fn mention_regex() -> &'static Regex {

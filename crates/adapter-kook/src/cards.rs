@@ -3,12 +3,12 @@ use tavern_domain::{ChatMode, EngineResponse, NarrativeStyle};
 
 use crate::card_menus::{render_role_picker_card, render_scenario_menu_card};
 use crate::card_widgets::{
-    ending_toolbar, notice_action_bar, push_bulletin_section, push_npc_section, push_party_cards,
-    push_story_action_footer, status_console_rows, truncate_chars,
+    notice_action_bar, push_npc_section, push_party_cards, status_console_rows, truncate_chars,
 };
 use crate::card_workshop::{
     render_worldbook_detail_card, render_worldbook_store_card, render_workshop_desk_card,
 };
+use crate::live_cards::render_story_turn_card;
 
 pub use crate::card_menus::render_private_card_json;
 
@@ -78,88 +78,7 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
             theme,
             show_actions,
         } => render_notice_card(channel_id, title, body, theme.kook_str(), *show_actions),
-        EngineResponse::StoryTurn {
-            channel_id: turn_chan,
-            turn_number,
-            scene_title,
-            location,
-            world_time,
-            act_badge,
-            narrative,
-            state_changes,
-            whisper_hints,
-            suggested_actions,
-            suggested_check,
-            world_bulletin,
-            ending_reached,
-            ..
-        } => {
-            let act_part = act_badge
-                .as_deref()
-                .map(|a| format!("　｜　🎬 {a}"))
-                .unwrap_or_default();
-            let header_title = if let Some(end) = ending_reached {
-                format!("🏆 终局 · {}（{}）", end.title, scene_title)
-            } else {
-                format!("🎭 {scene_title}")
-            };
-            let mut modules = vec![
-                json!({
-                    "type": "header",
-                    "text": { "type": "plain-text", "content": truncate_chars(&header_title, 100) }
-                }),
-                json!({
-                    "type": "context",
-                    "elements": [{
-                        "type": "kmarkdown",
-                        "content": truncate_chars(
-                            &format!("📍 **{}**　｜　🕒 {}　｜　🎲 第 **{}** 回合{act_part}", location, world_time, turn_number),
-                            500
-                        )
-                    }]
-                }),
-                json!({ "type": "divider" }),
-            ];
-
-            push_chunked_sections(&mut modules, narrative, 3200);
-
-            if let Some(b) = world_bulletin {
-                push_bulletin_section(&mut modules, b);
-            }
-
-            if (!state_changes.is_empty() || !whisper_hints.is_empty()) && modules.len() < 39 {
-                modules.push(json!({ "type": "divider" }));
-                let mut lines = Vec::new();
-                lines.extend(state_changes.iter().map(|s| format!("> {s}")));
-                lines.extend(whisper_hints.iter().map(|s| format!("> {s}")));
-                push_chunked_sections(&mut modules, &lines.join("\n"), 3200);
-            }
-
-            if let Some(end) = ending_reached {
-                let unlock_tag = if end.newly_unlocked { " 🆕 **本服首次解锁成就！**" } else { "" };
-                modules.push(json!({ "type": "divider" }));
-                modules.push(json!({
-                    "type": "section",
-                    "text": {
-                        "type": "kmarkdown",
-                        "content": format!("🏆 **达成结局：《{}》**{unlock_tag}\n> 冒险已圆满收束！点下方按钮发战报墙留念、查看结局图鉴或回档重选命运。", end.title)
-                    }
-                }));
-                modules.push(ending_toolbar(turn_chan));
-            } else {
-                push_story_action_footer(
-                    &mut modules,
-                    turn_chan,
-                    *turn_number,
-                    suggested_actions,
-                    suggested_check.as_ref(),
-                );
-            }
-
-            let card_theme = if ending_reached.is_some() { "warning" } else { "primary" };
-            json!([{ "type": "card", "theme": card_theme, "size": "lg", "modules": modules }])
-                .to_string()
-        }
+        EngineResponse::StoryTurn { .. } => render_story_turn_card(resp, None, false),
         EngineResponse::StatusBoard {
             channel_id: board_chan,
             room,

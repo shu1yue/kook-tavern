@@ -1,191 +1,300 @@
 use std::time::Duration;
 
-use tavern_domain::{CardTheme, EngineResponse};
+use tavern_core::GameEngine;
+use tavern_domain::{CardTheme, DirectMessageOut, EngineResponse, LiveStoryHud};
 use tokio::time::sleep;
 use tracing::{error, warn};
 
 use crate::api::KookClient;
 use crate::card_menus::render_wall_report_card;
 use crate::cards::{chunk_kmarkdown, render_kook_card_json, render_private_card_json};
+use crate::live_cards::{ActiveStoryCard, render_story_turn_card};
 use crate::plain::render_plain_fallback;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InPlaceSyncMode {
+    /// Refreshes active StoryTurn card in-place and emits ZERO extra card on success (true native feel).
+    SilentOnSuccess,
+    /// Refreshes active StoryTurn card in-place and shows a personal temp toast to the caller.
+    TempToast,
+    /// Refreshes active StoryTurn card (or archives on reset/undo) and posts the normal public card.
+    PublicCard,
+}
 
 impl KookClient {
     pub async fn dispatch_response(&self, channel_id: &str, resp: EngineResponse) {
+        self.dispatch_response_inner(channel_id, None, InPlaceSyncMode::PublicCard, resp, None)
+            .await;
+    }
+
+    /// Cohesive v1.6 delivery pipeline:
+    /// - Archives previous StoryTurn buttons via `message/update` when a new StoryTurn arrives;
+    /// - Refreshes the active StoryTurn card's live HUD in-place on mid-turn actions/checks/roles;
+    /// - Keeps `StatusBoard`, `RolePicker`, and in-place action receipts out of the public feed.
+    pub async fn dispatch_response_live(
+        &self,
+        channel_id: &str,
+        caller_user_id: Option<&str>,
+        sync_mode: InPlaceSyncMode,
+        resp: EngineResponse,
+        engine: &GameEngine,
+    ) {
+        let hud = engine.get_live_story_hud(channel_id).ok().flatten();
+        self.dispatch_response_inner(channel_id, caller_user_id, sync_mode, resp, hud.as_ref())
+            .await;
+    }
+
+    async fn dispatch_response_inner(
+        &self,
+        channel_id: &str,
+        caller_user_id: Option<&str>,
+        sync_mode: InPlaceSyncMode,
+        resp: EngineResponse,
+        hud: Option<&LiveStoryHud>,
+    ) {
         if matches!(resp, EngineResponse::Ignore) {
             return;
         }
+        let is_dm_chan = channel_id.starts_with("dm:");
 
-        // PrivateNotice MUST NEVER be sent to the public channel!
-        if let EngineResponse::PrivateNotice {
-            user_id,
-            title,
-            body,
-            actions,
-        } = resp
-        {
+        // 1. PrivateNotice MUST NEVER be sent to the public channel!
+        if let EngineResponse::PrivateNotice { user_id, title, body, actions } = resp {
             let content = format!("**{title}**\n{body}");
-            let is_dm_chan = channel_id.starts_with("dm:");
             if !is_dm_chan && body.chars().count() <= 3800 {
                 let card_json = render_private_card_json(&title, &body, &actions);
-                if self
-                    .send_channel_temp_card(channel_id, &user_id, &card_json)
-                    .await
-                    .is_ok()
-                {
+                if self.send_channel_temp_card(channel_id, &user_id, &card_json).await.is_ok() {
                     return;
                 }
-                warn!(
-                    user_id,
-                    "频道仅本人可见卡片发送失败，自动降级为临时文本/私信"
-                );
+                warn!(user_id, "频道仅本人可见卡片发送失败，自动降级为临时文本/私信");
             }
-            let mut prefer_temp = !is_dm_chan;
-            for (idx, chunk) in chunk_kmarkdown(&content, 3500).into_iter().enumerate() {
-                if idx > 0 {
-                    sleep(Duration::from_millis(250)).await;
-                }
-                if prefer_temp {
-                    if self
-                        .send_channel_temp_kmarkdown(channel_id, &user_id, &chunk)
-                        .await
-                        .is_ok()
-                    {
-                        continue;
-                    }
-                    warn!(user_id, "频道临时消息发送失败，自动降级为私信发送");
-                    prefer_temp = false;
-                }
-                if let Err(dm_err) = self.send_direct_kmarkdown(&user_id, &chunk).await {
-                    warn!(user_id, error = %dm_err, "私密通知私信兜底同样失败");
-                    break;
-                }
-            }
+            self.send_private_text_fallback(channel_id, &user_id, &content, !is_dm_chan)
+                .await;
             return;
         }
 
-        // WorkshopDesk is strictly per-user private (never falls back to public channel card!)
+        // 2. WorkshopDesk is strictly per-user private (never falls back to public channel card!)
         if let EngineResponse::WorkshopDesk { ref user_id, .. } = resp {
             let uid = user_id.clone();
-            let is_dm_chan = channel_id.starts_with("dm:");
             if !is_dm_chan {
                 let card_json = render_kook_card_json(channel_id, &resp);
-                if self
-                    .send_channel_temp_card(channel_id, &uid, &card_json)
-                    .await
-                    .is_ok()
-                {
+                if self.send_channel_temp_card(channel_id, &uid, &card_json).await.is_ok() {
                     return;
                 }
                 warn!(user_id = %uid, "工坊临时卡发送失败，降级为仅本人可见临时文本/私信");
             }
             let plain = render_plain_fallback(&resp, true);
-            let mut prefer_temp = !is_dm_chan;
-            for chunk in chunk_kmarkdown(&plain, 3500) {
-                if prefer_temp
-                    && self
-                        .send_channel_temp_kmarkdown(channel_id, &uid, &chunk)
-                        .await
-                        .is_ok()
-                {
-                    continue;
+            self.send_private_text_fallback(channel_id, &uid, &plain, !is_dm_chan)
+                .await;
+            return;
+        }
+
+        // 3. Utility panels (`StatusBoard` & `RolePicker`) open as per-user temp overlays so they
+        //    never interrupt teammates or pollute the story stream (safe fallback to public card).
+        if matches!(resp, EngineResponse::StatusBoard { .. } | EngineResponse::RolePicker { .. })
+            && !is_dm_chan
+            && let Some(uid) = caller_user_id
+        {
+            let card_json = render_kook_card_json(channel_id, &resp);
+            if self.send_channel_temp_card(channel_id, uid, &card_json).await.is_ok() {
+                return;
+            }
+            warn!(user_id = uid, "面板临时浮层发送失败，降级为普通频道卡片");
+        }
+
+        // 4. Cohesive StoryTurn: archive old StoryTurn buttons, send new card with live HUD, cache msg_id!
+        if let EngineResponse::StoryTurn {
+            turn_number,
+            ref ending_reached,
+            ref direct_messages,
+            ..
+        } = resp
+        {
+            let dms = direct_messages.clone();
+            let is_ended = ending_reached.is_some();
+            if !is_dm_chan {
+                if let Some(prev) = self.live_cards().take(channel_id) {
+                    let archived = render_story_turn_card(&prev.story, None, true);
+                    if let Err(err) = self.update_channel_card(&prev.msg_id, &archived).await {
+                        warn!(channel_id, error = %err, "归档上一张剧情卡按钮失败（不影响新卡发送）");
+                    }
                 }
-                prefer_temp = false;
-                if let Err(err) = self.send_direct_kmarkdown(&uid, &chunk).await {
-                    warn!(user_id = %uid, error = %err, "工坊私密兜底发送失败");
-                    break;
+                let card_json = render_story_turn_card(&resp, hud, false);
+                match self.send_channel_card_returning_id(channel_id, &card_json).await {
+                    Ok(msg_id) => {
+                        if !msg_id.is_empty() && !is_ended {
+                            self.live_cards().replace(
+                                channel_id,
+                                ActiveStoryCard {
+                                    msg_id,
+                                    turn_number,
+                                    story: Box::new(resp),
+                                },
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        warn!(channel_id, error = %err, "发送剧情卡片失败，自动降级为纯文本");
+                        self.send_plain_channel_fallback(channel_id, &resp).await;
+                    }
                 }
+            } else {
+                self.send_public_card_with_fallback(channel_id, &resp).await;
+            }
+            if !dms.is_empty() {
+                self.spawn_whisper_delivery(channel_id.to_string(), dms);
             }
             return;
         }
 
-        // 1. Send public channel card FIRST for low latency
-        let card_json = render_kook_card_json(channel_id, &resp);
+        // 5. Notice responses: sync active StoryTurn card in-place when live state changed!
+        if let EngineResponse::Notice { ref title, ref body, theme, .. } = resp
+            && !is_dm_chan
+        {
+            let inplace_ok = self.sync_active_story_hud(channel_id, hud).await;
+            let is_non_error = matches!(
+                theme,
+                CardTheme::Success | CardTheme::Info | CardTheme::Secondary | CardTheme::Primary
+            );
+            if inplace_ok && sync_mode == InPlaceSyncMode::SilentOnSuccess && is_non_error {
+                // Active StoryTurn card already updated live right in front of players — zero extra card!
+                return;
+            }
+            if sync_mode != InPlaceSyncMode::PublicCard
+                && (inplace_ok || !is_non_error)
+                && let Some(uid) = caller_user_id
+            {
+                let toast_resp = EngineResponse::Notice {
+                    title: title.clone(),
+                    body: body.clone(),
+                    theme,
+                    show_actions: false,
+                };
+                let toast_card = render_kook_card_json(channel_id, &toast_resp);
+                if self.send_channel_temp_card(channel_id, uid, &toast_card).await.is_ok() {
+                    return;
+                }
+            }
+        }
+
+        // 6. Standard public card delivery (menu, store, export, public notices, etc.)
+        self.send_public_card_with_fallback(channel_id, &resp).await;
+
+        if let EngineResponse::ExportReport { wall_report: Some(ref wall), .. } = resp {
+            let wall_card = render_wall_report_card(wall);
+            if let Err(err) = self.send_channel_card(&wall.target_channel_id, &wall_card).await {
+                warn!(wall_channel = %wall.target_channel_id, error = %err, "同步发送高光战报卡至战报墙失败");
+            }
+        }
+    }
+
+    /// Synchronizes the channel's active StoryTurn card in-place:
+    /// - If the room was reset/ended or rewound (`/undo`), archives old buttons and clears cache;
+    /// - If `hud.turn_number == cached.turn_number`, refreshes the live HUD inside the card!
+    async fn sync_active_story_hud(&self, channel_id: &str, hud: Option<&LiveStoryHud>) -> bool {
+        let Some(active) = self.live_cards().get(channel_id) else {
+            return false;
+        };
+        let Some(h) = hud else {
+            if let Some(prev) = self.live_cards().take(channel_id) {
+                let archived = render_story_turn_card(&prev.story, None, true);
+                let _ = self.update_channel_card(&prev.msg_id, &archived).await;
+            }
+            return false;
+        };
+        if h.turn_number != active.turn_number {
+            if let Some(prev) = self.live_cards().take(channel_id) {
+                let archived = render_story_turn_card(&prev.story, None, true);
+                let _ = self.update_channel_card(&prev.msg_id, &archived).await;
+            }
+            return false;
+        }
+        let updated = render_story_turn_card(&active.story, Some(h), false);
+        match self.update_channel_card(&active.msg_id, &updated).await {
+            Ok(()) => true,
+            Err(err) => {
+                warn!(channel_id, error = %err, "原地刷新剧情卡动态栏失败，降级为常规提示卡");
+                false
+            }
+        }
+    }
+
+    async fn send_public_card_with_fallback(&self, channel_id: &str, resp: &EngineResponse) {
+        let card_json = render_kook_card_json(channel_id, resp);
         if let Err(err) = self.send_channel_card(channel_id, &card_json).await {
             warn!(channel_id, error = %err, "发送卡片消息失败，自动降级为分段 KMarkdown 发送");
-            let plain = render_plain_fallback(&resp, false);
-            for chunk in chunk_kmarkdown(&plain, 3500) {
-                if let Err(fb_err) = self.send_channel_kmarkdown(channel_id, &chunk).await {
-                    error!(channel_id, error = %fb_err, "降级发送频道消息同样失败");
-                    break;
+            self.send_plain_channel_fallback(channel_id, resp).await;
+        }
+    }
+
+    async fn send_plain_channel_fallback(&self, channel_id: &str, resp: &EngineResponse) {
+        let plain = render_plain_fallback(resp, false);
+        for chunk in chunk_kmarkdown(&plain, 3500) {
+            if let Err(fb_err) = self.send_channel_kmarkdown(channel_id, &chunk).await {
+                error!(channel_id, error = %fb_err, "降级发送频道消息同样失败");
+                break;
+            }
+        }
+    }
+
+    async fn send_private_text_fallback(
+        &self,
+        channel_id: &str,
+        user_id: &str,
+        content: &str,
+        mut prefer_temp: bool,
+    ) {
+        for (idx, chunk) in chunk_kmarkdown(content, 3500).into_iter().enumerate() {
+            if idx > 0 {
+                sleep(Duration::from_millis(250)).await;
+            }
+            if prefer_temp {
+                if self.send_channel_temp_kmarkdown(channel_id, user_id, &chunk).await.is_ok() {
+                    continue;
                 }
+                warn!(user_id, "频道临时消息发送失败，自动降级为私信发送");
+                prefer_temp = false;
+            }
+            if let Err(dm_err) = self.send_direct_kmarkdown(user_id, &chunk).await {
+                warn!(user_id, error = %dm_err, "私密通知私信兜底同样失败");
+                break;
             }
         }
+    }
 
-        // 2. Publish highlight card to the configured report wall channel if present
-        if let EngineResponse::ExportReport {
-            wall_report: Some(ref wall),
-            ..
-        } = resp
-        {
-            let wall_card = render_wall_report_card(wall);
-            if let Err(err) = self
-                .send_channel_card(&wall.target_channel_id, &wall_card)
-                .await
-            {
-                warn!(
-                    wall_channel = %wall.target_channel_id,
-                    error = %err,
-                    "同步发送高光战报卡至战报墙失败（不影响本地导出）"
-                );
-            }
-        }
-
-        // 3. Deliver private whispers asynchronously with pacing + 3-tier fallback callback
-        if let EngineResponse::StoryTurn {
-            direct_messages, ..
-        } = resp
-            && !direct_messages.is_empty()
-        {
-            let client = self.clone();
-            let chan = channel_id.to_string();
-            let permits = self.whisper_permits_handle();
-            tokio::spawn(async move {
-                let Ok(_permit) = permits.acquire_owned().await else {
-                    return;
-                };
-                let mut undelivered_names = Vec::new();
-                for (idx, dm) in direct_messages.into_iter().enumerate() {
-                    if idx > 0 {
-                        sleep(Duration::from_millis(400)).await;
-                    }
-                    if let Err(dm_err) = client.send_direct_kmarkdown(&dm.user_id, &dm.content).await
+    fn spawn_whisper_delivery(&self, chan: String, direct_messages: Vec<DirectMessageOut>) {
+        let client = self.clone();
+        let permits = self.whisper_permits_handle();
+        tokio::spawn(async move {
+            let Ok(_permit) = permits.acquire_owned().await else {
+                return;
+            };
+            let mut undelivered_names = Vec::new();
+            for (idx, dm) in direct_messages.into_iter().enumerate() {
+                if idx > 0 {
+                    sleep(Duration::from_millis(400)).await;
+                }
+                if let Err(dm_err) = client.send_direct_kmarkdown(&dm.user_id, &dm.content).await {
+                    warn!(user_id = %dm.user_id, player = %dm.player_name, error = %dm_err, "私信递纸条失败，降级临时消息");
+                    if chan.starts_with("dm:")
+                        || client.send_channel_temp_kmarkdown(&chan, &dm.user_id, &dm.content).await.is_err()
                     {
-                        warn!(
-                            user_id = %dm.user_id,
-                            player = %dm.player_name,
-                            error = %dm_err,
-                            "私信递纸条失败，降级为频道仅本人可见临时消息"
-                        );
-                        if chan.starts_with("dm:") {
-                            undelivered_names.push(dm.player_name);
-                        } else if let Err(tmp_err) = client
-                            .send_channel_temp_kmarkdown(&chan, &dm.user_id, &dm.content)
-                            .await
-                        {
-                            warn!(
-                                user_id = %dm.user_id,
-                                player = %dm.player_name,
-                                error = %tmp_err,
-                                "临时消息降级同样失败，记入公屏补领提醒"
-                            );
-                            undelivered_names.push(dm.player_name);
-                        }
+                        undelivered_names.push(dm.player_name);
                     }
                 }
-                if !undelivered_names.is_empty() && !chan.starts_with("dm:") {
-                    let notice = EngineResponse::Notice {
-                        title: "⚠️ 秘密纸条送达提醒".to_string(),
-                        body: format!(
-                            "给 **{}** 的秘密纸条未能直接送达（可能关闭了私信或遇临时限流）。\n请随时点击剧情卡上的 **「🪪 我的角色卡」** 按钮（或发 `/me`、`/whisper`，均仅本人可见）补领查看喵！",
-                            undelivered_names.join("、")
-                        ),
-                        theme: CardTheme::Warning,
-                        show_actions: false,
-                    };
-                    let card = render_kook_card_json(&chan, &notice);
-                    let _ = client.send_channel_card(&chan, &card).await;
-                }
-            });
-        }
+            }
+            if !undelivered_names.is_empty() && !chan.starts_with("dm:") {
+                let notice = EngineResponse::Notice {
+                    title: "⚠️ 秘密纸条送达提醒".to_string(),
+                    body: format!(
+                        "给 **{}** 的秘密纸条未能直接送达。请随时点剧情卡上的 **「🪪 我的角色卡」**（仅本人可见）补领查看喵！",
+                        undelivered_names.join("、")
+                    ),
+                    theme: CardTheme::Warning,
+                    show_actions: false,
+                };
+                let card = render_kook_card_json(&chan, &notice);
+                let _ = client.send_channel_card(&chan, &card).await;
+            }
+        });
     }
 }

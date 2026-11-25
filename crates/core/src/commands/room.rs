@@ -175,7 +175,7 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         .unwrap_or_default();
     let mut opening_changes = vec![
         mode_hint,
-        "✨ 先点「🎛️ 面板/设置」→「🎭 选职业入团」拿五维属性与专属装备，或直接点下方 ①②③ 按钮开玩！".to_string(),
+        "✨ 直接点下方职业按钮一键入团（原地亮名不刷屏），再点 ①②③ 或直接打人话即可开玩！".to_string(),
     ];
     if let Some(latest_echo) = echoes.first() {
         opening_changes.push(format!(

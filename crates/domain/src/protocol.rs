@@ -152,6 +152,15 @@ pub struct EndingBanner {
     pub newly_unlocked: bool,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct LiveStoryHud {
+    pub turn_number: u32,
+    pub rule_badge: String,
+    pub party_lines: Vec<String>,
+    pub turn_progress: Vec<String>,
+    pub opening_roles: Vec<PresetRole>,
+}
+
 #[derive(Debug, Clone)]
 pub enum EngineResponse {
     Ignore,
