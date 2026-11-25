@@ -1,0 +1,372 @@
+id: sunforge_keep
+name: "剑湾晨钟 · 失落铸炉"
+tagline: "经典 D&D d20 五幕中篇战役（2~3晚体量）——从边境酒馆启程，深入沉睡百年的矮人日蚀铸炉"
+genre: "经典 D&D 奇幻战役 / 地下城探险与派系博弈"
+theme: "ember"
+dm_style: |
+  你是一位深谙经典 D&D 奇幻战役节奏的资深地下城主（DM）。
+  文风兼具史诗冒险画面感与边境酒馆的鲜活烟火气，严格按本桌 D&D `d20` 检定结果（含 Nat 20 大成功高光、Nat 1 大失败整活、优势/劣势与熟练加值）以及玩家施放的招牌技能（`/skill`）精彩演戏。
+  重视团队配合（如队友 `/assist` 掩护、圣武士顶前、游荡者探陷阱、法师解符文）；对想出妙计或精彩扮演的玩家，适时在 `grant_inspiration` 中赏赐激励点；在幕间鼓励小队扎营短休/长休（`/rest`），善用 `private_whispers` 触发角色个人秘密与暗线。
+initial_location: "晨钟村 · 铜钟旅店"
+initial_time: "丰收月七日 · 暮色初降 18:30"
+opening_scene: |
+  黄昏的余晖把晨钟村古老的青铜钟楼染成熔金，山脊另一侧却翻涌着反常的暗紫色灰云。
+  你们围坐在「铜钟旅店」橡木长桌旁，烤鹿肉与蜂蜜麦酒的香气还未散尽，旅店木门便被一头浑身焦黑、鞍袋冒烟的矮人战骡撞开——车辕上绑着半块滚烫的符文精金锭，以及一封被血指印按穿的求援蜡封信：
+  《致铁砧兄弟会与任意持剑之士：失落铸炉的“晨日核心”正在苏醒，灰烬议会已封锁焦岩古道。三日后日蚀降临前，若无人重启三道古矮人镇压闸，整座剑湾山谷将化为焦土。——失踪的大匠师 巴林·铜须》
+  壁炉阴影里，一名披着红鸦斗篷的独臂斥候悄然吹灭了手边的油灯；而柜台后的老村长颤抖着捧出一袋叮当作响的金币，目光望向你们……
+opening_actions:
+  - "上前检查冒烟战骡与符文精金锭"
+  - "拦住阴影里悄然离席的红鸦斥候"
+  - "向老村长询问焦岩古道与铸炉往事"
+
+player_defaults:
+  max_hp: 16
+  max_san: 12
+  starter_items:
+    - "冒险者行囊与干粮（3日份）"
+    - "25枚剑湾金币"
+    - "火把与打火石"
+    - "基础治疗药水（回复4HP）"
+
+preset_roles:
+  - name: "晨光圣武士"
+    alignment: "守序善良"
+    traits: ["誓言护盾", "正气凛然"]
+    proficient_skills: ["格斗", "游说", "医疗"]
+    bonus_items: ["晨光长剑", "徽记圆盾"]
+    stats: { body: 2, agility: 0, investigate: 0, social: 1, insight: 0 }
+    abilities:
+      - name: "圣光护佑"
+        max_uses: 1
+        uses_left: 1
+        recharge: short_rest
+        desc: "举起圣徽降下金光屏障，为自己或一名队友抵挡一次重击并回复少量士气"
+      - name: "至圣斩"
+        max_uses: 2
+        uses_left: 2
+        recharge: long_rest
+        desc: "将灼目誓言圣焰灌注刃锋，对邪恶、不死或构装体造成毁灭性额外破甲打击"
+  - name: "暗影游荡者"
+    alignment: "混乱善良"
+    traits: ["巧手开锁", "耳聪目明"]
+    proficient_skills: ["潜行", "开锁", "察觉"]
+    bonus_items: ["双生精钢短刃", "矮人撬锁工具组"]
+    stats: { body: 0, agility: 2, investigate: 2, social: 0, insight: -1 }
+    abilities:
+      - name: "影袭背刺"
+        max_uses: 2
+        uses_left: 2
+        recharge: short_rest
+        desc: "借队友牵制或阴影盲区暴起发难，精准刺穿敌方护甲要害或割断机关缆绳"
+      - name: "烟雾脱身"
+        max_uses: 1
+        uses_left: 1
+        recharge: short_rest
+        desc: "掷出炼金烟弹遮蔽视线，瞬间脱离包围或带一名队友闪入掩体"
+  - name: "奥术学者"
+    alignment: "中立善良"
+    traits: ["符文通识", "法术敏锐"]
+    proficient_skills: ["奥秘", "调查", "神秘"]
+    bonus_items: ["星铜法杖", "古矮人符文字典"]
+    stats: { body: -1, agility: 0, investigate: 2, social: 0, insight: 2 }
+    abilities:
+      - name: "烈焰爆发"
+        max_uses: 2
+        uses_left: 2
+        recharge: long_rest
+        desc: "吟唱塑能咒文引爆范围火球，清扫成群伏兵或熔断沉重铁链"
+      - name: "奥术护盾"
+        max_uses: 1
+        uses_left: 1
+        recharge: short_rest
+        desc: "瞬发半透明力场屏障，偏转箭矢、法术冲击或陷阱落石"
+  - name: "荒野游侠"
+    alignment: "守序中立"
+    traits: ["百步穿杨", "追踪老手"]
+    proficient_skills: ["察觉", "射击", "潜行"]
+    bonus_items: ["榆木长弓（箭囊满）", "银纹猎刀"]
+    stats: { body: 1, agility: 2, investigate: 1, social: -1, insight: 0 }
+    abilities:
+      - name: "猎人印记"
+        max_uses: 2
+        uses_left: 2
+        recharge: short_rest
+        desc: "锁定一名目标的行动破绽与弱点，使其难以逃脱追踪并放大团队集火伤害"
+      - name: "荒野草药"
+        max_uses: 1
+        uses_left: 1
+        recharge: long_rest
+        desc: "就地调制强效止血宁神草膏，立刻为小队处理伤势或解除毒素"
+
+acts:
+  - id: act1_bell_inn
+    title: "晨钟村的焦痕信骡"
+    goal: "查清求援信真伪、红鸦斥候的身份与通往焦岩古道的秘密近道"
+    advance_flags: ["获取古道地图或向导", "查明精金锭异变"]
+  - id: act2_cinder_road
+    title: "焦岩古道伏击与营火夜话"
+    goal: "突破灰烬议会暗哨与被驱赶的地精骑兵，抵达失落铸炉峡谷前哨"
+    advance_flags: ["突破焦岩哨卡", "抵达废堡山门"]
+  - id: act3_outer_bailey
+    title: "矮人废堡外庭与三方角力"
+    goal: "穿越机关重重的石像外庭，决定与猩红鸦爪盗贼团或晨光巡查队合作还是对抗"
+    advance_flags: ["打开铸炉内门", "找到大匠师失踪线索"]
+  - id: act4_rune_forge
+    title: "符文熔炉深厅与沉睡大匠师"
+    goal: "关闭至少两道失控镇压闸，找到被囚禁的大匠师巴林并揭开灰烬议会真图谋"
+    advance_flags: ["营救大匠师巴林", "掌握晨日核心停机口令"]
+  - id: act5_eclipse_altar
+    title: "日蚀圣坛终决"
+    goal: "在日蚀高悬前迎战执政官维克多与熔岩构装体，最终裁定晨日核心与剑湾山谷的命运"
+    advance_flags: ["完成日蚀圣坛最终抉择"]
+
+endings:
+  - id: ending_sun_rekindled
+    title: "晨钟重鸣 · 铸炉归光"
+    kind: "true"
+    summary: "营救大匠师巴林并成功重启三道镇压闸，击溃执政官维克多的日蚀仪轨，晨日核心重归温和庇佑剑湾。"
+  - id: ending_brotherhood_oath
+    title: "铁砧之誓 · 残火犹存"
+    kind: "good"
+    summary: "虽未能保住完整熔炉，但小队力挽狂澜强行封死核心裂隙并护送幸存者撤离，剑湾免于浩劫。"
+  - id: ending_crow_pact
+    title: "鸦翼金契 · 暗流易主"
+    kind: "normal"
+    summary: "与猩红鸦爪达成秘密交易，瓜分古矮人精金宝库并放任铸炉能量落入地下势力之手，小队富甲一方但暗影悄然蔓延。"
+  - id: ending_ash_collapse
+    title: "日蚀灰烬 · 铸炉永眠"
+    kind: "bad"
+    summary: "日蚀仪轨失控或小队力竭溃败，失落铸炉在剧烈震荡中彻底坍塌，山谷被漫天焦灰笼罩。"
+
+map_nodes:
+  - id: bell_inn
+    name: "晨钟村 · 铜钟旅店"
+    x: 10
+    y: 50
+    aliases: ["铜钟旅店", "晨钟村", "旅店", "酒馆"]
+    kind: hub
+  - id: smithy_square
+    name: "铁砧铁匠铺"
+    x: 20
+    y: 22
+    aliases: ["铁匠铺", "村口铁匠铺", "广场"]
+    kind: hub
+  - id: cinder_road
+    name: "焦岩古道"
+    x: 32
+    y: 52
+    aliases: ["古道", "焦岩", "山道"]
+    kind: danger
+  - id: old_watchtower
+    name: "断崖烽火台"
+    x: 36
+    y: 80
+    aliases: ["烽火台", "哨塔", "营地"]
+    kind: mystery
+  - id: dwarf_gate
+    name: "失落铸炉石像山门"
+    x: 52
+    y: 48
+    aliases: ["山门", "废堡山门", "石像门"]
+    kind: hub
+  - id: outer_bailey
+    name: "废堡外庭与吊桥"
+    x: 64
+    y: 25
+    aliases: ["外庭", "吊桥", "废堡"]
+    kind: danger
+  - id: crow_hideout
+    name: "裂隙走私暗道"
+    x: 62
+    y: 78
+    aliases: ["暗道", "走私洞", "盗贼营"]
+    kind: secret
+  - id: rune_forge
+    name: "符文熔炉深厅"
+    x: 78
+    y: 46
+    aliases: ["熔炉", "深厅", "铸炉厅"]
+    kind: mystery
+  - id: vault_prison
+    name: "古矮人秘库与囚室"
+    x: 84
+    y: 76
+    aliases: ["秘库", "囚室", "地牢"]
+    kind: secret
+  - id: eclipse_altar
+    name: "日蚀圣坛"
+    x: 92
+    y: 24
+    aliases: ["圣坛", "祭坛", "顶层圣坛"]
+    kind: danger
+
+map_edges:
+  - { from: bell_inn, to: smithy_square, label: "青石街" }
+  - { from: bell_inn, to: cinder_road, label: "东出村口" }
+  - { from: smithy_square, to: cinder_road, label: "矿车旧轨" }
+  - { from: cinder_road, to: old_watchtower, label: "崖畔小径" }
+  - { from: cinder_road, to: dwarf_gate, label: "黑曜峡谷" }
+  - { from: old_watchtower, to: crow_hideout, label: "猎人密道", locked: true }
+  - { from: dwarf_gate, to: outer_bailey, label: "巨盾拱门" }
+  - { from: dwarf_gate, to: crow_hideout, label: "崩塌排水渠", locked: true }
+  - { from: outer_bailey, to: rune_forge, label: "符文青铜闸", locked: true }
+  - { from: crow_hideout, to: rune_forge, label: "矿道通风井" }
+  - { from: rune_forge, to: vault_prison, label: "淬火铁门", locked: true }
+  - { from: rune_forge, to: eclipse_altar, label: "星火旋梯" }
+  - { from: outer_bailey, to: eclipse_altar, label: "外墙断桥", locked: true }
+
+rules:
+  check_system: "d20"
+  tension_pace: "steady"
+  lethality: "balanced"
+  clue_generosity: "balanced"
+  bulletin_name: "《晨钟驿报 · 剑湾暗流》"
+  bulletin_interval: 4
+  dm_weight_note: "本战役为经典 D&D 五幕中篇，留足探索、营火互动、派系谈判与战术配合空间；过幕升级后适当提高中后期敌人与机关 DC（从 DC11 逐步升至 DC16~18）。"
+  factions:
+    - name: "灰烬议会"
+      goal: "在三日后日蚀降临时强行抽干晨日核心，锻造足以操控剑湾的『蚀日冠冕』"
+      escalation: "加派黑袍术士封锁古道、唤醒失控的矮人青铜构装体"
+    - name: "铁砧兄弟会"
+      goal: "寻回失踪的大匠师巴林，守住祖先留下的符文铸炉秘密"
+      escalation: "矮人铁卫援军正从北境赶来，但途中遭到山体塌方阻滞"
+    - name: "猩红鸦爪盗贼团"
+      goal: "趁乱摸进古矮人秘库窃取精金圣物与蓝图，高价卖给海港贵族"
+      escalation: "派出斥候尾随冒险小队坐收渔翁之利，但若利益一致也可达成交易"
+    - name: "晨光教会巡查队"
+      goal: "查清暗紫灰云源头并清除邪教仪轨，对矮人古物抱有强硬收缴倾向"
+      escalation: "圣殿骑士团前锋正在向晨钟村集结，可能接管整座山谷"
+  must_hit_beats:
+    - act: 1
+      by_turn: 4
+      flag: "获取古道地图或向导"
+      prompt_hint: "确保小队拿到通往焦岩古道的关键情报（可来自老铁匠、红鸦斥候或战骡鞍袋暗格），准备启程出村。"
+    - act: 2
+      by_turn: 9
+      flag: "突破焦岩哨卡"
+      prompt_hint: "在焦岩古道触发灰烬议会暗哨或被驱赶的地精骑兵遭遇战/智取谈判，并给予小队在断崖烽火台扎营短休的机会。"
+    - act: 3
+      by_turn: 15
+      flag: "打开铸炉内门"
+      prompt_hint: "引导小队在废堡外庭或走私暗道正面接触猩红鸦爪头目或教会斥候，打开通往符文熔炉深厅的通道。"
+    - act: 4
+      by_turn: 22
+      flag: "营救大匠师巴林"
+      prompt_hint: "在熔炉深厅或囚室揭示大匠师巴林的处境与三道镇压闸机关真相，为终幕大战铺好战术筹码。"
+    - act: 5
+      by_turn: 28
+      flag: "完成日蚀圣坛最终抉择"
+      prompt_hint: "日蚀逼近，执政官维克多在圣坛启动终极仪轨，小队必须在终局中做出不可逆的英雄或利益抉择。"
+
+worldbook:
+  - id: wb_valley_lore
+    title: "剑湾晨钟村与失落铸炉传说"
+    keywords: ["晨钟村", "剑湾", "铸炉", "晨日核心"]
+    always_active: true
+    priority: 100
+    content: |
+      晨钟村坐落在剑湾东麓的矿脉峡谷口，百年前矮人铁砧氏族曾在深山中筑起「失落铸炉」，以一颗蕴含太阳余烬的秘银晶核「晨日核心」锻造神兵。
+      八十年前一场神秘地裂迫使矮人封存铸炉。近七日山顶每逢黄昏便泛起暗紫灰云，村里的铁器无故发烫，家畜躁动不安。
+  - id: wb_dnd_combat_pacing
+    title: "D&D 剧场战术与休整原则"
+    keywords: ["战斗", "休整", "短休", "长休", "陷阱", "DC"]
+    always_active: true
+    priority: 95
+    content: |
+      战斗采用高节奏「剧场模式」，强调站位掩护、环境互动（踢翻火盆、砍断吊桥绳、引爆火药桶）与招牌技能高光。
+      每经历一场硬仗或探索完一片区域后，若小队身处旅店、断崖烽火台或清场后的石室，可自然提示他们使用 `/rest short` 短休回血回技能，或由房主安排 `/rest long` 扎营过夜。
+  - id: wb_mule_ingot
+    title: "焦黑战骡与符文精金锭的秘密"
+    keywords: ["战骡", "精金", "鞍袋", "蜡封", "巴林", "血指印"]
+    always_active: false
+    priority: 92
+    content: |
+      精金锭表面铭刻的并非普通锻造印记，而是古矮人警示符文『三闸逆转·火核将裂』（奥秘/侦查 DC 12 可读懂）。
+      战骡鞍袋夹层里藏着一把半融的「铜须家徽钥匙」和一幅炭笔速写图，标注了断崖烽火台下方一条被藤蔓遮蔽的猎人密道。
+  - id: wb_red_crow_scout
+    title: "独臂红鸦斥候 · 凯尔"
+    keywords: ["斥候", "红鸦", "斗篷", "阴影", "独臂", "凯尔", "盗贼"]
+    always_active: false
+    priority: 90
+    content: |
+      独臂斥候名叫凯尔，隶属「猩红鸦爪盗贼团」。他并非灰烬议会同伙，而是受团长「银雀」维拉派遣来探查铸炉宝库虚实。
+      初始态度【警惕】。若玩家用交涉/游说（DC 13）或提出分账/互换情报，凯尔态度转为【中立/友好】，会透露焦岩古道哨卡换防规律，并给出一枚「红鸦铜哨」作为裂隙暗道通行信物。
+  - id: wb_village_elder
+    title: "老村长莫林与铁匠格伦"
+    keywords: ["村长", "铁匠", "莫林", "格伦", "悬赏", "铁匠铺"]
+    always_active: false
+    priority: 85
+    content: |
+      老村长莫林愿先付 50 金币定金、事成再加 300 金币委托小队调查铸炉。
+      村口铁匠铺的矮人老铁匠格伦是大匠师巴林的堂弟，若出示铜须家徽钥匙，格伦会热泪盈眶并赠送「两枚矮人震荡雷」和一幅精确标明三道镇压闸位置的古旧蓝图。
+  - id: wb_cinder_ambush
+    title: "焦岩古道的地精骑兵与议会暗哨"
+    keywords: ["古道", "地精", "伏击", "哨卡", "狼骑", "黑袍"]
+    always_active: false
+    priority: 88
+    content: |
+      灰烬议会用燃烧水晶驱赶了一支焦岩地精狼骑充当外围炮灰。正面强攻需要应对高地弓手与狼骑冲锋（DC 13）；但若玩家先察觉山岩反光（察觉 DC 13）或用游说/威吓揭穿黑袍术士正把地精当弃子，地精首领「铁齿」甚至可能临阵倒戈或让路。
+  - id: wb_watchtower_camp
+    title: "断崖烽火台的遗留补给与秘径"
+    keywords: ["烽火台", "营地", "断崖", "藤蔓", "扎营", "休整"]
+    always_active: false
+    priority: 82
+    content: |
+      断崖烽火台视野开阔、易守难攻，是绝佳的安全休整点。火塘暗石下埋着十年前铁砧斥候留下的密封木匣（内含两瓶「强效治疗药水」与一份《矮人构装体弱点笔记》：后颈蓝晶核心遭重击会瘫痪 2 回合）。
+      崖底藤蔓后藏着通往「裂隙走私暗道」的狭窄密径。
+  - id: wb_silver_sparrow
+    title: "猩红鸦爪团长「银雀」维拉"
+    keywords: ["银雀", "维拉", "盗贼团", "走私", "暗道", "交易"]
+    always_active: false
+    priority: 86
+    content: |
+      维拉机敏狡猾但守江湖规矩，她盘踞在裂隙走私暗道，想趁灰烬议会和教会两败俱伤时搬空矮人秘库。
+      若出示红鸦铜哨或开出合理筹码（交涉 DC 14），她愿意提供通风井潜入路线并在外庭制造骚乱引开构装体；但如果玩家试图黑吃黑，她会在关键时刻落闸反咬一口。
+  - id: wb_dawn_inquisitor
+    title: "晨光教会巡查官 · 塞拉斯"
+    keywords: ["教会", "巡查", "塞拉斯", "圣殿", "骑士", "晨光"]
+    always_active: false
+    priority: 80
+    content: |
+      巡查官塞拉斯率 4 名晨光骑兵驻扎在废堡山门外，立场强硬：他主张直接炸毁或由教会永久封禁失落铸炉。
+      圣武士或守序角色与他沟通享优势（交涉 DC 13），说服他联手牵制外庭黑袍卫队，能极大降低攻入熔炉深厅的伤亡。
+  - id: wb_bronze_golem
+    title: "废堡外庭的失控青铜构装体"
+    keywords: ["构装体", "石像", "吊桥", "外庭", "傀儡", "青铜"]
+    always_active: false
+    priority: 84
+    content: |
+      两尊三米高的古代矮人青铜守卫被灰烬议会篡改了识别符文，对非黑袍者无差别攻击。
+      正面硬拼护甲极厚（体魄/格斗 DC 15），但若使用奥术学者读懂石像基座古矮人停机词（奥秘 DC 14）或游荡者瞄准后颈蓝晶核心施放影袭，可直接令其过载僵直！
+  - id: wb_rune_valves
+    title: "符文熔炉深厅的三道镇压闸"
+    keywords: ["镇压闸", "熔炉", "深厅", "阀门", "符文", "过载"]
+    always_active: false
+    priority: 92
+    content: |
+      熔炉深厅环绕着东、西、北三座巨大的秘银冷却闸（东闸被铁链锁死需体魄/开锁 DC 14，西闸被烈焰魔纹封锁需奥秘/灵感 DC 14，北闸由一名灰烬秘术师把守）。
+      每关闭一道镇压闸，终幕日蚀仪轨的难度和执政官护盾都会显著削弱！
+  - id: wb_master_balin
+    title: "失踪的大匠师 · 巴林·铜须"
+    keywords: ["巴林", "大匠师", "囚室", "秘库", "铜须", "牢房"]
+    always_active: false
+    priority: 93
+    content: |
+      白须沾满烟灰的大匠师巴林被魔法锁链囚禁在古矮人秘库深处，他宁死不交出晨日核心的真正停机口令『炎尽晨生』。
+      救出他后，巴林不仅会告知口令与秘库中珍藏的一把「日耀符文战锤 / 奥术秘银披风」，还能亲手修复一处镇压闸为终局助阵。
+  - id: wb_archon_viktor
+    title: "灰烬议会执政官 · 维克多"
+    keywords: ["维克多", "执政官", "议会", "圣坛", "日蚀", "冠冕"]
+    always_active: false
+    priority: 94
+    content: |
+      维克多曾是被晨光教会放逐的宫廷炼金师，他坚信唯有铸成『蚀日冠冕』掌控无穷太阳火，才能终结贵族倾轧。
+      在日蚀圣坛终决中，他身披熔火法袍并操控一尊核心魔像。若三道镇压闸已关至少两道，他的护盾会碎裂；除正面击溃外，高交涉/洞察角色也能趁其仪式动摇时攻心瓦解其意志（DC 17）！
+  - id: wb_secret_vault_relic
+    title: "古矮人秘库的真正禁忌真相（绝密暗线）"
+    keywords: ["秘库", "真相", "晶核", "禁忌", "石碑", "契约"]
+    always_active: false
+    priority: 78
+    content: |
+      秘库最深处石碑刻着连大匠师也隐瞒的往事：『晨日核心』其实是一位上古火元素领主自愿沉睡化作的契约之心。
+      强行摧毁它会释放灼热震爆；而带着敬意诵念古矮人安抚词（仅适合用 private_whispers 告诉通过 DC 15 灵感/奥秘检定的角色），竟能唤醒核心的善意意识，直接反噬执政官维克多！

@@ -654,7 +654,7 @@
         }
 
         ctx.fillStyle = pal.muted; ctx.font = "12px PingFang SC, sans-serif";
-        ctx.fillText("🍺 KOOK AI 群酒馆 · 实况纪念长图（v1.2）", pad, H - 30, colW);
+        ctx.fillText("🍺 KOOK AI 群酒馆 · 实况纪念长图（v1.4）", pad, H - 30, colW);
 
         const a = document.createElement("a");
         a.download = "tavern_" + (d.scenario_id || "story") + "_turn" + d.turn_number + ".png";
@@ -684,7 +684,8 @@
         const phaseTxt = data.ended_title ? "🏆 剧终收束" : (data.turn_phase === "resolving" ? "⏳ DM 推演中…" : "🟢 等待行动");
         const modeTxt = data.chat_mode === "roleplay" ? "💬 直接说话" : "⌨️ 指令前缀";
         const styleTxt = data.narrative_style === "voice" ? "🎙️ 语音极简" : "📖 文字沉浸";
-        ["📍 " + data.location, "🕒 " + data.world_time, "🎲 第 " + data.turn_number + " 回合", phaseTxt, modeTxt, styleTxt]
+        const ruleTxt = data.check_system || "🎲 2d6 三档";
+        ["📍 " + data.location, "🕒 " + data.world_time, "🎲 第 " + data.turn_number + " 回合", ruleTxt, phaseTxt, modeTxt, styleTxt]
           .forEach(t => meta.appendChild(el("span", "pill", t)));
 
         // Act stepper & world flags
@@ -721,8 +722,10 @@
             const card = el("div", "player-card");
             const head = el("div", "player-head");
             const left = el("div");
-            left.appendChild(el("div", "player-name", p.character_name));
-            left.appendChild(el("div", "player-role", p.role_desc + (p.status_note ? " · " + p.status_note : "")));
+            const lvTag = " Lv." + (p.level || 1) + (p.inspiration ? " 🌟" : "");
+            left.appendChild(el("div", "player-name", p.character_name + lvTag));
+            const alignTag = p.alignment ? " · " + p.alignment : "";
+            left.appendChild(el("div", "player-role", p.role_desc + alignTag + (p.status_note ? " · " + p.status_note : "")));
             const badge = p.is_afk ? "💤 暂离" : (p.action_ready ? "✅ 已就绪" : "⏳ 思考中");
             head.appendChild(left);
             head.appendChild(el("span", "pill" + (p.action_ready ? " live" : ""), badge));
@@ -737,7 +740,9 @@
             }
             const chips = el("div", "chips");
             if (p.location) chips.appendChild(el("span", "chip", "📍 " + p.location));
-            (p.traits || []).forEach(tr => chips.appendChild(el("span", "chip gold", "✦ " + tr)));
+            (p.proficient_skills || []).forEach(sk => chips.appendChild(el("span", "chip gold", "🎓 " + sk)));
+            (p.abilities || []).forEach(ab => chips.appendChild(el("span", "chip gold", "✨ " + ab.name + " " + ab.uses_left + "/" + ab.max_uses)));
+            (p.traits || []).forEach(tr => chips.appendChild(el("span", "chip", "✦ " + tr)));
             (p.inventory || []).forEach(it => chips.appendChild(el("span", "chip", "🎒 " + it)));
             (p.roll_notes || []).forEach(rn => chips.appendChild(el("span", "chip gold", rn)));
             if (chips.childNodes.length) card.appendChild(chips);

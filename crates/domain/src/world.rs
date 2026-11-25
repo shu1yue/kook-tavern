@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::dnd::CheckSystem;
 use crate::models::{RoomState, Scenario};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -46,6 +47,8 @@ pub struct DirectorBeat {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ScenarioRules {
+    #[serde(default)]
+    pub check_system: CheckSystem,
     #[serde(default = "default_pace")]
     pub tension_pace: String,
     #[serde(default = "default_balanced")]
@@ -77,6 +80,7 @@ fn default_bulletin_interval() -> u32 {
 impl Default for ScenarioRules {
     fn default() -> Self {
         Self {
+            check_system: CheckSystem::default(),
             tension_pace: default_pace(),
             lethality: default_balanced(),
             clue_generosity: default_balanced(),
@@ -91,7 +95,8 @@ impl Default for ScenarioRules {
 
 impl ScenarioRules {
     pub fn has_custom_guidance(&self) -> bool {
-        !self.dm_weight_note.trim().is_empty()
+        self.check_system != CheckSystem::TwoD6
+            || !self.dm_weight_note.trim().is_empty()
             || !self.factions.is_empty()
             || !self.must_hit_beats.is_empty()
             || self.tension_pace != "brisk"
@@ -124,7 +129,10 @@ impl ScenarioRules {
             "generous" => "慷慨（鼓励大胆尝试，主动给足推进线索）",
             _ => "适中（有据可循，避免卡关）",
         };
-        let mut s = format!("节奏：{pace} ｜ 致命度：{lethal} ｜ 线索投放：{clues}");
+        let mut s = format!(
+            "默认检定体系：{} ｜ 节奏：{pace} ｜ 致命度：{lethal} ｜ 线索投放：{clues}",
+            self.check_system.prompt_guide()
+        );
         if !self.dm_weight_note.trim().is_empty() {
             s.push_str(&format!("\n- DM 裁决权重补充：{}", self.dm_weight_note.trim()));
         }

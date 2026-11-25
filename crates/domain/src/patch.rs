@@ -205,14 +205,19 @@ pub fn apply_dm_reply(
         }
     }
 
+    crate::dnd_ops::apply_inspiration_grants(
+        players,
+        &reply.grant_inspiration,
+        &mut effects.state_changes,
+    );
     effects
 }
 
 /// Authoritative server-side applier for scenario progression:
-/// world flags, act transitions (bounded to `scenario.acts`), and validated multi-ending triggers.
+/// world flags, act transitions (bounded to `scenario.acts`), milestone level-up, and validated endings.
 pub fn apply_story_progression(
     room: &mut RoomState,
-    players: &[Player],
+    players: &mut [Player],
     scenario: &Scenario,
     reply: &DmStructuredReply,
     resolving_turn: u32,
@@ -238,6 +243,7 @@ pub fn apply_story_progression(
                 room.current_act, total_acts, act.title, act.goal
             ));
         }
+        crate::dnd_ops::award_act_milestone(players, &mut effects.state_changes);
     }
 
     if let Some(ref draft) = reply.world_bulletin {
@@ -306,42 +312,31 @@ mod tests {
             gm_user_id: "u1".into(), web_token: "secret_tok".into(),
             clues: vec![], npc_states: vec![], suggested_actions: vec![],
             current_act: 1, world_flags: vec![], ended_id: None, ended_title: None,
-            bulletins: vec![], summary: String::new(), summary_upto_turn: 0, active: true,
+            bulletins: vec![], check_system: Default::default(), last_rest_turn: 0,
+            summary: String::new(), summary_upto_turn: 0, active: true,
             created_at: now, updated_at: now,
         };
         assert!(!format!("{room:?}").contains("secret_tok"));
-
         let mut players = vec![Player {
             channel_id: "c1".into(), user_id: "u1".into(), character_name: "陆沉".into(),
             role_desc: "机械师".into(), traits: vec![], hp: 50, max_hp: 50, san: 8, max_san: 10,
             inventory: vec!["扳手".into()], status_note: String::new(), is_afk: false,
-            stats: Default::default(), location: String::new(),
+            stats: Default::default(), location: String::new(), dnd: Default::default(),
         }];
         let reply = DmStructuredReply {
             scene_title: "测试".into(), narrative: "轰！".into(), private_whispers: vec![],
             state_patches: vec![
-                StatePatch {
-                    player_name: "陆沉".into(), hp_delta: -25, san_delta: 999,
-                    add_items: vec!["火把".into()], remove_items: vec!["不存在的物品".into()],
-                    status_note: None, location: Some("地下酒窖".into()),
-                },
-                StatePatch {
-                    player_name: "陆沉".into(), hp_delta: -25, san_delta: 0,
-                    add_items: vec![], remove_items: vec!["扳手".into()],
-                    status_note: Some("重伤".into()), location: None,
-                },
+                StatePatch { player_name: "陆沉".into(), hp_delta: -25, san_delta: 999, add_items: vec!["火把".into()], remove_items: vec!["不存在的物品".into()], status_note: None, location: Some("地下酒窖".into()) },
+                StatePatch { player_name: "陆沉".into(), hp_delta: -25, san_delta: 0, add_items: vec![], remove_items: vec!["扳手".into()], status_note: Some("重伤".into()), location: None },
             ],
             new_clues: vec!["线索A".into(), "线索A".into()], npc_updates: vec![],
             world_time: None, location: None, suggested_actions: vec![],
             suggested_check: None, add_flags: vec![], advance_act: false, trigger_ending_id: None,
-            world_bulletin: None, reincarnation_echo: None,
+            world_bulletin: None, reincarnation_echo: None, grant_inspiration: vec!["陆沉".into()],
         };
-
         let _ = apply_dm_reply(&mut room, &mut players, &reply);
-        assert_eq!(players[0].hp, 20);
-        assert_eq!(players[0].san, 10);
-        assert_eq!(players[0].inventory, vec!["火把"]);
-        assert_eq!(players[0].location, "地下酒窖");
-        assert_eq!(room.clues, vec!["线索A"]);
+        assert_eq!((players[0].hp, players[0].san), (20, 10));
+        assert!(players[0].dnd.inspiration);
+        assert_eq!((players[0].inventory.as_slice(), players[0].location.as_str(), room.clues.as_slice()), (&["火把".to_string()][..], "地下酒窖", &["线索A".to_string()][..]));
     }
 }

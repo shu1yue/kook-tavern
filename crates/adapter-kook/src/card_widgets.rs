@@ -73,14 +73,16 @@ pub fn story_suggestion_buttons(
 }
 
 pub fn story_toolbar(channel_id: &str, suggested_check: Option<&SuggestedCheck>) -> Value {
-    let dice_btn = if let Some(stat) = suggested_check.and_then(SuggestedCheck::parsed_stat) {
-        btn(
-            "warning",
-            format!("tavern:check:{channel_id}:{}", stat.key()),
-            &format!("{} {}检定", stat.icon(), stat.short_name()),
-        )
+    let dice_btn = if let Some(ck) = suggested_check
+        && let Some(stat) = ck.parsed_stat()
+    {
+        let (val, dc_tag) = match ck.dc {
+            Some(d) => (format!("tavern:check:{channel_id}:{}:{}", stat.key(), d.clamp(5, 25)), format!(" DC{}", d.clamp(5, 25))),
+            None => (format!("tavern:check:{channel_id}:{}", stat.key()), String::new()),
+        };
+        btn("warning", val, &format!("{} {}检定{dc_tag}", stat.icon(), stat.short_name()))
     } else {
-        btn("secondary", format!("tavern:roll:{channel_id}:2d6"), "🎲 掷 2d6")
+        btn("secondary", format!("tavern:roll:{channel_id}:1d20"), "🎲 掷 d20")
     };
     action_group(vec![
         dice_btn,
@@ -160,7 +162,7 @@ pub fn status_console_rows(channel_id: &str, room: &RoomState) -> [Value; 3] {
     };
     let row1 = action_group(vec![
         btn("success", format!("tavern:rolemenu:{channel_id}"), "🎭 选职业入团"),
-        btn("secondary", format!("tavern:roll:{channel_id}:1d100"), "🎲 掷 d100"),
+        btn("secondary", format!("tavern:rest:{channel_id}:short"), "🔥 营地短休"),
         btn("warning", format!("tavern:afk:{channel_id}"), "💤 暂离/归队"),
         btn("danger", format!("tavern:undo:{channel_id}"), "↩️ 回档上轮"),
     ]);
@@ -221,16 +223,17 @@ pub fn push_party_cards(
         } else {
             p.inventory.join(" · ")
         };
+        let lv_star = format!(
+            "Lv.{}{}",
+            p.dnd.level,
+            if p.dnd.inspiration { " 🌟" } else { "" }
+        );
         let content = format!(
-            "**{}**（{}） `{}`\n❤️ {}　｜　🧠 {}\n📊 {}\n🏷️ {}　｜　🎒 {}",
+            "**{}**（{} · {lv_star}） `{}`\n❤️ {}　｜　🧠 {}\n📊 {}\n🏷️ {}　｜　🎒 {}",
             truncate_chars(&p.character_name, 24),
-            truncate_chars(&p.role_desc, 24),
-            badge,
-            hp_bar,
-            san_bar,
-            p.stats.format_inline(),
-            truncate_chars(status_txt, 40),
-            truncate_chars(&inv, 140)
+            truncate_chars(&p.role_desc, 20),
+            badge, hp_bar, san_bar, p.stats.format_inline(),
+            truncate_chars(status_txt, 40), truncate_chars(&inv, 140)
         );
         modules.push(json!({
             "type": "section",

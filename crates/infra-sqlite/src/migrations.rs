@@ -205,6 +205,29 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
         Ok(())
     })?;
 
+    apply_if_needed(conn, 10, "0010_v14_dnd_rules_and_chars", |tx| {
+        add_column_if_missing(tx, "rooms", "check_system", "TEXT NOT NULL DEFAULT '2d6'")?;
+        add_column_if_missing(tx, "rooms", "last_rest_turn", "INTEGER NOT NULL DEFAULT 0")?;
+        add_column_if_missing(tx, "players", "dnd_json", "TEXT NOT NULL DEFAULT '{}'")?;
+        tx.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS saved_characters (
+                user_id TEXT NOT NULL,
+                character_name TEXT NOT NULL,
+                role_desc TEXT NOT NULL DEFAULT '',
+                traits_json TEXT NOT NULL DEFAULT '[]',
+                stats_json TEXT NOT NULL DEFAULT '{}',
+                dnd_json TEXT NOT NULL DEFAULT '{}',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, character_name)
+            );
+            CREATE INDEX IF NOT EXISTS idx_saved_chars_user
+                ON saved_characters (user_id, updated_at DESC);
+            "#,
+        )?;
+        Ok(())
+    })?;
+
     Ok(())
 }
 

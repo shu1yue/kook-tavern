@@ -102,6 +102,17 @@ impl CharacterStats {
         raw.clamp(-3, 5)
     }
 
+    pub fn add(&mut self, kind: StatKind, delta: i32) {
+        let slot = match kind {
+            StatKind::Body => &mut self.body,
+            StatKind::Agility => &mut self.agility,
+            StatKind::Investigate => &mut self.investigate,
+            StatKind::Social => &mut self.social,
+            StatKind::Insight => &mut self.insight,
+        };
+        *slot = (*slot + delta).clamp(-3, 5);
+    }
+
     pub fn format_inline(&self) -> String {
         format!(
             "💪{} 🏃{} 🔍{} 🗣️{} ✨{}",
@@ -133,9 +144,11 @@ fn fmt_mod(v: i32) -> String {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckTier {
+    CritFailure,
     Failure,
     Partial,
     Success,
+    CritSuccess,
 }
 
 impl CheckTier {
@@ -150,19 +163,19 @@ impl CheckTier {
     }
 
     pub fn label(self) -> &'static str {
-        match self {
-            CheckTier::Success => "✨ 完全成功（≥10）",
-            CheckTier::Partial => "⚠️ 代价成功（7~9）",
-            CheckTier::Failure => "❌ 失败（≤6）",
-        }
+        crate::dnd_ops::check_tier_label_for(self, crate::dnd::CheckSystem::TwoD6)
+    }
+
+    pub fn label_for(self, sys: crate::dnd::CheckSystem) -> &'static str {
+        crate::dnd_ops::check_tier_label_for(self, sys)
     }
 
     pub fn rule_hint(self) -> &'static str {
-        match self {
-            CheckTier::Success => "痛快达成目标，可附带额外线索或有利局势",
-            CheckTier::Partial => "达成主要目标，但必须伴随代价、消耗、风险或新麻烦",
-            CheckTier::Failure => "行动受挫，局势恶化或触发真实风险/线索受阻",
-        }
+        crate::dnd_ops::check_tier_hint_for(self, crate::dnd::CheckSystem::TwoD6)
+    }
+
+    pub fn rule_hint_for(self, sys: crate::dnd::CheckSystem) -> &'static str {
+        crate::dnd_ops::check_tier_hint_for(self, sys)
     }
 }
 
@@ -238,6 +251,8 @@ pub struct SuggestedCheck {
     pub stat: String,
     #[serde(default)]
     pub reason: String,
+    #[serde(default)]
+    pub dc: Option<i32>,
 }
 
 impl SuggestedCheck {

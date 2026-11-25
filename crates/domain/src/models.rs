@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::dnd::{CharacterAbility, CheckSystem, PlayerDndProfile};
 use crate::stats::{CharacterStats, ScenarioAct, ScenarioEnding};
 use crate::world::{ScenarioMapEdge, ScenarioMapNode, ScenarioRules, WorldBulletin};
 
@@ -124,6 +125,12 @@ pub struct PresetRole {
     pub bonus_items: Vec<String>,
     #[serde(default)]
     pub stats: CharacterStats,
+    #[serde(default)]
+    pub alignment: String,
+    #[serde(default)]
+    pub proficient_skills: Vec<String>,
+    #[serde(default)]
+    pub abilities: Vec<CharacterAbility>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -207,6 +214,10 @@ pub struct RoomState {
     #[serde(default)]
     pub bulletins: Vec<WorldBulletin>,
     #[serde(default)]
+    pub check_system: CheckSystem,
+    #[serde(default)]
+    pub last_rest_turn: u32,
+    #[serde(default)]
     pub summary: String,
     #[serde(default)]
     pub summary_upto_turn: u32,
@@ -253,6 +264,8 @@ pub struct Player {
     pub stats: CharacterStats,
     #[serde(default)]
     pub location: String,
+    #[serde(default)]
+    pub dnd: PlayerDndProfile,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -314,33 +327,24 @@ pub struct UsageSummary {
 impl UsageSummary {
     pub fn cache_hit_ratio_pct(&self) -> f64 {
         let total = self.cache_hit_tokens + self.cache_miss_tokens;
-        if total == 0 {
-            if self.prompt_tokens == 0 {
-                0.0
-            } else {
-                (self.cache_hit_tokens as f64 / self.prompt_tokens as f64) * 100.0
-            }
-        } else {
-            (self.cache_hit_tokens as f64 / total as f64) * 100.0
-        }
+        let denom = if total > 0 { total } else { self.prompt_tokens };
+        if denom == 0 { 0.0 } else { (self.cache_hit_tokens as f64 / denom as f64) * 100.0 }
     }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DailyUsage {
-    pub day_utc: String,
-    pub calls: u64,
-    pub estimated_cny: f64,
-}
+pub struct DailyUsage { pub day_utc: String, pub calls: u64, pub estimated_cny: f64 }
 
 pub fn format_batched_actions(actions: &[PendingAction]) -> String {
-    let mut lines = Vec::with_capacity(actions.len());
-    for a in actions {
-        let mut entry = format!("【{}】行动：{}", a.character_name, a.action_text.trim());
-        if !a.roll_notes.is_empty() {
-            entry.push_str(&format!("\n  ↳ 已验证后端掷骰：{}", a.roll_notes.join("；")));
-        }
-        lines.push(entry);
-    }
-    lines.join("\n")
+    actions
+        .iter()
+        .map(|a| {
+            let mut e = format!("【{}】行动：{}", a.character_name, a.action_text.trim());
+            if !a.roll_notes.is_empty() {
+                e.push_str(&format!("\n  ↳ 已验证后端掷骰：{}", a.roll_notes.join("；")));
+            }
+            e
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }

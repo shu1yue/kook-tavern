@@ -1,9 +1,10 @@
 use anyhow::Result;
 use tavern_core::{BoxFuture, LlmProvider};
 use tavern_domain::{
-    DmStructuredReply, DmTurnOutput, LlmUsage, NpcUpdate, PendingAction, Player, PrivateWhisper,
-    RoomState, Scenario, StatePatch, SuggestedCheck, SummaryOutput, TurnRecord, WorldBulletinDraft,
-    WorldEcho, format_batched_actions, match_dynamic_worldbook, should_trigger_bulletin,
+    CheckSystem, DmStructuredReply, DmTurnOutput, LlmUsage, NpcUpdate, PendingAction, Player,
+    PrivateWhisper, RoomState, Scenario, StatePatch, SuggestedCheck, SummaryOutput, TurnRecord,
+    WorldBulletinDraft, WorldEcho, format_batched_actions, match_dynamic_worldbook,
+    should_trigger_bulletin,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -156,6 +157,11 @@ impl LlmProvider for MockLlmProvider {
                 .split(" · 推进")
                 .next()
                 .unwrap_or(&room.world_time);
+            let grant_inspiration = if joined_lower.contains("精彩扮演") || joined_lower.contains("激励") {
+                actions.first().map(|a| vec![a.character_name.clone()]).unwrap_or_default()
+            } else {
+                Vec::new()
+            };
             let reply = DmStructuredReply {
                 scene_title: format!("{} · 第 {} 幕", scenario.name, turn_next),
                 narrative: format!(
@@ -176,12 +182,14 @@ impl LlmProvider for MockLlmProvider {
                 suggested_check: Some(SuggestedCheck {
                     stat: "侦查".to_string(),
                     reason: "搜寻隐秘细节".to_string(),
+                    dc: (room.check_system == CheckSystem::D20).then_some(13),
                 }),
                 add_flags,
                 advance_act,
                 trigger_ending_id,
                 world_bulletin,
                 reincarnation_echo,
+                grant_inspiration,
             };
 
             Ok(DmTurnOutput {

@@ -144,8 +144,8 @@ pub fn handle_pick_role(
     )?
     else {
         return Ok(EngineResponse::Notice {
-            title: "ℹ️ 当前房间已结束或归档".to_string(),
-            body: "请开启新冒险后再选职业。".to_string(),
+            title: "⏳ 当前房间暂不可选职业".to_string(),
+            body: "房间正在结算中、已结束或已归档，请稍后再试或开启新冒险。".to_string(),
             theme: CardTheme::Warning,
             show_actions: false,
         });
@@ -160,7 +160,7 @@ pub fn handle_pick_role(
         return Ok(EngineResponse::Notice {
             title: format!("🎭 职业已切换：{} · {}", player.character_name, preset.name),
             body: format!(
-                "🏷️ 新特质：{}\n📊 五维属性：{}\n❤️ 当前 HP {}/{} ｜ 🧠 SAN {}/{}（保留原血量与背包，不重复发放初始道具喵！）",
+                "🏷️ 新特质：{}\n📊 五维属性：{}\n❤️ 当前 HP {}/{} ｜ 🧠 SAN {}/{}（开局第 0 轮可重选属性与技能；开打后仅更新称谓与特质，保留血量、背包与已成长数值喵！）",
                 preset.traits.join(" / "),
                 player.stats.format_inline(),
                 player.hp,
@@ -173,10 +173,24 @@ pub fn handle_pick_role(
         });
     }
 
+    let mut extra = String::new();
+    if !player.dnd.proficient_skills.is_empty() {
+        extra.push_str(&format!("\n🎓 熟练技能：{}", player.dnd.proficient_skills.join(" · ")));
+    }
+    if !player.dnd.abilities.is_empty() {
+        let abs = player
+            .dnd
+            .abilities
+            .iter()
+            .map(|a| format!("{}({}/{})", a.name, a.uses_left, a.max_uses))
+            .collect::<Vec<_>>()
+            .join("、");
+        extra.push_str(&format!("\n✨ 招牌技（`/skill`）：{abs}"));
+    }
     Ok(EngineResponse::Notice {
         title: format!("⚔️ 一键选卡入团成功：{}（{}）", player.character_name, preset.name),
         body: format!(
-            "🏷️ 特质：**{}**\n📊 五维属性：{}\n❤️ HP {}/{} ｜ 🧠 SAN {}/{}\n🎒 初始行囊（含职业专属装备）：{}\n\n直接点剧情卡上的 ①②③ 按钮，或直接发消息即可开始行动喵！",
+            "🏷️ 特质：**{}**\n📊 五维属性：{}\n❤️ HP {}/{} ｜ 🧠 SAN {}/{}{extra}\n🎒 初始行囊（含职业专属装备）：{}\n\n直接点剧情卡上的 ①②③ 按钮，或直接发消息即可开始行动喵！",
             preset.traits.join(" / "),
             player.stats.format_inline(),
             player.hp,

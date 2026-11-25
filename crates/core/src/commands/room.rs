@@ -18,11 +18,10 @@ pub fn cmd_help() -> EngineResponse {
         "",
         "**⌨️ 进阶文字快捷键（想精细操作时再用）**",
         "- `/menu` / `/roles` — 剧本大厅 / 职业选卡",
-        "- `/me` / `/check 侦查 [原因]` — 仅自己可见个人角色卡+秘密纸条 / 五维三档检定",
-        "- `/endings` / `/web` — 本服结局图鉴 / 伴生实况大屏链接",
-        "- `/join 角色名 职业 | 特质1,特质2` — 自定义人设（保留血量与背包）",
-        "- `.r 2d6+1` 或 `.r d100` — 自定义掷骰 ｜ `/gm help` — 房主控场 ｜ `/reload` — 管理员热重载剧本",
-        "- `/export` / `/reset` — 发战报墙留念 / 房主结团清空",
+        "- `/me` / `/check 侦查 [adv|dc15|inspire] [原因]` — 个人角色卡 / 多规则检定",
+        "- `/skill` / `/rest short|long` / `/assist <队友>` / `/levelup` — 招牌技 / 营地休整 / 队友协助 / 过幕升级",
+        "- `/char` / `/rule d20|2d6|d100` / `/inspire <角色>` — 自由车卡库 / 切换 D&D 规则 / 颁激励点",
+        "- `/endings` / `/web` / `/export` / `/reset` — 结局图鉴 / 实况大屏 / 发战报墙 / 结团",
     ]
     .join("\n");
 
@@ -148,6 +147,8 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         ended_id: None,
         ended_title: None,
         bulletins: Vec::new(),
+        check_system: scenario.rules.check_system,
+        last_rest_turn: 0,
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,

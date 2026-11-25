@@ -21,6 +21,7 @@ pub struct RoomPublicView {
     pub turn_phase: &'static str,
     pub chat_mode: &'static str,
     pub narrative_style: &'static str,
+    pub check_system: &'static str,
     pub active: bool,
     pub current_act: u32,
     pub acts: Vec<ActPublicView>,
@@ -65,11 +66,24 @@ pub struct EndingGalleryItem {
 }
 
 #[derive(Debug, Serialize)]
+pub struct AbilityPublicView {
+    pub name: String,
+    pub uses_left: u32,
+    pub max_uses: u32,
+    pub recharge: &'static str,
+}
+
+#[derive(Debug, Serialize)]
 pub struct PlayerPublicView {
     pub character_name: String,
     pub role_desc: String,
     pub traits: Vec<String>,
     pub stats: CharacterStats,
+    pub level: u32,
+    pub inspiration: bool,
+    pub alignment: String,
+    pub proficient_skills: Vec<String>,
+    pub abilities: Vec<AbilityPublicView>,
     pub hp: i32,
     pub max_hp: i32,
     pub san: i32,
@@ -221,11 +235,27 @@ pub fn build_room_public_view(state: &WebState, channel_id: &str, room: RoomStat
             } else {
                 p.location
             };
+            let abilities = p
+                .dnd
+                .abilities
+                .into_iter()
+                .map(|a| AbilityPublicView {
+                    name: a.name,
+                    uses_left: a.uses_left,
+                    max_uses: a.max_uses,
+                    recharge: a.recharge.short_label(),
+                })
+                .collect();
             PlayerPublicView {
                 character_name: p.character_name,
                 role_desc: p.role_desc,
                 traits: p.traits,
                 stats: p.stats,
+                level: p.dnd.level,
+                inspiration: p.dnd.inspiration,
+                alignment: p.dnd.alignment,
+                proficient_skills: p.dnd.proficient_skills,
+                abilities,
                 hp: p.hp,
                 max_hp: p.max_hp,
                 san: p.san,
@@ -263,6 +293,7 @@ pub fn build_room_public_view(state: &WebState, channel_id: &str, room: RoomStat
         turn_phase: room.turn_phase.as_str(),
         chat_mode: room.chat_mode.as_str(),
         narrative_style: room.narrative_style.as_str(),
+        check_system: room.check_system.short_badge(),
         active: room.active,
         current_act: room.current_act,
         acts,

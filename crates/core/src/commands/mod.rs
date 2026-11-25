@@ -1,6 +1,8 @@
 pub mod button_roles;
 pub mod buttons;
+pub mod char_vault;
 pub mod check;
+pub mod dnd;
 pub mod export;
 pub mod gm;
 pub mod m1;
@@ -119,6 +121,16 @@ async fn match_known_command(
         "act" | "a" | "行动" => party::cmd_act(engine, msg, arg).await?,
         "roll" | "r" | "掷骰" => party::cmd_roll(engine, msg, arg)?,
         "check" | "ck" | "检定" | "属性" => check::cmd_check(engine, msg, arg)?,
+        "rule" | "规则" => dnd::cmd_rule(engine, msg, arg)?,
+        "skill" | "sk" | "技能" | "绝活" => dnd::cmd_skill(engine, msg, arg)?,
+        "rest" | "休整" | "短休" | "长休" => {
+            let eff_arg = if cmd == "长休" && arg.is_empty() { "long" } else if cmd == "短休" && arg.is_empty() { "short" } else { arg };
+            dnd::cmd_rest(engine, msg, eff_arg)?
+        }
+        "inspire" | "激励" => dnd::cmd_inspire(engine, msg, arg)?,
+        "assist" | "协助" => dnd::cmd_assist(engine, msg, arg)?,
+        "levelup" | "lv" | "升级" | "成长" => dnd::cmd_levelup(engine, msg, arg)?,
+        "char" | "角色库" | "车卡库" => char_vault::cmd_char(engine, msg, arg)?,
         "me" | "my" | "我的" | "角色卡" => check::cmd_me(engine, msg)?,
         "endings" | "图鉴" | "成就" | "结局" => check::cmd_endings(engine, msg)?,
         "go" | "resolve" | "next" | "结算" => turn::resolve_turn(engine, &msg.channel_id).await?,
@@ -271,6 +283,9 @@ pub(crate) fn is_known_command_name(cmd: &str) -> bool {
         "help" | "h" | "帮助" | "scenarios" | "list" | "menu" | "大厅" | "剧本"
             | "roles" | "职业" | "start" | "open" | "开团" | "join" | "card" | "车卡" | "入团"
             | "act" | "a" | "行动" | "roll" | "r" | "掷骰" | "check" | "ck" | "检定" | "属性"
+            | "rule" | "规则" | "skill" | "sk" | "技能" | "绝活" | "rest" | "休整" | "短休" | "长休"
+            | "inspire" | "激励" | "assist" | "协助" | "levelup" | "lv" | "升级" | "成长"
+            | "char" | "角色库" | "车卡库"
             | "me" | "my" | "我的" | "角色卡" | "endings" | "图鉴" | "成就" | "结局"
             | "go" | "resolve" | "next" | "结算" | "status" | "st" | "状态" | "mode" | "模式"
             | "style" | "风格" | "档位" | "afk" | "暂离" | "摸鱼" | "leave" | "quit" | "退团"

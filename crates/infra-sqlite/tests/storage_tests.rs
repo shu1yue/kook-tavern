@@ -82,6 +82,8 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
         ended_id: None,
         ended_title: None,
         bulletins: vec![],
+        check_system: Default::default(),
+        last_rest_turn: 0,
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,
@@ -105,6 +107,7 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
         is_afk: false,
         stats: Default::default(),
         location: "大厅".into(),
+        dnd: Default::default(),
     };
     store.upsert_player(&player).unwrap();
 

@@ -34,7 +34,9 @@ pub struct ResolvingLease {
     pub actions: Vec<PendingAction>,
 }
 
-pub trait RoomStore: Send + Sync {
+use crate::dnd_ports::DndStore;
+
+pub trait RoomStore: DndStore + Send + Sync {
     fn reset_stuck_resolving_on_startup(&self) -> Result<usize>;
     fn upsert_room(&self, room: &RoomState) -> Result<()>;
     fn backfill_room_guild_id(&self, channel_id: &str, guild_id: &str) -> Result<bool>;

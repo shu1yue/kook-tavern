@@ -256,18 +256,22 @@ fn default_imported_roles() -> Vec<PresetRole> {
         PresetRole {
             name: "敏锐调查员".into(), traits: vec!["观察力强".into()], bonus_items: vec!["袖珍放大镜".into()],
             stats: CharacterStats { body: 0, agility: 1, investigate: 2, social: 0, insight: 0 },
+            alignment: "守序中立".into(), proficient_skills: vec!["调查".into(), "察觉".into()], abilities: vec![],
         },
         PresetRole {
             name: "圆滑交涉者".into(), traits: vec!["善解人意".into()], bonus_items: vec!["精致名片夹".into()],
             stats: CharacterStats { body: -1, agility: 0, investigate: 1, social: 2, insight: 1 },
+            alignment: "混乱中立".into(), proficient_skills: vec!["游说".into()], abilities: vec![],
         },
         PresetRole {
             name: "神秘学者".into(), traits: vec!["直觉敏锐".into()], bonus_items: vec!["旧笔记残页".into()],
             stats: CharacterStats { body: -1, agility: 0, investigate: 1, social: 1, insight: 2 },
+            alignment: "中立善良".into(), proficient_skills: vec!["奥秘".into(), "神秘".into()], abilities: vec![],
         },
         PresetRole {
             name: "前排护卫".into(), traits: vec!["临危不乱".into()], bonus_items: vec!["便携急救包".into()],
             stats: CharacterStats { body: 2, agility: 1, investigate: 0, social: 0, insight: 0 },
+            alignment: "守序善良".into(), proficient_skills: vec!["格斗".into(), "医疗".into()], abilities: vec![],
         },
     ]
 }

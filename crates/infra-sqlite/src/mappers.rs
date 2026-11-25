@@ -2,7 +2,8 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use tavern_domain::{
-    CharacterStats, ChatMode, NarrativeStyle, PendingAction, Player, RoomState, TurnPhase,
+    CharacterStats, ChatMode, CheckSystem, NarrativeStyle, PendingAction, Player, RoomState,
+    TurnPhase,
 };
 
 pub fn query_room(conn: &Connection, channel_id: &str) -> Result<Option<RoomState>> {
@@ -13,7 +14,7 @@ pub fn query_room(conn: &Connection, channel_id: &str) -> Result<Option<RoomStat
                    turn_number, state_version, turn_phase, chat_mode, narrative_style,
                    gm_user_id, web_token, clues_json, npc_states_json, suggested_actions_json,
                    current_act, world_flags_json, ended_id, ended_title, bulletins_json,
-                   summary, summary_upto_turn, active, created_at, updated_at
+                   check_system, last_rest_turn, summary, summary_upto_turn, active, created_at, updated_at
             FROM rooms WHERE channel_id = ?1
             "#,
             params![channel_id],
@@ -44,11 +45,13 @@ pub fn query_room(conn: &Connection, channel_id: &str) -> Result<Option<RoomStat
                     ended_id: (!ended_id.is_empty()).then_some(ended_id),
                     ended_title: (!ended_title.is_empty()).then_some(ended_title),
                     bulletins: serde_json::from_str(&r.get::<_, String>(20)?).unwrap_or_default(),
-                    summary: r.get(21)?,
-                    summary_upto_turn: r.get(22)?,
-                    active: r.get::<_, i32>(23)? != 0,
-                    created_at: parse_dt(&r.get::<_, String>(24)?),
-                    updated_at: parse_dt(&r.get::<_, String>(25)?),
+                    check_system: CheckSystem::parse(&r.get::<_, String>(21)?).unwrap_or_default(),
+                    last_rest_turn: r.get::<_, i64>(22)?.max(0) as u32,
+                    summary: r.get(23)?,
+                    summary_upto_turn: r.get(24)?,
+                    active: r.get::<_, i32>(25)? != 0,
+                    created_at: parse_dt(&r.get::<_, String>(26)?),
+                    updated_at: parse_dt(&r.get::<_, String>(27)?),
                 })
             },
         )
@@ -71,8 +74,8 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
             turn_number, state_version, turn_phase, chat_mode, narrative_style,
             gm_user_id, web_token, clues_json, npc_states_json, suggested_actions_json,
             current_act, world_flags_json, ended_id, ended_title, bulletins_json,
-            summary, summary_upto_turn, active, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
+            check_system, last_rest_turn, summary, summary_upto_turn, active, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28)
         ON CONFLICT(channel_id) DO UPDATE SET
             guild_id = excluded.guild_id, scenario_id = excluded.scenario_id, title = excluded.title,
             location = excluded.location, world_time = excluded.world_time,
@@ -85,6 +88,7 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
             current_act = excluded.current_act, world_flags_json = excluded.world_flags_json,
             ended_id = excluded.ended_id, ended_title = excluded.ended_title,
             bulletins_json = excluded.bulletins_json,
+            check_system = excluded.check_system, last_rest_turn = excluded.last_rest_turn,
             summary = excluded.summary, summary_upto_turn = excluded.summary_upto_turn,
             active = excluded.active, updated_at = excluded.updated_at
         "#,
@@ -94,6 +98,7 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
             room.turn_phase.as_str(), room.chat_mode.as_str(), room.narrative_style.as_str(),
             room.gm_user_id, room.web_token, clues_json, npc_json, suggested_json,
             room.current_act.max(1), flags_json, ended_id, ended_title, bulletins_json,
+            room.check_system.as_str(), room.last_rest_turn,
             room.summary, room.summary_upto_turn, if room.active { 1 } else { 0 },
             room.created_at.to_rfc3339(), room.updated_at.to_rfc3339(),
         ],
@@ -105,12 +110,13 @@ pub fn write_player(conn: &Connection, player: &Player) -> Result<()> {
     let traits_json = serde_json::to_string(&player.traits)?;
     let inv_json = serde_json::to_string(&player.inventory)?;
     let stats_json = serde_json::to_string(&player.stats)?;
+    let dnd_json = serde_json::to_string(&player.dnd)?;
     conn.execute(
         r#"
         INSERT INTO players (
             channel_id, user_id, character_name, role_desc, traits_json,
-            hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json, location
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json, location, dnd_json
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
         ON CONFLICT(channel_id, user_id) DO UPDATE SET
             character_name = excluded.character_name,
             role_desc = excluded.role_desc,
@@ -121,12 +127,13 @@ pub fn write_player(conn: &Connection, player: &Player) -> Result<()> {
             status_note = excluded.status_note,
             is_afk = excluded.is_afk,
             stats_json = excluded.stats_json,
-            location = excluded.location
+            location = excluded.location,
+            dnd_json = excluded.dnd_json
         "#,
         params![
             player.channel_id, player.user_id, player.character_name, player.role_desc,
             traits_json, player.hp, player.max_hp, player.san, player.max_san, inv_json,
-            player.status_note, if player.is_afk { 1 } else { 0 }, stats_json, player.location,
+            player.status_note, if player.is_afk { 1 } else { 0 }, stats_json, player.location, dnd_json,
         ],
     )?;
     Ok(())
@@ -175,6 +182,7 @@ pub fn update_player_profile_sql(
 /// never overwriting concurrent `/join` edits to `character_name`, `role_desc`, `traits`, or `is_afk`.
 pub fn update_player_dm_state(conn: &Connection, player: &Player) -> Result<()> {
     let inv_json = serde_json::to_string(&player.inventory)?;
+    let dnd_json = serde_json::to_string(&player.dnd)?;
     conn.execute(
         r#"
         UPDATE players SET
@@ -182,12 +190,13 @@ pub fn update_player_dm_state(conn: &Connection, player: &Player) -> Result<()> 
             san = ?4,
             inventory_json = ?5,
             status_note = ?6,
-            location = ?7
+            location = ?7,
+            dnd_json = ?8
         WHERE channel_id = ?1 AND user_id = ?2
         "#,
         params![
             player.channel_id, player.user_id, player.hp, player.san, inv_json,
-            player.status_note, player.location,
+            player.status_note, player.location, dnd_json,
         ],
     )?;
     Ok(())
@@ -202,7 +211,7 @@ pub fn query_player_by_id(
         .query_row(
             r#"
             SELECT channel_id, user_id, character_name, role_desc, traits_json,
-                   hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json, location
+                   hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json, location, dnd_json
             FROM players WHERE channel_id = ?1 AND user_id = ?2
             "#,
             params![channel_id, user_id],
@@ -216,7 +225,7 @@ pub fn query_players(conn: &Connection, channel_id: &str) -> Result<Vec<Player>>
     let mut stmt = conn.prepare(
         r#"
         SELECT channel_id, user_id, character_name, role_desc, traits_json,
-               hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json, location
+               hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json, location, dnd_json
         FROM players WHERE channel_id = ?1 ORDER BY rowid ASC
         "#,
     )?;
@@ -244,6 +253,7 @@ fn map_player_row(r: &Row<'_>) -> rusqlite::Result<Player> {
         is_afk: r.get::<_, i32>(11)? != 0,
         stats: serde_json::from_str(&r.get::<_, String>(12)?).unwrap_or_default(),
         location: r.get(13)?,
+        dnd: serde_json::from_str(&r.get::<_, String>(14)?).unwrap_or_default(),
     })
 }
 

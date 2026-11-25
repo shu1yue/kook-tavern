@@ -29,15 +29,10 @@ pub async fn dispatch_button(
     }
 
     let parts: Vec<&str> = value.splitn(5, ':').collect();
-    if parts.len() < 3 || parts[0] != "tavern" {
+    if parts.len() < 2 || parts[0] != "tavern" {
         return Ok(EngineResponse::Ignore);
     }
     let action = parts[1];
-    let payload_chan = parts[2];
-    if payload_chan.is_empty() || payload_chan != channel_id {
-        return Ok(EngineResponse::Ignore);
-    }
-
     let mk_msg = |content: String| IncomingMessage {
         guild_id: effective_guild.clone(),
         channel_id: channel_id.to_string(),
@@ -46,6 +41,18 @@ pub async fn dispatch_button(
         content,
         is_direct: false,
     };
+    if parts.len() == 2 {
+        return match action {
+            "menu" => Ok(room::cmd_list_scenarios(engine, channel_id)),
+            "endings" => check::cmd_endings(engine, &mk_msg("/endings".into())),
+            "help" => Ok(room::cmd_help()),
+            _ => Ok(EngineResponse::Ignore),
+        };
+    }
+    let payload_chan = parts[2];
+    if payload_chan.is_empty() || payload_chan != channel_id {
+        return Ok(EngineResponse::Ignore);
+    }
 
     match action {
         "resolve" => turn::resolve_turn(engine, channel_id).await,
@@ -84,7 +91,17 @@ pub async fn dispatch_button(
             let Some(stat) = StatKind::parse(stat_raw) else {
                 return Ok(EngineResponse::Ignore);
             };
-            check::cmd_check(engine, &mk_msg(format!("/check {}", stat.key())), stat.key())
+            let dc_arg = parts
+                .get(4)
+                .and_then(|s| s.parse::<i32>().ok())
+                .map(|d| format!(" dc{}", d.clamp(5, 25)))
+                .unwrap_or_default();
+            let arg_str = format!("{}{dc_arg}", stat.key());
+            check::cmd_check(engine, &mk_msg(format!("/check {arg_str}")), &arg_str)
+        }
+        "rest" => {
+            let kind = parts.get(3).copied().unwrap_or("short");
+            crate::commands::dnd::cmd_rest(engine, &mk_msg(format!("/rest {kind}")), kind)
         }
         "pick" => {
             let Some(expected_turn) = parts.get(3).and_then(|s| s.parse::<u32>().ok()) else {

@@ -79,6 +79,8 @@ pub struct DmStructuredReply {
     pub world_bulletin: Option<WorldBulletinDraft>,
     #[serde(default)]
     pub reincarnation_echo: Option<String>,
+    #[serde(default)]
+    pub grant_inspiration: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -1,3 +1,6 @@
+pub mod char_vault;
+pub mod dnd_check_tx;
+pub mod dnd_tx;
 pub mod endings;
 pub mod exporter;
 pub mod m1_ops;

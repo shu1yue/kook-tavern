@@ -119,6 +119,17 @@ pub fn validate_scenario(sc: &Scenario) -> Result<(), Vec<String>> {
                 break;
             }
         }
+        if r.proficient_skills.len() > 5 {
+            errors.push(format!("预设职业 `{name}` 熟练技能超过 5 项上限"));
+        }
+        if r.abilities.len() > 4 {
+            errors.push(format!("预设职业 `{name}` 招牌技能超过 4 项上限"));
+        }
+        for ab in &r.abilities {
+            if ab.name.trim().is_empty() || !(1..=6).contains(&ab.max_uses) {
+                errors.push(format!("预设职业 `{name}` 存在无效招牌技能（名称为空或次数超出 1~6）"));
+            }
+        }
     }
 
     let mut wb_ids = HashSet::new();

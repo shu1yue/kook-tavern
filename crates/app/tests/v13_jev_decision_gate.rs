@@ -241,8 +241,9 @@ fn semantic_lore_union_preserves_prefix_cache_and_keyword_floor() {
         narrative_style: NarrativeStyle::Prose, gm_user_id: "u1".into(),
         web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![],
-        ended_id: None, ended_title: None, bulletins: vec![], summary: String::new(),
-        summary_upto_turn: 0, active: true, created_at: now, updated_at: now,
+        ended_id: None, ended_title: None, bulletins: vec![], check_system: Default::default(),
+        last_rest_turn: 0, summary: String::new(), summary_upto_turn: 0, active: true,
+        created_at: now, updated_at: now,
     };
     let actions = vec![PendingAction {
         channel_id: "c_lore".into(), target_turn: 2, user_id: "u1".into(),
@@ -278,14 +279,15 @@ fn semantic_reply_audit_suppresses_false_positives_and_redacts_whisper_leak() {
         narrative_style: NarrativeStyle::Prose, gm_user_id: "u1".into(),
         web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![],
-        ended_id: None, ended_title: None, bulletins: vec![], summary: String::new(),
-        summary_upto_turn: 0, active: true, created_at: now, updated_at: now,
+        ended_id: None, ended_title: None, bulletins: vec![], check_system: Default::default(),
+        last_rest_turn: 0, summary: String::new(), summary_upto_turn: 0, active: true,
+        created_at: now, updated_at: now,
     };
     let players = vec![Player {
         channel_id: "c_aud".into(), user_id: "u1".into(), character_name: "阿明".into(),
         role_desc: "侦探".into(), traits: vec![], hp: 10, max_hp: 10, san: 10, max_san: 10,
         inventory: vec![], status_note: String::new(), is_afk: false,
-        stats: Default::default(), location: String::new(),
+        stats: Default::default(), location: String::new(), dnd: Default::default(),
     }];
 
     // Case A: Keyword heuristic false positive ("幸好没受了伤") suppressed by semantic audit!
@@ -296,6 +298,7 @@ fn semantic_reply_audit_suppresses_false_positives_and_redacts_whisper_leak() {
         npc_updates: vec![], world_time: None, location: None, suggested_actions: vec![],
         suggested_check: None, add_flags: vec![], advance_act: false,
         trigger_ending_id: None, world_bulletin: None, reincarnation_echo: None,
+        grant_inspiration: vec![],
     };
     assert!(detect_consistency_nudge(&sc, &room, &players, &fp_reply, false).is_some());
     let clean_audit = ReplyAuditVerdict {
@@ -321,6 +324,7 @@ fn semantic_reply_audit_suppresses_false_positives_and_redacts_whisper_leak() {
         state_patches: vec![], new_clues: vec![], npc_updates: vec![], world_time: None,
         location: None, suggested_actions: vec![], suggested_check: None, add_flags: vec![],
         advance_act: false, trigger_ending_id: None, world_bulletin: None, reincarnation_echo: None,
+        grant_inspiration: vec![],
     };
     let leak_audit = ReplyAuditVerdict {
         prob_missed_vitals: 0.02,
@@ -525,14 +529,15 @@ async fn openai_provider_wires_jev_lore_recall_and_whisper_redaction_end_to_end(
         narrative_style: NarrativeStyle::Prose, gm_user_id: "u1".into(),
         web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![],
-        ended_id: None, ended_title: None, bulletins: vec![], summary: String::new(),
-        summary_upto_turn: 0, active: true, created_at: now, updated_at: now,
+        ended_id: None, ended_title: None, bulletins: vec![], check_system: Default::default(),
+        last_rest_turn: 0, summary: String::new(), summary_upto_turn: 0, active: true,
+        created_at: now, updated_at: now,
     };
     let players = vec![Player {
         channel_id: "c_e2e".into(), user_id: "u1".into(), character_name: "阿明".into(),
         role_desc: "侦探".into(), traits: vec![], hp: 10, max_hp: 10, san: 10, max_san: 10,
         inventory: vec![], status_note: String::new(), is_afk: false,
-        stats: Default::default(), location: String::new(),
+        stats: Default::default(), location: String::new(), dnd: Default::default(),
     }];
     let actions = vec![PendingAction {
         channel_id: "c_e2e".into(), target_turn: 2, user_id: "u1".into(),
@@ -589,14 +594,15 @@ async fn gate7_red_team_regressions_null_fields_bounds_soft_prefix_and_partial_f
         narrative_style: NarrativeStyle::Prose, gm_user_id: "u1".into(),
         web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![],
-        ended_id: None, ended_title: None, bulletins: vec![], summary: String::new(),
-        summary_upto_turn: 0, active: true, created_at: now, updated_at: now,
+        ended_id: None, ended_title: None, bulletins: vec![], check_system: Default::default(),
+        last_rest_turn: 0, summary: String::new(), summary_upto_turn: 0, active: true,
+        created_at: now, updated_at: now,
     };
     let players = vec![Player {
         channel_id: "c_g7".into(), user_id: "u1".into(), character_name: "阿明".into(),
         role_desc: "侦探".into(), traits: vec![], hp: 10, max_hp: 10, san: 10, max_san: 10,
         inventory: vec![], status_note: String::new(), is_afk: false,
-        stats: Default::default(), location: String::new(),
+        stats: Default::default(), location: String::new(), dnd: Default::default(),
     }];
     let long_narrative = "风雪在余烬酒馆的窗棂外呼啸拍打，壁炉里干柴噼啪作响。老雷恩擦拭着一只缺口陶杯，目光在吧台阴影与墙上焦黑徽记之间缓缓游移，大厅里的旅人们各怀心事地压低了交谈声，空气中弥漫着松脂与冷铁交织的紧张气息。";
     let mut reply = DmStructuredReply {
@@ -606,6 +612,7 @@ async fn gate7_red_team_regressions_null_fields_bounds_soft_prefix_and_partial_f
         state_patches: vec![], new_clues: vec![], npc_updates: vec![], world_time: None,
         location: None, suggested_actions: vec![], suggested_check: None, add_flags: vec![],
         advance_act: false, trigger_ending_id: None, world_bulletin: None, reincarnation_echo: None,
+        grant_inspiration: vec![],
     };
     let leak_audit = ReplyAuditVerdict {
         prob_missed_vitals: 0.0, prob_missed_item: 0.0, prob_whisper_leak: 0.91,

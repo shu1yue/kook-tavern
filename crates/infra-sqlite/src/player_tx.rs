@@ -1,8 +1,11 @@
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use tavern_core::JoinPlayerOutcome;
-use tavern_domain::{Player, PresetRole, StarterCharacterDefaults};
+use tavern_domain::{
+    CharacterAbility, Player, PlayerDndProfile, PresetRole, StarterCharacterDefaults, TurnPhase,
+};
 
+use crate::dnd_check_tx::has_pending_skill_for_turn;
 use crate::mappers::{query_player_by_id, query_players, query_room, write_player};
 
 fn pick_unique_name(existing: &[Player], raw_name: &str) -> String {
@@ -72,15 +75,16 @@ pub fn ensure_player_tx(
         is_afk: false,
         stats: Default::default(),
         location: room.location.clone(),
+        dnd: Default::default(),
     };
     write_player(&tx, &p)?;
     tx.commit()?;
     Ok(Some(p))
 }
 
-/// Atomically joins with a preset role (new player gets starter + bonus items + stats)
+/// Atomically joins with a preset role (new player gets starter + bonus items + stats + D&D abilities)
 /// or switches an existing player's role/traits/stats WITHOUT touching their `character_name`,
-/// HP, SAN, or inventory!
+/// HP, SAN, inventory, or mid-game ability charges!
 pub fn pick_role_tx(
     conn: &mut Connection,
     channel_id: &str,
@@ -93,18 +97,42 @@ pub fn pick_role_tx(
     let Some(room) = query_room(&tx, channel_id)? else {
         return Ok(None);
     };
-    if !room.active || room.ended_id.is_some() {
+    if !room.active || room.ended_id.is_some() || room.turn_phase == TurnPhase::Resolving {
         return Ok(None);
     }
-    if query_player_by_id(&tx, channel_id, user_id)?.is_some() {
+    if let Some(mut prev) = query_player_by_id(&tx, channel_id, user_id)? {
         let traits_json = serde_json::to_string(&preset.traits)?;
-        let stats_json = serde_json::to_string(&preset.stats)?;
+        if !preset.alignment.trim().is_empty() {
+            prev.dnd.alignment = preset.alignment.clone();
+        }
+        // Anti-farm & levelup-preservation guard:
+        // Only respec stats/proficiencies/abilities on Turn 0 (before casting a signature skill)
+        // or once for a blank quick-join "酒馆旅客" who hasn't picked a build yet.
+        let can_respec = room.turn_number == 0
+            && !has_pending_skill_for_turn(&tx, channel_id, 1, Some(user_id))?;
+        let is_blank_traveler = prev.role_desc == "酒馆旅客"
+            && prev.dnd.abilities.is_empty()
+            && prev.dnd.proficient_skills.is_empty()
+            && prev.stats == Default::default();
+        if can_respec || is_blank_traveler {
+            prev.stats = preset.stats;
+            prev.dnd.proficient_skills = preset.proficient_skills.iter().take(4).cloned().collect();
+            prev.dnd.abilities = preset
+                .abilities
+                .iter()
+                .take(4)
+                .cloned()
+                .map(CharacterAbility::with_full_uses)
+                .collect();
+        }
+        let stats_json = serde_json::to_string(&prev.stats)?;
+        let dnd_json = serde_json::to_string(&prev.dnd)?;
         tx.execute(
             r#"
-            UPDATE players SET role_desc = ?3, traits_json = ?4, stats_json = ?5, is_afk = 0
+            UPDATE players SET role_desc = ?3, traits_json = ?4, stats_json = ?5, dnd_json = ?6, is_afk = 0
             WHERE channel_id = ?1 AND user_id = ?2
             "#,
-            params![channel_id, user_id, preset.name, traits_json, stats_json],
+            params![channel_id, user_id, preset.name, traits_json, stats_json, dnd_json],
         )?;
         let updated = query_player_by_id(&tx, channel_id, user_id)?;
         tx.commit()?;
@@ -118,6 +146,18 @@ pub fn pick_role_tx(
             inventory.push(bonus.clone());
         }
     }
+    let dnd = PlayerDndProfile {
+        alignment: preset.alignment.clone(),
+        proficient_skills: preset.proficient_skills.iter().take(4).cloned().collect(),
+        abilities: preset
+            .abilities
+            .iter()
+            .take(4)
+            .cloned()
+            .map(CharacterAbility::with_full_uses)
+            .collect(),
+        ..PlayerDndProfile::default()
+    };
     let p = Player {
         channel_id: channel_id.to_string(),
         user_id: user_id.to_string(),
@@ -133,6 +173,7 @@ pub fn pick_role_tx(
         is_afk: false,
         stats: preset.stats,
         location: room.location.clone(),
+        dnd,
     };
     write_player(&tx, &p)?;
     tx.commit()?;
@@ -206,6 +247,7 @@ pub fn join_player_tx(
         is_afk: false,
         stats: Default::default(),
         location: room.location.clone(),
+        dnd: Default::default(),
     };
     write_player(&tx, &p)?;
     tx.commit()?;

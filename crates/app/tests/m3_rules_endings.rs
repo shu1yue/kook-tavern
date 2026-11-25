@@ -243,7 +243,7 @@ async fn m3_five_dim_stats_three_tier_check_acts_multi_ending_and_undo() {
         .unwrap();
     match gallery {
         EngineResponse::Notice { body, .. } => {
-            assert!(body.contains("1 / 9"));
+            assert!(body.contains("1 / 13"));
             assert!(body.contains("晨雾散尽"));
         }
         other => panic!("expected endings Notice, got {other:?}"),
@@ -363,7 +363,7 @@ async fn m3_red_team_regressions_afk_vacuous_truth_dm_gallery_isolation_and_atom
         .unwrap();
     match dm_b_endings {
         EngineResponse::Notice { body, .. } => {
-            assert!(body.contains("0 / 9"));
+            assert!(body.contains("0 / 13"));
             assert!(!body.contains("私聊秘密角色A"));
             assert!(!body.contains("晨雾散尽"));
         }

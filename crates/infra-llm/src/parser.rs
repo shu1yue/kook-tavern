@@ -1,4 +1,4 @@
-use tavern_domain::{DmPatchDelta, DmStructuredReply, RoomState};
+use tavern_domain::{CheckSystem, DmPatchDelta, DmStructuredReply, RoomState};
 use tracing::warn;
 
 /// Defensively parses LLM JSON output and reports whether structured JSON succeeded (`true`)
@@ -45,6 +45,7 @@ pub fn parse_dm_reply_checked(raw: &str, room: &RoomState) -> (DmStructuredReply
             trigger_ending_id: None,
             world_bulletin: None,
             reincarnation_echo: None,
+            grant_inspiration: Vec::new(),
         },
         false,
     )
@@ -103,6 +104,11 @@ fn normalize_reply(mut reply: DmStructuredReply, room: &RoomState) -> DmStructur
     if reply.narrative.trim().is_empty() {
         reply.narrative = "（周围陷入一阵意味深长的沉默，似乎有什么正在暗处酝酿……）".to_string();
     }
+    if room.check_system != CheckSystem::D20
+        && let Some(ck) = reply.suggested_check.as_mut()
+    {
+        ck.dc = None;
+    }
     reply
 }
 
@@ -157,6 +163,8 @@ mod tests {
             ended_id: None,
             ended_title: None,
             bulletins: vec![],
+            check_system: Default::default(),
+            last_rest_turn: 0,
             summary: String::new(),
             summary_upto_turn: 0,
             active: true,

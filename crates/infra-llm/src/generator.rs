@@ -163,28 +163,28 @@ fn build_mock_generated_scenario(
         },
         preset_roles: vec![
             PresetRole {
-                name: "冷静调查员".into(),
-                traits: vec!["细心".into(), "善推理".into()],
+                name: "冷静调查员".into(), traits: vec!["细心".into(), "善推理".into()],
                 bonus_items: vec!["放大镜".into()],
                 stats: CharacterStats { body: 0, agility: 1, investigate: 2, social: 0, insight: 0 },
+                alignment: "守序中立".into(), proficient_skills: vec!["调查".into(), "察觉".into()], abilities: vec![],
             },
             PresetRole {
-                name: "直觉通灵者".into(),
-                traits: vec!["敏锐".into(), "懂禁忌".into()],
+                name: "直觉通灵者".into(), traits: vec!["敏锐".into(), "懂禁忌".into()],
                 bonus_items: vec!["护身铜铃".into()],
                 stats: CharacterStats { body: -1, agility: 0, investigate: 1, social: 1, insight: 2 },
+                alignment: "中立善良".into(), proficient_skills: vec!["奥秘".into(), "神秘".into()], abilities: vec![],
             },
             PresetRole {
-                name: "街头交涉手".into(),
-                traits: vec!["嘴甜".into(), "人脉广".into()],
+                name: "街头交涉手".into(), traits: vec!["嘴甜".into(), "人脉广".into()],
                 bonus_items: vec!["老旧通行证".into()],
                 stats: CharacterStats { body: 0, agility: 1, investigate: 0, social: 2, insight: 0 },
+                alignment: "混乱中立".into(), proficient_skills: vec!["游说".into(), "潜行".into()], abilities: vec![],
             },
             PresetRole {
-                name: "可靠护卫".into(),
-                traits: vec!["力大".into(), "抗压".into()],
+                name: "可靠护卫".into(), traits: vec!["力大".into(), "抗压".into()],
                 bonus_items: vec!["急救包".into()],
                 stats: CharacterStats { body: 2, agility: 1, investigate: 0, social: 0, insight: 0 },
+                alignment: "守序善良".into(), proficient_skills: vec!["格斗".into(), "医疗".into()], abilities: vec![],
             },
         ],
         acts: vec![

@@ -306,7 +306,7 @@ mod tests {
             whisper_hints: vec!["🤫 DM 悄悄给 **陆沉** 递了一张秘密纸条".into()],
             suggested_actions: vec!["追问白鸦下落".into(), "潜入地下酒窖".into()],
             suggested_check: Some(tavern_domain::SuggestedCheck {
-                stat: "侦查".into(), reason: "细查柜台暗格".into(),
+                stat: "侦查".into(), reason: "细查柜台暗格".into(), dc: None,
             }),
             world_bulletin: Some(tavern_domain::WorldBulletin {
                 turn_number: 2, masthead: "《余烬号外》".into(), headline: "修女封锁东栈桥".into(),

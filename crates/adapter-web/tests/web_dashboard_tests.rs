@@ -83,6 +83,8 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
             body: "码头守夜人目击教会暗哨在浓雾中集结。".into(),
             faction: "圣光教会".into(),
         }],
+        check_system: tavern_domain::CheckSystem::D20,
+        last_rest_turn: 0,
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,
@@ -112,6 +114,14 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
                 insight: 0,
             },
             location: "地下酿酒窖".into(),
+            dnd: tavern_domain::PlayerDndProfile {
+                level: 2,
+                inspiration: true,
+                alignment: "中立善良".into(),
+                proficient_skills: vec!["机关".into()],
+                personal_secret: "TOP_SECRET_PLAYER_MOTIVE_999".into(),
+                ..Default::default()
+            },
         })
         .unwrap();
 
@@ -168,6 +178,11 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
     assert!(body.contains("\"tag\":\"号外\""));
     // Unvisited secret map node (`clocktower_core`) MUST be masked to prevent spoilers!
     assert!(!body.contains("钟楼三层星仪机房"));
+    // v1.4 D&D public fields exposed, while player's private `personal_secret` MUST NEVER leak!
+    assert!(body.contains("D&D d20"));
+    assert!(body.contains("\"level\":2"));
+    assert!(body.contains("\"inspiration\":true"));
+    assert!(!body.contains("TOP_SECRET_PLAYER_MOTIVE_999"));
     assert!(!body.contains("03-17总钥"));
     // Un-unlocked endings & future acts MUST stay masked and never spoil!
     assert!(body.contains("？？？"));

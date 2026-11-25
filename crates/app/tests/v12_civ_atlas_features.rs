@@ -273,21 +273,21 @@ async fn director_beats_spotlight_and_consistency_nudge_work_end_to_end() {
         chat_mode: tavern_domain::ChatMode::Roleplay, narrative_style: tavern_domain::NarrativeStyle::Prose,
         gm_user_id: "u1".into(), web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![], ended_id: None,
-        ended_title: None, bulletins: vec![], summary: String::new(), summary_upto_turn: 0,
-        active: true, created_at: now, updated_at: now,
+        ended_title: None, bulletins: vec![], check_system: Default::default(), last_rest_turn: 0,
+        summary: String::new(), summary_upto_turn: 0, active: true, created_at: now, updated_at: now,
     };
     let players = vec![
         tavern_domain::Player {
             channel_id: "c_dir".into(), user_id: "u1".into(), character_name: "话痨甲".into(),
             role_desc: "猎人".into(), traits: vec![], hp: 12, max_hp: 12, san: 10, max_san: 10,
             inventory: vec![], status_note: String::new(), is_afk: false,
-            stats: Default::default(), location: "余烬酒馆大厅".into(),
+            stats: Default::default(), location: "余烬酒馆大厅".into(), dnd: Default::default(),
         },
         tavern_domain::Player {
             channel_id: "c_dir".into(), user_id: "u2".into(), character_name: "内向乙".into(),
             role_desc: "学者".into(), traits: vec![], hp: 12, max_hp: 12, san: 10, max_san: 10,
             inventory: vec![], status_note: String::new(), is_afk: false,
-            stats: Default::default(), location: "余烬酒馆大厅".into(),
+            stats: Default::default(), location: "余烬酒馆大厅".into(), dnd: Default::default(),
         },
     ];
     let recent = vec![
@@ -319,7 +319,7 @@ async fn director_beats_spotlight_and_consistency_nudge_work_end_to_end() {
         private_whispers: vec![], state_patches: vec![], new_clues: vec![], npc_updates: vec![],
         world_time: None, location: Some("余烬酒馆大厅".into()), suggested_actions: vec![],
         suggested_check: None, add_flags: vec![], advance_act: false, trigger_ending_id: None,
-        world_bulletin: None, reincarnation_echo: None,
+        world_bulletin: None, reincarnation_echo: None, grant_inspiration: vec![],
     };
     let plan = detect_consistency_nudge(&sc, &room, &players, &reply, false).unwrap();
     assert!(plan.want_items);

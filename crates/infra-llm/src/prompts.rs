@@ -10,7 +10,7 @@ use tracing::info;
 
 use crate::prompt_ext::{
     build_lore_corpus, format_act_progress, format_dynamic_director_sections,
-    format_static_rules_and_map, merge_dynamic_worldbook,
+    format_player_dnd_tail, format_static_rules_and_map, merge_dynamic_worldbook,
 };
 
 const DEFAULT_DM_SYSTEM: &str = include_str!("../../../prompts/dm_system.md");
@@ -227,23 +227,13 @@ fn format_dynamic_turn_prompt(
                     p.location.trim()
                 };
                 format!(
-                    "- {}（{}）{} | 位置: {} | HP {}/{} | SAN {}/{} | 五维: {} | 特质: {} | 背包: [{}] | 状态: {}",
+                    "- {}（{}）{} | 位置: {} | HP {}/{} | SAN {}/{} | 五维: {} | 特质: {} | 背包: [{}] | 状态: {}{}",
                     p.character_name,
                     if p.role_desc.is_empty() { "冒险者" } else { &p.role_desc },
-                    afk_tag,
-                    p_loc,
-                    p.hp,
-                    p.max_hp,
-                    p.san,
-                    p.max_san,
-                    p.stats.format_prompt(),
-                    traits,
-                    inv,
-                    if p.status_note.trim().is_empty() {
-                        "正常"
-                    } else {
-                        p.status_note.trim()
-                    }
+                    afk_tag, p_loc, p.hp, p.max_hp, p.san, p.max_san,
+                    p.stats.format_prompt(), traits, inv,
+                    if p.status_note.trim().is_empty() { "正常" } else { p.status_note.trim() },
+                    format_player_dnd_tail(p)
                 )
             })
             .collect::<Vec<_>>()
@@ -312,7 +302,7 @@ fn format_dynamic_turn_prompt(
 
     format!(
         r#"{opening_section}【当前权威世界状态（只读快照）】
-- 即将结算：第 {next_turn} 回合
+- 即将结算：第 {next_turn} 回合 ｜ 本桌检定体系：{check_rule}
 - 当前地点：{location}
 - 当前时间：{world_time}
 - 当前幕次进度：{act_block}
@@ -334,6 +324,7 @@ fn format_dynamic_turn_prompt(
 【本轮全体玩家行动（请统一裁决并仅输出合法 JSON）】
 {batched_input}"#,
         next_turn = room.turn_number + 1,
+        check_rule = room.check_system.prompt_guide(),
         location = room.location,
         world_time = room.world_time,
         party_count = players.len(),

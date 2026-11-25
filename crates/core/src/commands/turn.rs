@@ -208,7 +208,7 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
     let mut effects = apply_dm_reply(&mut updated_room, &mut updated_players, &dm_reply);
     let triggered_ending = apply_story_progression(
         &mut updated_room,
-        &updated_players,
+        &mut updated_players,
         &scenario,
         &dm_reply,
         lease.target_turn,

@@ -184,6 +184,43 @@ pub fn format_dynamic_director_sections(
     }
 }
 
+pub fn format_player_dnd_tail(p: &Player) -> String {
+    let mut parts = Vec::new();
+    if p.dnd.level > 1 {
+        parts.push(format!("Lv.{}", p.dnd.level));
+    }
+    if !p.dnd.alignment.trim().is_empty() {
+        parts.push(format!("阵营:{}", p.dnd.alignment.trim()));
+    }
+    if !p.dnd.proficient_skills.is_empty() {
+        parts.push(format!("熟练:[{}]", p.dnd.proficient_skills.join("、")));
+    }
+    if !p.dnd.abilities.is_empty() {
+        let abs = p
+            .dnd
+            .abilities
+            .iter()
+            .map(|a| format!("{}({}/{})", a.name, a.uses_left, a.max_uses))
+            .collect::<Vec<_>>()
+            .join(",");
+        parts.push(format!("招牌技:[{abs}]"));
+    }
+    if p.dnd.inspiration {
+        parts.push("🌟持有激励".into());
+    }
+    if !p.dnd.backstory.trim().is_empty() {
+        parts.push(format!("背景:{}", p.dnd.backstory.trim()));
+    }
+    if !p.dnd.personal_secret.trim().is_empty() {
+        parts.push(format!("个人秘密(严禁公屏剧透):{}", p.dnd.personal_secret.trim()));
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(" | {}", parts.join(" | "))
+    }
+}
+
 pub fn format_act_progress(scenario: &Scenario, room: &RoomState) -> String {
     let flags = if room.world_flags.is_empty() {
         "无".to_string()

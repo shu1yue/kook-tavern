@@ -289,8 +289,9 @@ pub fn pop_and_restore_snapshot_tx(
             chat_mode = ?8, narrative_style = ?9, clues_json = ?10,
             npc_states_json = ?11, suggested_actions_json = ?12,
             current_act = ?13, world_flags_json = ?14, ended_id = ?15, ended_title = ?16,
-            bulletins_json = ?17, summary = ?18, summary_upto_turn = ?19,
-            active = ?20, updated_at = ?21
+            bulletins_json = ?17, check_system = ?18, last_rest_turn = ?19,
+            summary = ?20, summary_upto_turn = ?21,
+            active = ?22, updated_at = ?23
         WHERE channel_id = ?1
         "#,
         params![
@@ -299,7 +300,8 @@ pub fn pop_and_restore_snapshot_tx(
             current_version + 1, snapshot.room.chat_mode.as_str(),
             snapshot.room.narrative_style.as_str(), clues_json, npc_json, suggested_json,
             snapshot.room.current_act.max(1), flags_json, ended_id, ended_title,
-            bulletins_json, snapshot.room.summary, snapshot.room.summary_upto_turn,
+            bulletins_json, snapshot.room.check_system.as_str(), snapshot.room.last_rest_turn,
+            snapshot.room.summary, snapshot.room.summary_upto_turn,
             if snapshot.room.active { 1 } else { 0 }, Utc::now().to_rfc3339(),
         ],
     )?;

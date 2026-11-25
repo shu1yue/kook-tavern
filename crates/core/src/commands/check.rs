@@ -1,10 +1,12 @@
 use anyhow::Result;
 use tavern_domain::{
-    CardTheme, EngineResponse, IncomingMessage, RoomEvent, RoomState, Scenario, StatKind,
-    ending_scope_key, perform_stat_check,
+    CardTheme, CheckSystem, CheckTier, EngineResponse, IncomingMessage, RoomEvent, RoomState,
+    Scenario, ending_scope_key,
 };
 
+use crate::commands::dnd::{format_dnd_me_sections, parse_check_args};
 use crate::commands::party_helpers::ensure_player;
+use crate::dnd_ports::{CheckCommitOutcome, RuleCheckRequest};
 use crate::engine::GameEngine;
 
 /// Single authoritative guard for ended rooms (`ended_id.is_some()`).
@@ -36,100 +38,96 @@ pub fn format_act_badge(scenario: Option<&Scenario>, current_act: u32) -> Option
 pub fn cmd_check(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result<EngineResponse> {
     let Some(room) = engine.store.get_room(&msg.channel_id)? else {
         return Ok(EngineResponse::Notice {
-            title: "ℹ️ 当前频道尚未开团".to_string(),
-            body: "先发送 `/start` 或点绿色开团按钮开一桌，再进行属性检定喵！".to_string(),
-            theme: CardTheme::Warning,
-            show_actions: false,
+            title: "ℹ️ 当前频道尚未开团".into(),
+            body: "先发送 `/start` 或点绿色开团按钮开一桌，再进行属性检定喵！".into(),
+            theme: CardTheme::Warning, show_actions: false,
         });
     };
     if !room.active {
         return Ok(EngineResponse::Notice {
-            title: "ℹ️ 当前房间已归档".to_string(),
-            body: "请开启新剧本后再检定。".to_string(),
-            theme: CardTheme::Warning,
-            show_actions: false,
+            title: "ℹ️ 当前房间已归档".into(), body: "请开启新剧本后再检定。".into(),
+            theme: CardTheme::Warning, show_actions: false,
         });
     }
-    if let Some(notice) = ended_room_notice(&room) {
-        return Ok(notice);
-    }
-
+    if let Some(notice) = ended_room_notice(&room) { return Ok(notice); }
     let Some(scenario) = engine.scenarios.get(&room.scenario_id) else {
         return Ok(EngineResponse::Notice {
-            title: "❌ 剧本配置缺失".to_string(),
-            body: format!("找不到剧本 `{}`。", room.scenario_id),
-            theme: CardTheme::Danger,
-            show_actions: false,
+            title: "❌ 剧本配置缺失".into(), body: format!("找不到剧本 `{}`。", room.scenario_id),
+            theme: CardTheme::Danger, show_actions: false,
         });
     };
-
     let Some(player) = ensure_player(engine, msg, &scenario)? else {
         return Ok(EngineResponse::Notice {
-            title: "ℹ️ 当前房间不可操作".to_string(),
-            body: "房间已结束或被重置，请重新开团。".to_string(),
-            theme: CardTheme::Warning,
-            show_actions: false,
+            title: "ℹ️ 当前房间不可操作".into(), body: "房间已结束或被重置，请重新开团。".into(),
+            theme: CardTheme::Warning, show_actions: false,
         });
     };
 
-    let mut parts = arg.splitn(2, char::is_whitespace);
-    let stat_raw = parts.next().unwrap_or("").trim();
-    let reason = parts
-        .next()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(String::from);
-
-    let Some(stat) = StatKind::parse(stat_raw) else {
+    let Some(parsed) = parse_check_args(arg) else {
         return Ok(EngineResponse::Notice {
-            title: format!("🎲 {} 的五维属性与检定指南", player.character_name),
+            title: format!("🎲 {} 的属性检定指南（{}）", player.character_name, room.check_system.short_badge()),
             body: format!(
-                "**当前五维加值**：{}\n\n**用法**：`/check <属性> [原因]`（走后端确定性 `2d6 + 属性` 三档检定）\n- `体魄`（💪 搏斗/攀爬/抗毒）｜ `敏捷`（🏃 潜行/闪避/开锁）\n- `侦查`（🔍 搜证/察觉/识破）｜ `交涉`（🗣️ 说服/套话/安抚）\n- `灵感`（✨ 直觉/抗惊吓/破译规则）\n\n**三档裁决**：❌ `≤6` 失败 ｜ ⚠️ `7~9` 代价成功 ｜ ✨ `≥10` 完全成功\n例：`/check 侦查 翻找17号酒桶暗格`",
-                player.stats.format_inline()
+                "**五维加值**：{}\n**当前体系**：{}\n\n**用法**：`/check <属性> [adv|dis|inspire] [dc15] [原因]`\n- `体魄`(STR) ｜ `敏捷`(DEX) ｜ `侦查`(INV) ｜ `交涉`(CHA) ｜ `灵感`(WIS)\n例：`/check 侦查 dc15 翻找暗格` 或 `/check 敏捷 adv 飞跃断桥`",
+                player.stats.format_inline(),
+                room.check_system.prompt_guide()
             ),
             theme: CardTheme::Info,
             show_actions: false,
         });
     };
 
-    let result = perform_stat_check(stat, &player.stats, reason);
-    let formatted = result.format_short();
-    let Some(turn_no) = engine.store.append_roll_atomic(
-        &msg.channel_id,
-        &msg.user_id,
-        &player.character_name,
-        &formatted,
-    )?
-    else {
-        return Ok(EngineResponse::Notice {
-            title: "ℹ️ 当前房间已结束或归档".to_string(),
-            body: "无法再向本局绑定检定，请查看结局图鉴或开启新局。".to_string(),
-            theme: CardTheme::Info,
-            show_actions: false,
-        });
+    let req = RuleCheckRequest {
+        stat: parsed.stat,
+        raw_stat_token: parsed.raw_stat_token,
+        mode: parsed.mode,
+        dc: parsed.dc,
+        use_inspiration: parsed.use_inspiration,
+        reason: parsed.reason,
     };
+    let (player, result, turn_no, bonus_notes) =
+        match engine
+            .store
+            .execute_rule_check_atomic(&msg.channel_id, &msg.user_id, &req)?
+        {
+            CheckCommitOutcome::Committed { player, result, turn_no, bonus_notes } => {
+                (player, result, turn_no, bonus_notes)
+            }
+            CheckCommitOutcome::RoomUnavailable | CheckCommitOutcome::PlayerNotFound => {
+                return Ok(EngineResponse::Notice {
+                    title: "ℹ️ 当前房间已结束或归档".to_string(),
+                    body: "无法再向本局绑定检定，请查看结局图鉴或开启新局。".to_string(),
+                    theme: CardTheme::Info,
+                    show_actions: false,
+                });
+            }
+        };
 
+    let formatted = result.format_short();
     engine.emit_event(RoomEvent::RoomUpdated {
         channel_id: msg.channel_id.clone(),
         turn_number: turn_no.saturating_sub(1),
     });
-
-    let theme = match result.tier {
-        tavern_domain::CheckTier::Success => CardTheme::Success,
-        tavern_domain::CheckTier::Partial => CardTheme::Warning,
-        tavern_domain::CheckTier::Failure => CardTheme::Danger,
+    let theme = match (result.system, result.tier) {
+        (_, CheckTier::CritSuccess | CheckTier::Success)
+        | (CheckSystem::D100, CheckTier::Partial) => CardTheme::Success,
+        (_, CheckTier::Partial) => CardTheme::Warning,
+        (_, CheckTier::Failure | CheckTier::CritFailure) => CardTheme::Danger,
     };
-
+    let bonus_line = if bonus_notes.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", bonus_notes.join(" ｜ "))
+    };
     Ok(EngineResponse::Notice {
         title: format!(
             "{} {} · {}检定",
-            stat.icon(),
+            req.stat.icon(),
             player.character_name,
-            stat.short_name()
+            req.stat.short_name()
         ),
         body: format!(
-            "{formatted}\n\n（已自动绑定到第 **{turn_no}** 轮行动中，接下来直接打字或点 ①②③ 行动按钮，DM 将严格按 **{}** 裁决！）",
-            result.tier.rule_hint()
+            "{bonus_line}{formatted}\n\n（已绑定至第 **{turn_no}** 轮行动，DM 将按 **{}** 裁决！）",
+            result.tier.rule_hint_for(result.system)
         ),
         theme,
         show_actions: false,
@@ -237,53 +235,22 @@ pub fn cmd_me(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRespon
         return Ok(EngineResponse::PrivateNotice {
             user_id: msg.user_id.clone(),
             title: format!("🪪 《{}》尚未入团", room.title),
-            body: "你还没有在本局创建角色卡！\n点「🎛️ 面板/设置」→「🎭 选职业入团」一键挑职业拿五维属性与专属装备，或直接打人话自动上桌。".to_string(),
+            body: "你还没有在本局创建角色卡！点「🎭 选职业入团」或发 `/char load <名字>` 即可上桌。".into(),
         });
     };
-
-    let next_turn = if room.turn_phase == tavern_domain::TurnPhase::Resolving {
-        room.turn_number + 2
-    } else {
-        room.turn_number + 1
-    };
-    let pending = engine
-        .store
-        .list_pending_actions(&msg.channel_id, next_turn)?;
+    let next_turn = if room.turn_phase == tavern_domain::TurnPhase::Resolving { room.turn_number + 2 } else { room.turn_number + 1 };
+    let pending = engine.store.list_pending_actions(&msg.channel_id, next_turn)?;
     let my_act = pending.iter().find(|a| a.user_id == msg.user_id);
-
-    let act_status = if room.ended_id.is_some() {
-        "🏆 本局已收束"
-    } else if p.is_afk {
-        "💤 暂离中（自动结算跳过）"
-    } else if my_act.is_some_and(|a| !a.action_text.trim().is_empty()) {
-        "✅ 本轮已提交行动"
-    } else {
-        "⏳ 等待你行动"
-    };
-
+    let act_status = if room.ended_id.is_some() { "🏆 本局已收束" }
+        else if p.is_afk { "💤 暂离中（自动结算跳过）" }
+        else if my_act.is_some_and(|a| !a.action_text.trim().is_empty()) { "✅ 本轮已提交行动" }
+        else { "⏳ 等待你行动" };
     let hp_bar = mini_meter(p.hp, p.max_hp, "🟥", "⬜");
     let san_bar = mini_meter(p.san, p.max_san, "🟦", "⬜");
-    let traits = if p.traits.is_empty() {
-        "无".to_string()
-    } else {
-        p.traits.join(" / ")
-    };
-    let inv = if p.inventory.is_empty() {
-        "空".to_string()
-    } else {
-        p.inventory.join(" · ")
-    };
-    let status_txt = if p.status_note.trim().is_empty() {
-        "正常"
-    } else {
-        p.status_note.trim()
-    };
-
-    let loc_txt = if p.location.trim().is_empty() {
-        room.location.as_str()
-    } else {
-        p.location.trim()
-    };
+    let traits = if p.traits.is_empty() { "无".into() } else { p.traits.join(" / ") };
+    let inv = if p.inventory.is_empty() { "空".into() } else { p.inventory.join(" · ") };
+    let status_txt = if p.status_note.trim().is_empty() { "正常" } else { p.status_note.trim() };
+    let loc_txt = if p.location.trim().is_empty() { room.location.as_str() } else { p.location.trim() };
     let mut sections = vec![
         format!(
             "🎭 **《{}》** ｜ 第 **{}** 回合 ｜ `{act_status}`\n📍 **你当前所在**：{loc_txt}",
@@ -298,6 +265,7 @@ pub fn cmd_me(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRespon
         ),
         format!("🎒 **背包行囊**：{inv}"),
     ];
+    sections.extend(format_dnd_me_sections(&p, room.check_system));
 
     if let Some(a) = my_act {
         let mut cur_lines = Vec::new();
