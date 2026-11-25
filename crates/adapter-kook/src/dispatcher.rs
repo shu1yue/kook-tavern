@@ -20,12 +20,13 @@ impl KookClient {
             user_id,
             title,
             body,
+            actions,
         } = resp
         {
             let content = format!("**{title}**\n{body}");
             let is_dm_chan = channel_id.starts_with("dm:");
             if !is_dm_chan && body.chars().count() <= 3800 {
-                let card_json = render_private_card_json(&title, &body);
+                let card_json = render_private_card_json(&title, &body, &actions);
                 if self
                     .send_channel_temp_card(channel_id, &user_id, &card_json)
                     .await
@@ -56,6 +57,41 @@ impl KookClient {
                 }
                 if let Err(dm_err) = self.send_direct_kmarkdown(&user_id, &chunk).await {
                     warn!(user_id, error = %dm_err, "私密通知私信兜底同样失败");
+                    break;
+                }
+            }
+            return;
+        }
+
+        // WorkshopDesk is strictly per-user private (never falls back to public channel card!)
+        if let EngineResponse::WorkshopDesk { ref user_id, .. } = resp {
+            let uid = user_id.clone();
+            let is_dm_chan = channel_id.starts_with("dm:");
+            if !is_dm_chan {
+                let card_json = render_kook_card_json(channel_id, &resp);
+                if self
+                    .send_channel_temp_card(channel_id, &uid, &card_json)
+                    .await
+                    .is_ok()
+                {
+                    return;
+                }
+                warn!(user_id = %uid, "工坊临时卡发送失败，降级为仅本人可见临时文本/私信");
+            }
+            let plain = render_plain_fallback(&resp, true);
+            let mut prefer_temp = !is_dm_chan;
+            for chunk in chunk_kmarkdown(&plain, 3500) {
+                if prefer_temp
+                    && self
+                        .send_channel_temp_kmarkdown(channel_id, &uid, &chunk)
+                        .await
+                        .is_ok()
+                {
+                    continue;
+                }
+                prefer_temp = false;
+                if let Err(err) = self.send_direct_kmarkdown(&uid, &chunk).await {
+                    warn!(user_id = %uid, error = %err, "工坊私密兜底发送失败");
                     break;
                 }
             }

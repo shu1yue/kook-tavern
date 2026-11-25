@@ -17,7 +17,7 @@ pub fn cmd_help() -> EngineResponse {
         "3. 检定、掷骰、查私密纸条、看 Web 大屏、结局图鉴、暂离与回档——全在卡片底部一键点击！",
         "",
         "**⌨️ 进阶文字快捷键（想精细操作时再用）**",
-        "- `/menu` / `/roles` — 剧本大厅 / 职业选卡",
+        "- `/menu` / `/store` / `/workshop` — 剧本大厅 / 开源世界书商店 / 引导剧本工坊",
         "- `/me` / `/check 侦查 [adv|dc15|inspire] [原因]` — 个人角色卡 / 多规则检定",
         "- `/skill` / `/rest short|long` / `/assist <队友>` / `/levelup` — 招牌技 / 营地休整 / 队友协助 / 过幕升级",
         "- `/char` / `/rule d20|2d6|d100` / `/inspire <角色>` — 自由车卡库 / 切换 D&D 规则 / 颁激励点",

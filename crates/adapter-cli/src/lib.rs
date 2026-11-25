@@ -217,16 +217,23 @@ async fn print_response(stdout: &mut io::Stdout, resp: &EngineResponse) -> Resul
             );
             stdout.write_all(out.as_bytes()).await?;
         }
-        EngineResponse::PrivateNotice {
-            user_id,
-            title,
-            body,
-        } => {
+        EngineResponse::PrivateNotice { user_id, title, body, .. } => {
             let out = format!(
                 "\n┌── 🔒 仅对 {user_id} 可见 ─────────────────────────────────\n│ {title}\n├──────────────────────────────────────────────────────────\n{}\n└──────────────────────────────────────────────────────────\n\n",
                 indent_lines(body)
             );
             stdout.write_all(out.as_bytes()).await?;
+        }
+        EngineResponse::WorldbookStoreMenu { packs, .. } => {
+            let list = packs.iter().map(|p| format!("│ - {} (`{}` · {} · {}幕)", p.name, p.id, p.recommended_system.short_badge(), p.recommended_acts)).collect::<Vec<_>>().join("\n");
+            stdout.write_all(format!("\n┌── 📦 开源世界书商店 ──\n{list}\n└──────────────────────\n\n").as_bytes()).await?;
+        }
+        EngineResponse::WorldbookDetail { pack, .. } => {
+            stdout.write_all(format!("\n📖 世界书《{}》（{} 条设定）\n{}\n\n", pack.name, pack.entries.len(), pack.summary).as_bytes()).await?;
+        }
+        EngineResponse::WorkshopDesk { draft, base_pack, .. } => {
+            let wb = base_pack.as_deref().map(|p| p.name.as_str()).unwrap_or("空白原创");
+            stdout.write_all(format!("\n✍️ 工坊草稿｜世界书：{wb}｜{}｜{}\n脑洞：{}\n{}\n\n", draft.length_label(), draft.check_system.short_badge(), draft.premise, draft.forged_summary).as_bytes()).await?;
         }
         EngineResponse::StoryTurn {
             turn_number, scene_title, location, world_time, act_badge, narrative,

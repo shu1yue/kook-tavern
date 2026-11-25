@@ -37,18 +37,32 @@ pub fn import_sillytavern_file(
         bail!("导入文件实际读取超过 16 MiB 安全上限，已拒绝加载");
     }
 
-    let json_text = if bytes.starts_with(&PNG_SIGNATURE) {
-        extract_png_chara_json(&bytes)?
-    } else {
-        String::from_utf8(bytes).context("JSON 文件不是有效的 UTF-8 文本")?
-    };
-
-    let root: Value = serde_json::from_str(&json_text).context("解析 SillyTavern JSON 失败")?;
     let stem = input_path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("st_imported");
-    convert_st_json(&root, stem, custom_id, theme_opt)
+    parse_sillytavern_bytes(&bytes, stem, custom_id, theme_opt)
+}
+
+/// Parses raw SillyTavern `.png` or `.json` bytes into a validated `Scenario` without disk I/O.
+pub fn parse_sillytavern_bytes(
+    bytes: &[u8],
+    fallback_stem: &str,
+    custom_id: Option<&str>,
+    theme_opt: Option<&str>,
+) -> Result<Scenario> {
+    if bytes.len() as u64 > MAX_IMPORT_BYTES {
+        bail!("导入数据超过 16 MiB 安全上限，已拒绝加载");
+    }
+    let json_text = if bytes.starts_with(&PNG_SIGNATURE) {
+        extract_png_chara_json(bytes)?
+    } else {
+        std::str::from_utf8(bytes)
+            .context("JSON 文件不是有效的 UTF-8 文本")?
+            .to_string()
+    };
+    let root: Value = serde_json::from_str(&json_text).context("解析 SillyTavern JSON 失败")?;
+    convert_st_json(&root, fallback_stem, custom_id, theme_opt)
 }
 
 fn convert_st_json(
@@ -248,7 +262,7 @@ fn str_field(obj: &Value, key: &str) -> Option<String> {
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(String::from)
+        .map(|s| s.chars().take(4000).collect())
 }
 
 fn default_imported_roles() -> Vec<PresetRole> {

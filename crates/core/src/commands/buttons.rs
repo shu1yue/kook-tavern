@@ -4,8 +4,8 @@ use tavern_domain::{
 };
 
 use crate::commands::{
-    button_roles, check, export, m1, party, resolve_authoritative_guild, room, turn,
-    will_likely_resolve_turn,
+    button_roles, check, dnd, export, m1, party, resolve_authoritative_guild, room, turn,
+    will_likely_resolve_turn, workshop,
 };
 use crate::engine::GameEngine;
 
@@ -46,6 +46,8 @@ pub async fn dispatch_button(
             "menu" => Ok(room::cmd_list_scenarios(engine, channel_id)),
             "endings" => check::cmd_endings(engine, &mk_msg("/endings".into())),
             "help" => Ok(room::cmd_help()),
+            "store" => Ok(workshop::cmd_store(engine, channel_id, "")),
+            "workshop" => workshop::cmd_workshop(engine, &mk_msg("/workshop".into()), "").await,
             _ => Ok(EngineResponse::Ignore),
         };
     }
@@ -101,7 +103,28 @@ pub async fn dispatch_button(
         }
         "rest" => {
             let kind = parts.get(3).copied().unwrap_or("short");
-            crate::commands::dnd::cmd_rest(engine, &mk_msg(format!("/rest {kind}")), kind)
+            dnd::cmd_rest(engine, &mk_msg(format!("/rest {kind}")), kind)
+        }
+        "skill" => {
+            let idx = parts.get(3).copied().unwrap_or("").trim();
+            dnd::cmd_skill(engine, &mk_msg(format!("/skill {idx}")), idx)
+        }
+        "lv" => {
+            let choice = parts.get(3).copied().unwrap_or("").trim();
+            if !matches!(choice, "hp" | "charge") {
+                return Ok(EngineResponse::Ignore);
+            }
+            dnd::cmd_levelup(engine, &mk_msg(format!("/levelup {choice}")), choice)
+        }
+        "store" => {
+            let pack_id = parts.get(3).copied().unwrap_or("").trim();
+            Ok(workshop::cmd_store(engine, channel_id, pack_id))
+        }
+        "ws" => {
+            let sub = parts.get(3).copied().unwrap_or("desk").trim();
+            let extra = parts.get(4).copied().unwrap_or("").trim();
+            let arg = if extra.is_empty() { sub.to_string() } else { format!("{sub} {extra}") };
+            workshop::cmd_workshop(engine, &mk_msg(format!("/workshop {arg}")), &arg).await
         }
         "pick" => {
             let Some(expected_turn) = parts.get(3).and_then(|s| s.parse::<u32>().ok()) else {
@@ -132,6 +155,9 @@ pub fn will_button_likely_resolve_turn(
     match parts[1] {
         "resolve" => will_likely_resolve_turn(engine, guild_id, channel_id, user_id, "/go", false),
         "afk" => will_likely_resolve_turn(engine, guild_id, channel_id, user_id, "/afk", false),
+        "ws" if matches!(parts.get(3).copied(), Some("forge" | "gen" | "锻造" | "生成")) => {
+            will_likely_resolve_turn(engine, guild_id, channel_id, user_id, "/workshop forge", false)
+        }
         "pick" => {
             let Some(expected_turn) = parts.get(3).and_then(|s| s.parse::<u32>().ok()) else {
                 return false;

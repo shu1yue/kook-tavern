@@ -10,12 +10,17 @@ use crate::ports::{
     BackgroundTaskRunner, DecisionGate, EventBus, ExportWriter, LlmProvider, NoopBackgroundRunner,
     NoopDecisionGate, NoopEventBus, NoopExportWriter, RoomStore, ScenarioCatalog,
 };
+use crate::workshop_ports::{
+    EmptyWorldbookCatalog, NoopStImporter, StRemoteImporter, WorldbookCatalog,
+};
 
 #[derive(Clone)]
 pub struct GameEngine {
     pub(crate) cfg: AppConfig,
     pub(crate) store: Arc<dyn RoomStore>,
     pub(crate) scenarios: Arc<dyn ScenarioCatalog>,
+    pub(crate) worldbooks: Arc<dyn WorldbookCatalog>,
+    pub(crate) st_importer: Arc<dyn StRemoteImporter>,
     pub(crate) llm: Arc<dyn LlmProvider>,
     pub(crate) decision: Arc<dyn DecisionGate>,
     pub(crate) events: Arc<dyn EventBus>,
@@ -35,6 +40,8 @@ impl GameEngine {
             cfg,
             store,
             scenarios,
+            worldbooks: Arc::new(EmptyWorldbookCatalog),
+            st_importer: Arc::new(NoopStImporter),
             llm,
             decision: Arc::new(NoopDecisionGate),
             events: Arc::new(NoopEventBus),
@@ -42,6 +49,16 @@ impl GameEngine {
             bg_runner: Arc::new(NoopBackgroundRunner),
             in_flight_llm: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    pub fn with_worldbooks(mut self, worldbooks: Arc<dyn WorldbookCatalog>) -> Self {
+        self.worldbooks = worldbooks;
+        self
+    }
+
+    pub fn with_st_importer(mut self, importer: Arc<dyn StRemoteImporter>) -> Self {
+        self.st_importer = importer;
+        self
     }
 
     pub fn with_decision_gate(mut self, decision: Arc<dyn DecisionGate>) -> Self {

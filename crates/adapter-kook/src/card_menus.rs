@@ -1,7 +1,43 @@
-use serde_json::json;
-use tavern_domain::{PresetRole, ScenarioSummary, WallReport};
+use serde_json::{Value, json};
+use tavern_domain::{PresetRole, PrivateButton, ScenarioSummary, WallReport};
 
-use crate::card_widgets::{action_group, btn, truncate_chars};
+use crate::card_widgets::{action_group, btn, chunk_kmarkdown, truncate_chars};
+
+pub fn render_private_card_json(title: &str, body: &str, actions: &[PrivateButton]) -> String {
+    let mut modules = vec![
+        json!({
+            "type": "header",
+            "text": { "type": "plain-text", "content": truncate_chars(title, 100) }
+        }),
+        json!({
+            "type": "context",
+            "elements": [{
+                "type": "kmarkdown",
+                "content": "🔒 **仅你可见** · 队友完全看不到这张私密卡片（包含你的个人底牌与秘密纸条）"
+            }]
+        }),
+        json!({ "type": "divider" }),
+    ];
+    for chunk in chunk_kmarkdown(body, 3200) {
+        if modules.len() >= 40 {
+            break;
+        }
+        modules.push(json!({
+            "type": "section",
+            "text": { "type": "kmarkdown", "content": chunk }
+        }));
+    }
+    if !actions.is_empty() {
+        modules.push(json!({ "type": "divider" }));
+        let btns: Vec<Value> = actions
+            .iter()
+            .take(4)
+            .map(|a| btn(a.theme.kook_str(), a.value.clone(), &a.label))
+            .collect();
+        modules.push(action_group(btns));
+    }
+    json!([{ "type": "card", "theme": "info", "size": "lg", "modules": modules }]).to_string()
+}
 
 pub fn render_scenario_menu_card(channel_id: &str, scenarios: &[ScenarioSummary]) -> String {
     let mut modules = vec![
@@ -18,10 +54,12 @@ pub fn render_scenario_menu_card(channel_id: &str, scenarios: &[ScenarioSummary]
         }),
     ];
 
+    let mut shown = 0usize;
     for s in scenarios {
         if modules.len() >= 40 {
             break;
         }
+        shown += 1;
         modules.push(json!({ "type": "divider" }));
         modules.push(json!({
             "type": "section",
@@ -40,9 +78,21 @@ pub fn render_scenario_menu_card(channel_id: &str, scenarios: &[ScenarioSummary]
         )]));
     }
 
+    if scenarios.len() > shown {
+        modules.push(json!({
+            "type": "context",
+            "elements": [{
+                "type": "kmarkdown",
+                "content": format!("ℹ️ 当前展示前 {shown} / {} 个剧本，其余社区剧本可直接发 `/start <剧本ID>` 开启。", scenarios.len())
+            }]
+        }));
+    }
+
     modules.push(json!({ "type": "divider" }));
     modules.push(action_group(vec![
-        btn("info", format!("tavern:status:{channel_id}"), "📊 当前战局"),
+        btn("info", format!("tavern:store:{channel_id}"), "📦 世界书商店"),
+        btn("primary", format!("tavern:ws:{channel_id}:desk"), "✍️ 创作新剧本"),
+        btn("secondary", format!("tavern:status:{channel_id}"), "📊 当前战局"),
         btn("secondary", format!("tavern:help:{channel_id}"), "📖 玩法指南"),
     ]));
 

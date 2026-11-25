@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{PendingAction, Player, PresetRole, RoomState};
 use crate::stats::SuggestedCheck;
+use crate::workshop::{PrivateButton, WorldbookPack, WorldbookPackSummary, WorkshopDraft};
 use crate::world::WorldBulletin;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -182,6 +183,24 @@ pub enum EngineResponse {
         user_id: String,
         title: String,
         body: String,
+        actions: Vec<PrivateButton>,
+    },
+    /// Open-source Worldbook & Setting Store menu card.
+    WorldbookStoreMenu {
+        channel_id: String,
+        packs: Vec<WorldbookPackSummary>,
+    },
+    /// Detailed view of a single Worldbook Pack with clickable starter hooks.
+    WorldbookDetail {
+        channel_id: String,
+        pack: Box<WorldbookPack>,
+    },
+    /// Guided 5-step interactive Scenario Creation Workshop desk.
+    WorkshopDesk {
+        channel_id: String,
+        user_id: String,
+        draft: Box<WorkshopDraft>,
+        base_pack: Option<Box<WorldbookPack>>,
     },
     StoryTurn {
         channel_id: String,

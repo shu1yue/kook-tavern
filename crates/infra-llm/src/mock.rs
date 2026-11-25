@@ -1,10 +1,10 @@
 use anyhow::Result;
 use tavern_core::{BoxFuture, LlmProvider};
 use tavern_domain::{
-    CheckSystem, DmStructuredReply, DmTurnOutput, LlmUsage, NpcUpdate, PendingAction, Player,
-    PrivateWhisper, RoomState, Scenario, StatePatch, SuggestedCheck, SummaryOutput, TurnRecord,
-    WorldBulletinDraft, WorldEcho, format_batched_actions, match_dynamic_worldbook,
-    should_trigger_bulletin,
+    CheckSystem, DmStructuredReply, DmTurnOutput, ForgeScenarioOutput, ForgeScenarioRequest,
+    LlmUsage, NpcUpdate, PendingAction, Player, PrivateWhisper, RoomState, Scenario, StatePatch,
+    SuggestedCheck, SummaryOutput, TurnRecord, WorldBulletinDraft, WorldEcho,
+    format_batched_actions, match_dynamic_worldbook, should_trigger_bulletin,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -225,6 +225,31 @@ impl LlmProvider for MockLlmProvider {
                 summary: out,
                 usage: LlmUsage::default(),
             })
+        })
+    }
+
+    fn forge_scenario<'a>(
+        &'a self,
+        req: &'a ForgeScenarioRequest,
+    ) -> BoxFuture<'a, Result<ForgeScenarioOutput>> {
+        Box::pin(async move {
+            let usage = LlmUsage {
+                prompt_tokens: 1800,
+                completion_tokens: 1200,
+                cache_hit_tokens: 0,
+                cache_miss_tokens: 1800,
+            };
+            let raw = crate::generator::mock_forge_scenario(req);
+            match crate::generator::finalize_forged_scenario(raw, req, None) {
+                Ok(scenario) => Ok(ForgeScenarioOutput::Forged {
+                    scenario: Box::new(scenario),
+                    usage,
+                }),
+                Err(err) => Ok(ForgeScenarioOutput::ValidationFailed {
+                    error: err.to_string(),
+                    usage,
+                }),
+            }
         })
     }
 }

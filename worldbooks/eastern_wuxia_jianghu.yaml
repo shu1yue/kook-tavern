@@ -1,0 +1,60 @@
+id: eastern_wuxia_jianghu
+name: 青衫剑雨：架空武侠江湖
+genre: 东方武侠 / 江湖悬疑 / 门派风云
+theme: ember
+recommended_system: d20
+recommended_acts: 5
+license: CC0-1.0
+author: AI 群酒馆开源世界书库
+summary: 烟雨客栈、六扇门暗桩、失传剑谱与隐世奇毒交织的东方武林，既有刀光剑影的豪情，也有人心难测的江湖局中局。
+starter_hooks:
+  - 江南连绵梅雨中，失踪十年的前朝护国剑谱竟在荒野客栈里被公开拍卖，各路名门正派与魔教细作齐聚大堂
+  - 朝廷钦差押送的奇毒解药在官道驿站离奇被调包，六扇门秘令一支身份各异的江湖小队三日内追回真药
+  - 姑苏名剑山庄广发英雄帖举办试剑大会，大婚前夜少庄主却在密室中被人以本门绝学一剑封喉
+factions:
+  - name: 六扇门南境巡察司
+    goal: 暗中清查勾结外敌的武林豪强，维持朝廷对江湖的威慑
+    escalation: 官府秘档外泄或钦差车队遇袭
+  - name: 青云剑盟
+    goal: 自诩武林正道领袖，表面侠义凛然却暗藏争夺盟主之位的私心
+    escalation: 剑谱现世或本门弟子惨死引发猜忌
+  - name: 听雨楼情报阁
+    goal: 贩卖天下秘闻与暗杀买命钱，只认白银与等价筹码
+    escalation: 匿名买家出双倍价钱封口灭口
+entries:
+  - id: wb_wx_core
+    title: 烟雨江湖与客栈规矩
+    keywords: [江湖, 客栈, 武林, 侠客, 剑]
+    always_active: true
+    priority: 100
+    content: 天下大势外松内紧，朝廷借六扇门制衡各大门派，而真正决定生死的往往是荒野客栈里的一壶浊酒、一句江湖切口与屋檐上闪过的轻功黑影。行侠仗义讲究师出有名，但面对暗器与毒砂，多留三分心眼方能活到天明。
+  - id: wb_wx_qi
+    title: 内功修为、轻功与点穴
+    keywords: [内功, 真气, 轻功, 点穴, 招式]
+    always_active: false
+    priority: 90
+    content: 武林高手过招不只拼蛮力，更讲究借力打力与身法先机。强行催动真气破局虽可一击定乾坤，却容易气息紊乱；懂医理或点穴者既能封住敌人经脉逼供，也能替重伤同伴护住心脉。
+  - id: wb_wx_poison
+    title: 苗疆奇毒与银针验毒
+    keywords: [毒, 暗器, 解药, 银针, 酒菜]
+    always_active: false
+    priority: 88
+    content: 江湖黑道擅用无色无味的蒙汗药与牵机散，常涂抹在茶杯沿、烛芯或飞蝗石上。细心的江湖老手入席前会借筷尖、银针或观察店小二眼神识破端倪，中毒后须尽快寻得对症解药或以内力逼毒。
+  - id: wb_wx_intel
+    title: 江湖切口与茶馆消息网
+    keywords: [切口, 暗号, 听雨楼, 情报, 乞丐]
+    always_active: false
+    priority: 85
+    content: 摆茶碗的方位、敲桌面的节奏、乃至说书人口中的戏文，往往都是暗桩传递消息的密语。懂得江湖规矩的游侠只需亮出信物或对上暗号，便能从不起眼的挑夫与算命先生口中撬出惊天秘闻。
+  - id: wb_wx_sect
+    title: 失传秘籍与门派宿怨
+    keywords: [秘籍, 剑谱, 门派, 恩怨, 灭门]
+    always_active: false
+    priority: 82
+    content: 二十年前的寒潭血案让三大名门与魔教结下死仇，当年遗落的半卷《太虚剑谱》成为众人眼红的祸根。许多自称受害者的世家子弟，衣袖底下未必干净。
+  - id: wb_wx_organ
+    title: 机关密室与古墓奇门
+    keywords: [密室, 机关, 暗道, 阵法, 墓]
+    always_active: false
+    priority: 80
+    content: 名门山庄与前朝宝库常设墨家翻板、连弩与五行八卦锁。盲目硬闯易触发流沙与毒箭，通过观察地砖磨损、香炉朝向或破解诗词谜题才能安全打开密道。

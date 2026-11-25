@@ -1,10 +1,12 @@
 pub mod generator;
+mod generator_helpers;
 pub mod jev;
 pub mod jev_questions;
 pub mod mock;
 pub mod parser;
 pub mod prompt_ext;
 pub mod prompts;
+pub mod remote_fetch;
 pub mod transport;
 mod wire;
 
@@ -16,6 +18,7 @@ use tavern_core::{AppConfig, DecisionGate, LlmProvider, NoopDecisionGate};
 pub use generator::generate_scenario_with_llm;
 pub use jev::SystemOneJevGate;
 pub use mock::MockLlmProvider;
+pub use remote_fetch::{fetch_allowlisted_st_bytes, validate_allowlisted_import_url};
 pub use transport::OpenAiLlmProvider;
 
 pub fn build_decision_gate(cfg: &AppConfig, use_mock: bool) -> Arc<dyn DecisionGate> {

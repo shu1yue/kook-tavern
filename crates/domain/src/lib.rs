@@ -11,6 +11,7 @@ pub mod patch;
 pub mod protocol;
 pub mod stats;
 pub mod validate;
+pub mod workshop;
 pub mod world;
 
 pub use chronicle::{ChronicleEntry, WorldEcho, build_chronicle, distill_echo_text};
@@ -39,6 +40,10 @@ pub use stats::{
     StatKind, SuggestedCheck, ending_scope_key, perform_stat_check, perform_stat_check_with_rng,
 };
 pub use validate::{normalize_theme, sanitize_scenario_id, validate_scenario};
+pub use workshop::{
+    ForgeScenarioOutput, ForgeScenarioRequest, PrivateButton, WorldbookPack, WorldbookPackSummary,
+    WorkshopDraft, validate_worldbook_pack,
+};
 pub use world::{
     DirectorBeat, FactionAgenda, ScenarioMapEdge, ScenarioMapNode, ScenarioRules, WorldBulletin,
     due_director_beats, resolve_map_node_id, should_trigger_bulletin,

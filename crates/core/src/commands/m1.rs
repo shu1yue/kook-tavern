@@ -182,6 +182,7 @@ pub fn cmd_whisper(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineR
         user_id: msg.user_id.clone(),
         title: "🤫 你的专属秘密纸条档案（仅本人可见）".to_string(),
         body,
+        actions: Vec::new(),
     })
 }
 
@@ -243,6 +244,10 @@ pub fn cmd_reload(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRe
     }
     match engine.scenarios.reload() {
         Ok(count) => {
+            let wb_note = match engine.worldbooks.reload() {
+                Ok(n) => format!("{n} 套世界书"),
+                Err(err) => format!("世界书重载失败：{err}"),
+            };
             let names = engine
                 .scenarios
                 .list()
@@ -251,7 +256,7 @@ pub fn cmd_reload(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRe
                 .collect::<Vec<_>>()
                 .join("\n");
             Ok(EngineResponse::Notice {
-                title: format!("🔄 剧本库热重载成功（共 {count} 个剧本）"),
+                title: format!("🔄 剧本库热重载成功（共 {count} 个剧本 · {wb_note}）"),
                 body: format!(
                     "已从磁盘原子刷新并全部通过强类型 Schema 校验，零重启即时生效！\n\n{names}\n\n现在可直接发 `/menu` 或 `/start <剧本ID>` 开新团。"
                 ),

@@ -66,6 +66,9 @@ pub fn write_scenario_yaml(
     }
 
     let yaml = serde_yaml::to_string(scenario).context("序列化剧本 YAML 失败")?;
+    if yaml.len() as u64 > 2 * 1024 * 1024 {
+        bail!("序列化后的剧本 YAML 超过 2 MiB 上限，拒绝写入磁盘");
+    }
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
@@ -88,6 +91,9 @@ pub fn write_scenario_yaml(
         fs::rename(&tmp_path, &target)
             .with_context(|| format!("原子覆盖剧本文件失败: {}", target.display()))?;
         guard.disarm();
+        if alt_yml.is_file() {
+            let _ = fs::remove_file(&alt_yml);
+        }
     } else {
         // Atomic no-clobber link prevents TOCTOU overwrite races!
         match fs::hard_link(&tmp_path, &target) {

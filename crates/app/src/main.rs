@@ -5,11 +5,15 @@ use std::time::Duration;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tavern_adapter_web::{BroadcastEventBus, WebState};
-use tavern_core::{AppConfig, BackgroundTaskRunner, BoxFuture, GameEngine, RoomStore};
-use tavern_infra_llm::{build_decision_gate, build_llm_provider, generate_scenario_with_llm};
+use tavern_core::{
+    AppConfig, BackgroundTaskRunner, BoxFuture, GameEngine, RoomStore, StRemoteImporter,
+};
+use tavern_infra_llm::{
+    build_decision_gate, build_llm_provider, fetch_allowlisted_st_bytes, generate_scenario_with_llm,
+};
 use tavern_infra_sqlite::{
-    FsExportWriter, FsScenarioCatalog, SqliteRoomStore, import_sillytavern_file,
-    write_scenario_yaml,
+    FsExportWriter, FsScenarioCatalog, FsWorldbookCatalog, SqliteRoomStore,
+    import_sillytavern_file, parse_sillytavern_bytes, write_scenario_yaml,
 };
 use tokio::sync::{Semaphore, oneshot};
 use tracing::{error, warn};
@@ -208,6 +212,19 @@ async fn shutdown_web(handle: Option<(oneshot::Sender<()>, tokio::task::JoinHand
     }
 }
 
+struct SafeStRemoteImporter;
+
+impl StRemoteImporter for SafeStRemoteImporter {
+    fn import_from_url<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<tavern_domain::Scenario>> {
+        Box::pin(async move {
+            let (bytes, stem) = fetch_allowlisted_st_bytes(url).await?;
+            tokio::task::spawn_blocking(move || parse_sillytavern_bytes(&bytes, &stem, None, None))
+                .await
+                .map_err(|e| anyhow::anyhow!("解析 SillyTavern 文件任务中断: {e}"))?
+        })
+    }
+}
+
 fn build_runtime(cfg: AppConfig, mock_llm: bool) -> Result<BuiltRuntime> {
     let decision_gate = build_decision_gate(&cfg, mock_llm);
     let llm = build_llm_provider(&cfg, mock_llm, decision_gate.clone())?;
@@ -220,6 +237,7 @@ fn build_runtime(cfg: AppConfig, mock_llm: bool) -> Result<BuiltRuntime> {
         );
     }
     let scenarios = Arc::new(FsScenarioCatalog::load_from_dir(&cfg.scenarios_dir)?);
+    let worldbooks = Arc::new(FsWorldbookCatalog::load_from_dir(&cfg.resolve_worldbooks_dir())?);
     let exporter = Arc::new(FsExportWriter::new(cfg.exports_dir.clone()));
     let bg_runner = Arc::new(TokioBackgroundRunner::new(8));
     let event_bus = Arc::new(BroadcastEventBus::new(256));
@@ -227,6 +245,8 @@ fn build_runtime(cfg: AppConfig, mock_llm: bool) -> Result<BuiltRuntime> {
     let web_state = WebState::new(store.clone(), scenarios.clone(), event_bus.sender());
 
     let engine = GameEngine::new(cfg, store, scenarios, llm)
+        .with_worldbooks(worldbooks)
+        .with_st_importer(Arc::new(SafeStRemoteImporter))
         .with_ports(event_bus, exporter, bg_runner)
         .with_decision_gate(decision_gate);
     Ok(BuiltRuntime {

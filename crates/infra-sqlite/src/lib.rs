@@ -14,9 +14,12 @@ pub mod st_import;
 pub mod st_png;
 pub mod turn_queries;
 pub mod turn_tx;
+pub mod workshop_tx;
+pub mod worldbooks;
 
 pub use exporter::FsExportWriter;
 pub use repo::SqliteRoomStore;
 pub use scenario_io::write_scenario_yaml;
 pub use scenarios::FsScenarioCatalog;
-pub use st_import::import_sillytavern_file;
+pub use st_import::{import_sillytavern_file, parse_sillytavern_bytes};
+pub use worldbooks::FsWorldbookCatalog;

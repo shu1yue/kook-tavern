@@ -146,6 +146,17 @@ impl AppConfig {
             .context("缺少环境变量 KOOK_BOT_TOKEN，请先在 .env 中填入 KOOK 机器人 Token")
     }
 
+    pub fn resolve_worldbooks_dir(&self) -> PathBuf {
+        if let Some(raw) = env_non_empty("WORLDBOOKS_DIR") {
+            return PathBuf::from(raw);
+        }
+        self.scenarios_dir
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(|p| p.join("worldbooks"))
+            .unwrap_or_else(|| PathBuf::from("worldbooks"))
+    }
+
     pub fn require_llm_key(&self) -> Result<&str> {
         self.llm_api_key.as_deref().context(
             "缺少环境变量 LLM_API_KEY，请先在 .env 中填入大模型 API Key（或使用 --mock-llm 进行本地离线试玩）",

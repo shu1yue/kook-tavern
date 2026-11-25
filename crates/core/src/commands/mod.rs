@@ -12,6 +12,8 @@ pub mod party_helpers;
 pub mod room;
 pub mod turn;
 pub mod turn_support;
+pub mod workshop;
+pub mod workshop_ops;
 
 use anyhow::Result;
 use tavern_domain::{ChatMode, EngineResponse, IncomingMessage, TurnPhase};
@@ -131,6 +133,8 @@ async fn match_known_command(
         "assist" | "协助" => dnd::cmd_assist(engine, msg, arg)?,
         "levelup" | "lv" | "升级" | "成长" => dnd::cmd_levelup(engine, msg, arg)?,
         "char" | "角色库" | "车卡库" => char_vault::cmd_char(engine, msg, arg)?,
+        "store" | "商店" | "世界书" => workshop::cmd_store(engine, &msg.channel_id, arg),
+        "workshop" | "ws" | "工坊" | "创作" => workshop::cmd_workshop(engine, msg, arg).await?,
         "me" | "my" | "我的" | "角色卡" => check::cmd_me(engine, msg)?,
         "endings" | "图鉴" | "成就" | "结局" => check::cmd_endings(engine, msg)?,
         "go" | "resolve" | "next" | "结算" => turn::resolve_turn(engine, &msg.channel_id).await?,
@@ -201,6 +205,12 @@ pub fn will_likely_resolve_turn(
     let trimmed = content.trim();
     if trimmed.is_empty() {
         return false;
+    }
+    if let Some((_, cmd, arg)) = parse_known_or_strict_command(trimmed)
+        && matches!(cmd.as_str(), "workshop" | "ws" | "工坊" | "创作")
+        && matches!(arg.split_whitespace().next().unwrap_or("").to_ascii_lowercase().as_str(), "forge" | "gen" | "锻造" | "生成")
+    {
+        return workshop_ops::is_forge_placeholder_ready(engine, user_id);
     }
     let Ok(Some(room)) = engine.store.get_room(channel_id) else {
         return false;
@@ -285,7 +295,8 @@ pub(crate) fn is_known_command_name(cmd: &str) -> bool {
             | "act" | "a" | "行动" | "roll" | "r" | "掷骰" | "check" | "ck" | "检定" | "属性"
             | "rule" | "规则" | "skill" | "sk" | "技能" | "绝活" | "rest" | "休整" | "短休" | "长休"
             | "inspire" | "激励" | "assist" | "协助" | "levelup" | "lv" | "升级" | "成长"
-            | "char" | "角色库" | "车卡库"
+            | "char" | "角色库" | "车卡库" | "store" | "商店" | "世界书"
+            | "workshop" | "ws" | "工坊" | "创作"
             | "me" | "my" | "我的" | "角色卡" | "endings" | "图鉴" | "成就" | "结局"
             | "go" | "resolve" | "next" | "结算" | "status" | "st" | "状态" | "mode" | "模式"
             | "style" | "风格" | "档位" | "afk" | "暂离" | "摸鱼" | "leave" | "quit" | "退团"

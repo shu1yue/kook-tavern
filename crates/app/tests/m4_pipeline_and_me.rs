@@ -134,13 +134,14 @@ async fn private_me_sheet_isolates_whispers_and_renders_valid_private_card() {
             user_id,
             title,
             body,
+            actions,
         } => {
             assert_eq!(user_id, "u1");
             assert!(title.contains("齿轮机械师"));
             assert!(body.contains("🔍+2"));
             assert!(body.contains("精密黄铜扳手"));
             assert!(body.contains("霰弹枪")); // u1's own secret whisper
-            let card_json = render_private_card_json(&title, &body);
+            let card_json = render_private_card_json(&title, &body, &actions);
             let v: serde_json::Value = serde_json::from_str(&card_json).unwrap();
             assert!(v.is_array());
             assert!(v[0]["modules"].as_array().unwrap().len() <= 50);

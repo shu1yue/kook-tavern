@@ -7,8 +7,9 @@ use anyhow::{Context, Result, bail};
 use reqwest::Client;
 use tavern_core::{AppConfig, BoxFuture, DecisionGate, LlmProvider, NoopDecisionGate};
 use tavern_domain::{
-    DmTurnOutput, LlmUsage, PendingAction, Player, RoomState, Scenario, SummaryOutput, TurnRecord,
-    WorldEcho, detect_consistency_nudge_with_audit, merge_patch_delta, should_trigger_bulletin,
+    DmTurnOutput, ForgeScenarioOutput, ForgeScenarioRequest, LlmUsage, PendingAction, Player,
+    RoomState, Scenario, SummaryOutput, TurnRecord, WorldEcho, detect_consistency_nudge_with_audit,
+    merge_patch_delta, should_trigger_bulletin,
 };
 use tokio::time::sleep;
 use tracing::{info, warn};
@@ -280,6 +281,28 @@ impl LlmProvider for OpenAiLlmProvider {
             let messages = build_summary_messages(&self.prompts_dir, scenario, existing_summary, turns);
             let (summary, usage) = self.chat_completion(&self.summary_model, messages, false, None).await?;
             Ok(SummaryOutput { summary: summary.trim().to_string(), usage })
+        })
+    }
+
+    fn forge_scenario<'a>(
+        &'a self,
+        req: &'a ForgeScenarioRequest,
+    ) -> BoxFuture<'a, Result<ForgeScenarioOutput>> {
+        Box::pin(async move {
+            let messages = crate::generator::build_forge_messages(req);
+            let (raw, usage) = self.chat_completion(&self.model, messages, true, Some(4096)).await?;
+            match crate::generator::parse_scenario_json(&raw)
+                .and_then(|parsed| crate::generator::finalize_forged_scenario(parsed, req, None))
+            {
+                Ok(scenario) => Ok(ForgeScenarioOutput::Forged {
+                    scenario: Box::new(scenario),
+                    usage,
+                }),
+                Err(err) => Ok(ForgeScenarioOutput::ValidationFailed {
+                    error: err.to_string(),
+                    usage,
+                }),
+            }
         })
     }
 }

@@ -1,6 +1,7 @@
 mod api;
 pub mod card_menus;
 pub mod card_widgets;
+pub mod card_workshop;
 pub mod cards;
 mod dispatcher;
 pub mod events;

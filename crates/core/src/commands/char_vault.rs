@@ -48,6 +48,7 @@ fn list_vault(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRespon
             user_id: msg.user_id.clone(),
             title: "🪪 我的跨团角色库（空）".to_string(),
             body: "你还没有保存过个人角色！\n\n**两种快速入库方式**：\n1. 自由捏卡：`/char create 艾琳 游荡者 | 0,2,2,0,-1 | 潜行,开锁 | 混乱善良 | 街头长大的巧手`\n2. 先在房间里点职业入团，再发 `/char save` 存下来，下次换新剧本就能 `/char load 名字` 直接带走！".to_string(),
+            actions: Vec::new(),
         });
     }
     let lines = list
@@ -68,6 +69,7 @@ fn list_vault(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRespon
         user_id: msg.user_id.clone(),
         title: format!("🪪 我的跨团角色库（{}/8，仅你可见）", list.len()),
         body: format!("{lines}\n\n💡 在任意开团包厢发 `/char load <名字>` 即可带 TA 上桌！"),
+        actions: Vec::new(),
     })
 }
 
@@ -156,6 +158,7 @@ fn create_char(engine: &GameEngine, msg: &IncomingMessage, rest: &str) -> Result
             ch.stats.format_inline(),
             if ch.dnd.proficient_skills.is_empty() { "无".into() } else { ch.dnd.proficient_skills.join("、") }
         ),
+        actions: Vec::new(),
     })
 }
 
@@ -165,18 +168,23 @@ fn save_current(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResp
     };
     let mut base_stats = p.stats;
     if validate_point_buy(&base_stats).is_err() {
-        // Clamp upgraded or debuffed campaign stats cleanly into fair starter budget (-1..=3, sum <= 3)
-        for st in tavern_domain::StatKind::ALL {
-            let cur = base_stats.get(st);
-            if cur > 3 {
-                base_stats.add(st, 3 - cur);
-            } else if cur < -1 {
-                base_stats.add(st, -1 - cur);
+        // Clamp raw stat fields directly into fair starter budget (-1..=3, sum <= 3) in bounded O(1) steps
+        base_stats.body = base_stats.body.clamp(-1, 3);
+        base_stats.agility = base_stats.agility.clamp(-1, 3);
+        base_stats.investigate = base_stats.investigate.clamp(-1, 3);
+        base_stats.social = base_stats.social.clamp(-1, 3);
+        base_stats.insight = base_stats.insight.clamp(-1, 3);
+        for _ in 0..20 {
+            if base_stats.body + base_stats.agility + base_stats.investigate + base_stats.social + base_stats.insight <= 3 {
+                break;
             }
-        }
-        while base_stats.body + base_stats.agility + base_stats.investigate + base_stats.social + base_stats.insight > 3 {
-            let max_st = tavern_domain::StatKind::ALL.into_iter().max_by_key(|&s| base_stats.get(s)).unwrap();
-            base_stats.add(max_st, -1);
+            let slots = [
+                &mut base_stats.body, &mut base_stats.agility, &mut base_stats.investigate,
+                &mut base_stats.social, &mut base_stats.insight,
+            ];
+            if let Some(top) = slots.into_iter().max_by_key(|v| **v) {
+                *top = (*top - 1).max(-1);
+            }
         }
     }
     let ch = SavedCharacter {
@@ -195,6 +203,7 @@ fn save_current(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResp
         user_id: msg.user_id.clone(),
         title: format!("💾 已将【{}】存入跨团角色库", ch.character_name),
         body: format!("以后换新剧本开桌时，直接发 `/char load {}` 就能一键带 TA 跨团冒险！（已自动规整为 Lv.1 公平起始模板）", ch.character_name),
+        actions: Vec::new(),
     })
 }
 
@@ -242,6 +251,7 @@ fn delete_char(engine: &GameEngine, msg: &IncomingMessage, name: &str) -> Result
         user_id: msg.user_id.clone(),
         title: if ok { "🗑️ 已从个人角色库删除" } else { "❓ 未找到该存档角色" }.into(),
         body: if ok { format!("已移除角色 `{}`。", name.trim()) } else { format!("你的角色库里没有名为 `{}` 的角色。", name.trim()) },
+        actions: Vec::new(),
     })
 }
 

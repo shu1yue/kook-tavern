@@ -228,6 +228,20 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
         Ok(())
     })?;
 
+    apply_if_needed(conn, 11, "0011_v15_workshop_drafts", |tx| {
+        tx.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS workshop_drafts (
+                user_id TEXT PRIMARY KEY,
+                draft_json TEXT NOT NULL,
+                last_forge_at TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            );
+            "#,
+        )?;
+        Ok(())
+    })?;
+
     Ok(())
 }
 

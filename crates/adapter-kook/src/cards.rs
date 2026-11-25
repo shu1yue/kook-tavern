@@ -6,6 +6,11 @@ use crate::card_widgets::{
     ending_toolbar, notice_action_bar, push_bulletin_section, push_npc_section, push_party_cards,
     push_story_action_footer, status_console_rows, truncate_chars,
 };
+use crate::card_workshop::{
+    render_worldbook_detail_card, render_worldbook_store_card, render_workshop_desk_card,
+};
+
+pub use crate::card_menus::render_private_card_json;
 
 pub fn thinking_placeholder_card_json() -> String {
     json!([{
@@ -23,28 +28,23 @@ pub fn thinking_placeholder_card_json() -> String {
     .to_string()
 }
 
-pub fn render_private_card_json(title: &str, body: &str) -> String {
-    let mut modules = vec![
-        json!({
-            "type": "header",
-            "text": { "type": "plain-text", "content": truncate_chars(title, 100) }
-        }),
-        json!({
-            "type": "context",
-            "elements": [{
-                "type": "kmarkdown",
-                "content": "🔒 **仅你可见** · 队友完全看不到这张私密卡片（包含你的个人底牌与秘密纸条）"
-            }]
-        }),
-        json!({ "type": "divider" }),
-    ];
-    push_chunked_sections(&mut modules, body, 3200);
-    json!([{ "type": "card", "theme": "info", "size": "lg", "modules": modules }]).to_string()
-}
-
 pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String {
     match resp {
         EngineResponse::Ignore | EngineResponse::PrivateNotice { .. } => "[]".to_string(),
+        EngineResponse::WorldbookStoreMenu {
+            channel_id: store_chan,
+            packs,
+        } => render_worldbook_store_card(store_chan, packs),
+        EngineResponse::WorldbookDetail {
+            channel_id: det_chan,
+            pack,
+        } => render_worldbook_detail_card(det_chan, pack),
+        EngineResponse::WorkshopDesk {
+            channel_id: ws_chan,
+            draft,
+            base_pack,
+            ..
+        } => render_workshop_desk_card(ws_chan, draft, base_pack.as_deref()),
         EngineResponse::ScenarioMenu {
             channel_id: menu_chan,
             scenarios,

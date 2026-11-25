@@ -3,10 +3,11 @@ use std::pin::Pin;
 
 use anyhow::Result;
 use tavern_domain::{
-    CharacterStats, ChatMode, DailyUsage, DirectMessageOut, DmTurnOutput, EndingUnlock, LlmUsage,
-    LoreCandidate, NarrativeStyle, OocVerdict, PendingAction, Player, PresetRole,
-    ReplyAuditVerdict, RoomEvent, RoomSnapshot, RoomState, Scenario, StarterCharacterDefaults,
-    SummaryOutput, TurnRecord, UsageSummary, WhisperRecord, WorldEcho,
+    CharacterStats, ChatMode, DailyUsage, DirectMessageOut, DmTurnOutput, EndingUnlock,
+    ForgeScenarioOutput, ForgeScenarioRequest, LlmUsage, LoreCandidate, NarrativeStyle, OocVerdict,
+    PendingAction, Player, PresetRole, ReplyAuditVerdict, RoomEvent, RoomSnapshot, RoomState,
+    Scenario, StarterCharacterDefaults, SummaryOutput, TurnRecord, UsageSummary, WhisperRecord,
+    WorldEcho,
 };
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -35,8 +36,9 @@ pub struct ResolvingLease {
 }
 
 use crate::dnd_ports::DndStore;
+use crate::workshop_ports::WorkshopStore;
 
-pub trait RoomStore: DndStore + Send + Sync {
+pub trait RoomStore: DndStore + WorkshopStore + Send + Sync {
     fn reset_stuck_resolving_on_startup(&self) -> Result<usize>;
     fn upsert_room(&self, room: &RoomState) -> Result<()>;
     fn backfill_room_guild_id(&self, channel_id: &str, guild_id: &str) -> Result<bool>;
@@ -197,6 +199,13 @@ pub trait LlmProvider: Send + Sync {
         existing_summary: &'a str,
         turns: &'a [TurnRecord],
     ) -> BoxFuture<'a, Result<SummaryOutput>>;
+
+    fn forge_scenario<'a>(
+        &'a self,
+        _req: &'a ForgeScenarioRequest,
+    ) -> BoxFuture<'a, Result<ForgeScenarioOutput>> {
+        Box::pin(async { anyhow::bail!("当前 LLM 提供方未启用工坊剧本锻造能力") })
+    }
 }
 
 pub trait ScenarioCatalog: Send + Sync {
@@ -205,6 +214,15 @@ pub trait ScenarioCatalog: Send + Sync {
     fn default_scenario(&self) -> Option<Scenario>;
     fn reload(&self) -> Result<usize> {
         Ok(self.list().len())
+    }
+    fn is_builtin(&self, _id: &str) -> bool {
+        false
+    }
+    fn publish_community(&self, _scenario: &Scenario, _allow_overwrite: bool) -> Result<String> {
+        anyhow::bail!("当前剧本库为只读模式，暂不支持在线上架社区剧本")
+    }
+    fn delete_community(&self, _id: &str) -> Result<bool> {
+        anyhow::bail!("当前剧本库为只读模式，暂不支持删除社区剧本")
     }
 }
 

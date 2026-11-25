@@ -1,7 +1,7 @@
 use anyhow::Result;
 use tavern_domain::{
-    CardTheme, CheckSystem, CheckTier, EngineResponse, IncomingMessage, RoomEvent, RoomState,
-    Scenario, ending_scope_key,
+    CardTheme, CheckSystem, CheckTier, EngineResponse, IncomingMessage, PrivateButton, RoomEvent,
+    RoomState, Scenario, ending_scope_key,
 };
 
 use crate::commands::dnd::{format_dnd_me_sections, parse_check_args};
@@ -229,6 +229,7 @@ pub fn cmd_me(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRespon
             user_id: msg.user_id.clone(),
             title: "🪪 个人角色卡".to_string(),
             body: "当前频道尚未开团，点置顶卡里的绿色「▶️ 开启剧本」按钮先开一桌吧！".to_string(),
+            actions: Vec::new(),
         });
     };
     let Some(p) = engine.store.get_player(&msg.channel_id, &msg.user_id)? else {
@@ -236,6 +237,7 @@ pub fn cmd_me(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRespon
             user_id: msg.user_id.clone(),
             title: format!("🪪 《{}》尚未入团", room.title),
             body: "你还没有在本局创建角色卡！点「🎭 选职业入团」或发 `/char load <名字>` 即可上桌。".into(),
+            actions: Vec::new(),
         });
     };
     let next_turn = if room.turn_phase == tavern_domain::TurnPhase::Resolving { room.turn_number + 2 } else { room.turn_number + 1 };
@@ -298,10 +300,39 @@ pub fn cmd_me(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRespon
         ));
     }
 
+    let mut actions = Vec::new();
+    if !msg.is_direct && room.active && room.ended_id.is_none() && !p.is_afk {
+        for (i, ab) in p.dnd.abilities.iter().enumerate() {
+            if ab.uses_left > 0 && actions.len() < 2 {
+                let short: String = ab.name.chars().take(8).collect();
+                actions.push(PrivateButton {
+                    label: format!("✨ {short}({}/{})", ab.uses_left, ab.max_uses),
+                    value: format!("tavern:skill:{}:{}", msg.channel_id, i + 1),
+                    theme: CardTheme::Primary,
+                });
+            }
+        }
+        if p.dnd.pending_levelups > 0 {
+            actions.push(PrivateButton {
+                label: "⬆️ 升级 +2血/理智".into(),
+                value: format!("tavern:lv:{}:hp", msg.channel_id),
+                theme: CardTheme::Success,
+            });
+            if !p.dnd.abilities.is_empty() && actions.len() < 4 {
+                actions.push(PrivateButton {
+                    label: "⬆️ 招牌技+1充能".into(),
+                    value: format!("tavern:lv:{}:charge", msg.channel_id),
+                    theme: CardTheme::Warning,
+                });
+            }
+        }
+    }
+
     Ok(EngineResponse::PrivateNotice {
         user_id: msg.user_id.clone(),
         title: format!("🪪 个人角色卡 · {}（{}）", p.character_name, p.role_desc),
         body: sections.join("\n\n"),
+        actions,
     })
 }
 
