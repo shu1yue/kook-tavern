@@ -14,11 +14,12 @@ use tavern_domain::{
 use tokio::time::sleep;
 use tracing::{info, warn};
 
+use crate::memory::merge_chapter_memory;
 use crate::parser::{parse_dm_reply_checked, parse_patch_delta};
 use crate::prompt_ext::{
     build_lore_corpus, collect_unmatched_lore_candidates, summarize_whispers_for_audit,
 };
-use crate::prompts::{ChatMessage, build_dm_messages_with_extra_lore, build_summary_messages};
+use crate::prompts::{ChatMessage, build_dm_messages_full, build_summary_messages};
 use crate::wire::{ChatCompletionRequest, ChatCompletionResponse, ResponseFormat, extract_choice};
 
 const MAX_TRANSIENT_RETRIES: usize = 2;
@@ -220,7 +221,8 @@ impl LlmProvider for OpenAiLlmProvider {
     fn generate_turn<'a>(
         &'a self, scenario: &'a Scenario, room: &'a RoomState, players: &'a [Player],
         recent_turns: &'a [TurnRecord], actions: &'a [PendingAction],
-        world_echoes: &'a [WorldEcho], allow_nudge: bool,
+        world_echoes: &'a [WorldEcho], room_whispers: &'a [tavern_domain::WhisperRecord],
+        allow_nudge: bool,
     ) -> BoxFuture<'a, Result<DmTurnOutput>> {
         Box::pin(async move {
             let extra_lore_ids = if self.decision_gate.is_enabled() {
@@ -236,9 +238,9 @@ impl LlmProvider for OpenAiLlmProvider {
             } else {
                 Vec::new()
             };
-            let mut messages = build_dm_messages_with_extra_lore(
+            let mut messages = build_dm_messages_full(
                 &self.prompts_dir, scenario, room, players, recent_turns, actions, world_echoes,
-                &extra_lore_ids,
+                room_whispers, &extra_lore_ids,
             );
             let (raw, usage) = self.chat_completion(&self.model, messages.clone(), true, None).await?;
             let (mut reply, was_json) = parse_dm_reply_checked(&raw, room);
@@ -298,9 +300,12 @@ impl LlmProvider for OpenAiLlmProvider {
             if turns.is_empty() {
                 return Ok(SummaryOutput { summary: existing_summary.to_string(), usage: LlmUsage::default() });
             }
+            let from_turn = turns.first().map(|t| t.turn_number).unwrap_or(1);
+            let to_turn = turns.last().map(|t| t.turn_number).unwrap_or(from_turn);
             let messages = build_summary_messages(&self.prompts_dir, scenario, existing_summary, turns);
-            let (summary, usage) = self.chat_completion(&self.summary_model, messages, false, None).await?;
-            Ok(SummaryOutput { summary: summary.trim().to_string(), usage })
+            let (raw, usage) = self.chat_completion(&self.summary_model, messages, true, Some(800)).await?;
+            let merged = merge_chapter_memory(existing_summary, &raw, from_turn, to_turn);
+            Ok(SummaryOutput { summary: merged, usage })
         })
     }
 

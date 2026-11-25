@@ -307,6 +307,7 @@ fn add_custom_lore(
         title,
         keywords,
         always_active: false,
+        player_visible: false,
         priority: 95,
         content,
     });

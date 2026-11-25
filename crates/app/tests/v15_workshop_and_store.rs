@@ -362,7 +362,7 @@ struct FailingValidationLlm;
 impl LlmProvider for FailingValidationLlm {
     fn generate_turn<'a>(
         &'a self, _: &'a Scenario, _: &'a RoomState, _: &'a [Player], _: &'a [TurnRecord],
-        _: &'a [PendingAction], _: &'a [WorldEcho], _: bool,
+        _: &'a [PendingAction], _: &'a [WorldEcho], _: &'a [tavern_domain::WhisperRecord], _: bool,
     ) -> BoxFuture<'a, anyhow::Result<DmTurnOutput>> {
         Box::pin(async { anyhow::bail!("unused") })
     }

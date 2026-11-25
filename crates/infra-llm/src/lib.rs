@@ -2,6 +2,7 @@ pub mod generator;
 mod generator_helpers;
 pub mod jev;
 pub mod jev_questions;
+pub mod memory;
 pub mod mock;
 pub mod parser;
 pub mod prompt_ext;

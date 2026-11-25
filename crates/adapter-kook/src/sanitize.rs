@@ -1,4 +1,4 @@
-use tavern_domain::{EngineResponse, WorldBulletin};
+use tavern_domain::{EndingBanner, EngineResponse, LiveStoryHud, SuggestedCheck, WorldBulletin};
 
 /// Returns true when KOOK rejects a message via its content moderation filter (`code=40011`).
 pub fn is_kook_moderation_error(err: &anyhow::Error) -> bool {
@@ -44,6 +44,16 @@ pub fn soften_kook_text(input: &str) -> String {
     out
 }
 
+pub fn soften_live_hud(hud: &LiveStoryHud) -> LiveStoryHud {
+    LiveStoryHud {
+        turn_number: hud.turn_number,
+        rule_badge: hud.rule_badge.clone(),
+        party_lines: hud.party_lines.iter().map(|s| soften_kook_text(s)).collect(),
+        turn_progress: hud.turn_progress.iter().map(|s| soften_kook_text(s)).collect(),
+        opening_roles: hud.opening_roles.clone(),
+    }
+}
+
 pub fn soften_response(resp: &EngineResponse) -> EngineResponse {
     match resp {
         EngineResponse::StoryTurn {
@@ -67,12 +77,16 @@ pub fn soften_response(resp: &EngineResponse) -> EngineResponse {
             scene_title: soften_kook_text(scene_title),
             location: soften_kook_text(location),
             world_time: world_time.clone(),
-            act_badge: act_badge.clone(),
+            act_badge: act_badge.as_deref().map(soften_kook_text),
             narrative: soften_kook_text(narrative),
             state_changes: state_changes.iter().map(|s| soften_kook_text(s)).collect(),
             whisper_hints: whisper_hints.iter().map(|s| soften_kook_text(s)).collect(),
             suggested_actions: suggested_actions.iter().map(|s| soften_kook_text(s)).collect(),
-            suggested_check: suggested_check.clone(),
+            suggested_check: suggested_check.as_ref().map(|c| SuggestedCheck {
+                stat: c.stat.clone(),
+                dc: c.dc,
+                reason: soften_kook_text(&c.reason),
+            }),
             world_bulletin: world_bulletin.as_ref().map(|b| WorldBulletin {
                 turn_number: b.turn_number,
                 masthead: soften_kook_text(&b.masthead),
@@ -80,7 +94,12 @@ pub fn soften_response(resp: &EngineResponse) -> EngineResponse {
                 body: soften_kook_text(&b.body),
                 faction: soften_kook_text(&b.faction),
             }),
-            ending_reached: ending_reached.clone(),
+            ending_reached: ending_reached.as_ref().map(|e| EndingBanner {
+                id: e.id.clone(),
+                title: soften_kook_text(&e.title),
+                kind: e.kind.clone(),
+                newly_unlocked: e.newly_unlocked,
+            }),
             direct_messages: direct_messages.clone(),
         },
         EngineResponse::Notice { title, body, theme, show_actions } => EngineResponse::Notice {
@@ -94,7 +113,7 @@ pub fn soften_response(resp: &EngineResponse) -> EngineResponse {
 }
 
 /// Guaranteed-deliverable fallback StoryTurn card if KOOK STILL blocks a narrative with `40011`
-/// even after softening: preserves all live turn buttons, HUD, and progress so the table NEVER stalls!
+/// even after softening: preserves all live turn buttons and progress so the table NEVER stalls!
 pub fn safe_story_turn_fallback(resp: &EngineResponse) -> EngineResponse {
     let EngineResponse::StoryTurn {
         channel_id,
@@ -104,7 +123,6 @@ pub fn safe_story_turn_fallback(resp: &EngineResponse) -> EngineResponse {
         world_time,
         act_badge,
         suggested_actions,
-        suggested_check,
         ending_reached,
         ..
     } = resp
@@ -115,9 +133,9 @@ pub fn safe_story_turn_fallback(resp: &EngineResponse) -> EngineResponse {
         channel_id: channel_id.clone(),
         turn_number: *turn_number,
         scene_title: format!("第 {turn_number} 回合 · 剧情已安全入账"),
-        location: location.clone(),
+        location: soften_kook_text(location),
         world_time: world_time.clone(),
-        act_badge: act_badge.clone(),
+        act_badge: act_badge.as_deref().map(soften_kook_text),
         narrative: format!(
             "⚠️ 本轮《{}》部分措辞触发了 KOOK 平台内容审核拦截（40011），但**本轮剧情、道具、线索与掷骰结果已完整保存入账**！\n\n👉 你可以点 **「🪪 我的角色卡」** / 悬浮 HUD 查看最新背包与前情提要，直接点下方按钮继续推演，或点「🎛️ 面板/设置」→「↩️ 回档上轮」换一种表述重演喵！",
             soften_kook_text(scene_title)
@@ -125,9 +143,14 @@ pub fn safe_story_turn_fallback(resp: &EngineResponse) -> EngineResponse {
         state_changes: Vec::new(),
         whisper_hints: Vec::new(),
         suggested_actions: suggested_actions.iter().map(|s| soften_kook_text(s)).collect(),
-        suggested_check: suggested_check.clone(),
+        suggested_check: None,
         world_bulletin: None,
-        ending_reached: ending_reached.clone(),
+        ending_reached: ending_reached.as_ref().map(|e| EndingBanner {
+            id: e.id.clone(),
+            title: soften_kook_text(&e.title),
+            kind: e.kind.clone(),
+            newly_unlocked: e.newly_unlocked,
+        }),
         direct_messages: Vec::new(),
     }
 }

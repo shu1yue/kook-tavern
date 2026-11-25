@@ -305,6 +305,7 @@
 
   const $ = (id) => (pipWin && !pipWin.closed ? pipWin.document.getElementById(id) : null) || document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const cut = (s, n) => Array.from(String(s ?? '')).slice(0, n).join('');
   const fmtMod = (v) => (v >= 0 ? `+${v}` : `${v}`);
   const tierColor = (t) => ({ ally: '#3fb950', neutral: '#d29922', wary: '#f0883e', hostile: '#f85149' }[t] || '#d29922');
 
@@ -339,6 +340,9 @@
         if (page !== 'whispers') unreadWhispers += diff;
         seenWhispers = wc;
         toast(`🤫 收到 ${diff} 条新秘密纸条！点底部「🤫 纸条」查看`, 6000);
+      } else if (wc < seenWhispers) {
+        seenWhispers = wc;
+        unreadWhispers = 0;
       }
       state = next;
       render();
@@ -405,7 +409,7 @@
     let html = `
       <div class="card focus">
         <div class="id-row">
-          <div class="avatar">${esc((m.character_name || '冒').slice(0, 1))}</div>
+          <div class="avatar">${esc(cut(m.character_name || '冒', 1))}</div>
           <div style="min-width:0;flex:1">
             <div class="id-name">${esc(m.character_name)} <span class="chip sm accent">${esc(m.role_desc || '冒险者')} Lv.${m.level || 1}</span></div>
             <div class="id-meta">📍 ${esc(m.location)}</div>
@@ -484,18 +488,18 @@
         const col = n.kind === 'mate' ? '#38bdf8' : tierColor(n.tier);
         const sel = openNpcKey === n.key;
         edges += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${col}" stroke-opacity="${sel ? 0.95 : 0.45}" stroke-width="${sel ? 2.5 : 1.5}" ${n.kind === 'mate' ? 'stroke-dasharray="4 3"' : ''}/>`;
-        edges += `<text x="${((cx+x)/2).toFixed(1)}" y="${((cy+y)/2 - 3).toFixed(1)}" text-anchor="middle" fill="${col}" font-size="9">${esc(n.sub.slice(0, 4))}</text>`;
+        edges += `<text x="${((cx+x)/2).toFixed(1)}" y="${((cy+y)/2 - 3).toFixed(1)}" text-anchor="middle" fill="${col}" font-size="9">${esc(cut(n.sub, 4))}</text>`;
         circles += `<g class="g-node" data-toggle="${esc(n.key)}">` +
           (sel ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="21" fill="none" stroke="${col}" stroke-width="2" class="pulse-ring"/>` : '') +
           `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="17" fill="#181310" stroke="${col}" stroke-width="${sel ? 2.4 : 1.6}"/>` +
-          `<text x="${x.toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="middle" fill="#f3ece4" font-size="10.5" font-weight="700">${esc(n.name.slice(0, 3))}</text>` +
-          `<text x="${x.toFixed(1)}" y="${(y+28).toFixed(1)}" text-anchor="middle" fill="#cbd5e1" font-size="9.5">${esc(n.name.slice(0, 6))}</text>` +
+          `<text x="${x.toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="middle" fill="#f3ece4" font-size="10.5" font-weight="700">${esc(cut(n.name, 3))}</text>` +
+          `<text x="${x.toFixed(1)}" y="${(y+28).toFixed(1)}" text-anchor="middle" fill="#cbd5e1" font-size="9.5">${esc(cut(n.name, 6))}</text>` +
           `</g>`;
       });
       html += `<div class="graph-box"><svg class="graph-svg" viewBox="0 0 360 212">
         ${edges}
         <circle cx="${cx}" cy="${cy}" r="22" fill="#2a1c0e" stroke="var(--accent)" stroke-width="2.4"/>
-        <text x="${cx}" y="${cy+4}" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="800">${esc(state.me.character_name.slice(0, 4))}</text>
+        <text x="${cx}" y="${cy+4}" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="800">${esc(cut(state.me.character_name, 4))}</text>
         ${circles}
       </svg></div>`;
     }
@@ -661,12 +665,12 @@
           }).join('');
           const nodes = mp.nodes.map((n) => {
             const x = n.x * 3.4 + 10, y = n.y * 2.1 + 12;
-            const cur = n.is_room_current;
+            const cur = n.id === mp.active_node_id;
             const fill = cur ? 'var(--accent)' : n.visited ? '#3fb950' : '#475569';
             return `<g>
               ${cur ? `<circle cx="${x}" cy="${y}" r="14" fill="none" stroke="var(--accent)" stroke-width="2" class="pulse-ring"/>` : ''}
               <circle cx="${x}" cy="${y}" r="${cur ? 9 : 7}" fill="${fill}" stroke="#0c0a09" stroke-width="2"/>
-              <text x="${x}" y="${y + 19}" text-anchor="middle" fill="${cur ? 'var(--accent)' : '#cbd5e1'}" font-size="9.5" font-weight="${cur ? 700 : 500}">${esc(n.name.slice(0, 7))}</text>
+              <text x="${x}" y="${y + 19}" text-anchor="middle" fill="${cur ? 'var(--accent)' : '#cbd5e1'}" font-size="9.5" font-weight="${cur ? 700 : 500}">${esc(cut(n.name, 7))}</text>
             </g>`;
           }).join('');
           html += `<div class="graph-box"><svg class="graph-svg" viewBox="0 0 360 238">${edges}${nodes}</svg></div>
@@ -689,13 +693,21 @@
         }
       } else {
         const turns = state.recent_turns || [];
+        const sumTxt = (state.summary || '').trim();
+        if (sumTxt) {
+          const upto = state.summary_upto_turn ? `截至第 ${state.summary_upto_turn} 轮` : '长期记忆本';
+          html += `<div class="card focus">
+            <div class="label"><span>📜 历史前情总览</span><span>${esc(upto)}</span></div>
+            <div style="font-size:12.5px;white-space:pre-line;line-height:1.65">${esc(sumTxt)}</div>
+          </div>`;
+        }
         html += turns.length
           ? turns.map(t => `<div class="card">
               <div class="goal-title" style="font-size:13px">第 ${t.turn_number} 轮 · ${esc(t.scene_title)}</div>
               <div class="muted" style="margin-bottom:5px">📍 ${esc(t.location)} ｜ 🕒 ${esc(t.world_time)}</div>
               <div style="font-size:12.5px">${esc(t.narrative_excerpt)}</div>
             </div>`).join('')
-          : `<div class="empty">推进第 1 回合后会在这里自动留存防忘词提要喵！</div>`;
+          : (sumTxt ? '' : `<div class="empty">推进第 1 回合后会在这里自动留存防忘词提要喵！</div>`);
       }
     }
 
@@ -750,7 +762,9 @@
   }
 
   function startSse() {
+    let openedOnce = false;
     const es = new EventSource(sseUrl);
+    es.onopen = () => { if (openedOnce) fetchHud(); openedOnce = true; };
     es.addEventListener('update', () => fetchHud());
     es.addEventListener('reset', () => {
       setDot('err');

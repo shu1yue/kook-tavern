@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -9,6 +9,32 @@ use axum::http::HeaderMap;
 const RATE_WINDOW: Duration = Duration::from_secs(60);
 const MAX_REQUESTS_PER_WINDOW: u32 = 120;
 const MAX_TRACKED_IPS: usize = 2048;
+
+/// Extracts the real client IP for per-visitor rate limiting without allowing IP spoofing:
+/// - ONLY when the TCP peer is loopback (trusted local `cloudflared` tunnel / reverse proxy),
+///   honor `CF-Connecting-IP` (or first valid `X-Forwarded-For` hop);
+/// - For non-loopback peers, strictly ignore forwarded headers and use `addr.ip()`.
+pub fn extract_client_ip(addr: SocketAddr, headers: &HeaderMap) -> IpAddr {
+    if !addr.ip().is_loopback() {
+        return addr.ip();
+    }
+    if let Some(ip) = headers
+        .get("cf-connecting-ip")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.trim().parse::<IpAddr>().ok())
+    {
+        return ip;
+    }
+    if let Some(ip) = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .and_then(|s| s.trim().parse::<IpAddr>().ok())
+    {
+        return ip;
+    }
+    addr.ip()
+}
 
 /// Constant-time byte comparison to prevent timing side-channels on room tokens.
 pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -85,5 +111,13 @@ mod tests {
             assert!(limiter.allow(ip));
         }
         assert!(!limiter.allow(ip));
+
+        // Loopback peer (cloudflared tunnel) honors CF-Connecting-IP; external peer NEVER trusts spoofed headers!
+        let mut hdrs = HeaderMap::new();
+        hdrs.insert("cf-connecting-ip", HeaderValue::from_static("203.0.113.42"));
+        let local_peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 50000);
+        let public_peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(198, 51, 100, 7)), 50000);
+        assert_eq!(extract_client_ip(local_peer, &hdrs), IpAddr::V4(Ipv4Addr::new(203, 0, 113, 42)));
+        assert_eq!(extract_client_ip(public_peer, &hdrs), IpAddr::V4(Ipv4Addr::new(198, 51, 100, 7)));
     }
 }

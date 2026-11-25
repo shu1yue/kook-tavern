@@ -287,6 +287,7 @@ mod tests {
                 title: "规则".into(),
                 keywords: vec![],
                 always_active: true,
+                player_visible: false,
                 priority: 100,
                 content: "不要回头".into(),
             }],

@@ -270,16 +270,19 @@ impl RoomStore for SqliteRoomStore {
     fn update_summary_cas(
         &self,
         channel_id: &str,
-        expected_version: u64,
+        expected_prev_upto: u32,
+        expected_created_at: &str,
         summary: &str,
         summary_upto_turn: u32,
     ) -> Result<bool> {
         self.with_conn(|conn| {
             Ok(conn.execute(
-                "UPDATE rooms SET summary = ?3, summary_upto_turn = ?4, updated_at = ?5 WHERE channel_id = ?1 AND state_version = ?2",
+                "UPDATE rooms SET summary = ?4, summary_upto_turn = ?5, updated_at = ?6 \
+                 WHERE channel_id = ?1 AND summary_upto_turn = ?2 AND created_at = ?3 AND turn_number >= ?5",
                 params![
                     channel_id,
-                    expected_version as i64,
+                    expected_prev_upto,
+                    expected_created_at,
                     summary,
                     summary_upto_turn,
                     Utc::now().to_rfc3339(),
@@ -292,13 +295,20 @@ impl RoomStore for SqliteRoomStore {
         self.with_conn(|conn| pop_and_restore_snapshot_tx(conn, channel_id))
     }
 
-    fn list_player_whispers(
-        &self,
-        channel_id: &str,
-        user_id: &str,
-        limit: usize,
-    ) -> Result<Vec<WhisperRecord>> {
+    fn list_player_whispers(&self, channel_id: &str, user_id: &str, limit: usize) -> Result<Vec<WhisperRecord>> {
         self.with_conn(|conn| list_player_whispers_query(conn, channel_id, user_id, limit))
+    }
+
+    fn list_room_whispers(&self, channel_id: &str, limit: usize) -> Result<Vec<WhisperRecord>> {
+        self.with_conn(|conn| crate::m1_ops::list_room_whispers_query(conn, channel_id, limit))
+    }
+
+    fn get_active_story_card_msg(&self, channel_id: &str) -> Result<Option<(String, u32)>> {
+        self.with_conn(|conn| crate::m1_ops::get_active_story_card_msg_query(conn, channel_id))
+    }
+
+    fn set_active_story_card_msg(&self, channel_id: &str, msg_id: Option<(&str, u32)>) -> Result<()> {
+        self.with_conn(|conn| crate::m1_ops::set_active_story_card_msg_query(conn, channel_id, msg_id))
     }
 
     fn record_usage(&self, channel_id: &str, usage: &LlmUsage, estimated_cny: f64) -> Result<()> {

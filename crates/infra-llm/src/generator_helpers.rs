@@ -191,13 +191,13 @@ pub(crate) fn build_mock_forged_scenario(req: &ForgeScenarioRequest) -> Scenario
         worldbook: vec![
             WorldbookEntry {
                 id: "wb_plot_core".into(), title: "故事核心背景".into(),
-                keywords: vec![short_name.clone()], always_active: req.base_pack.is_none(), priority: 99,
+                keywords: vec![short_name.clone()], always_active: req.base_pack.is_none(), player_visible: true, priority: 99,
                 content: format!("本局围绕「{}」展开，危机层层升级。", d.premise.trim()),
             },
             WorldbookEntry {
                 id: "wb_plot_secret".into(), title: "主线隐藏真相".into(),
                 keywords: vec!["真相".into(), "秘密".into(), "线索".into()],
-                always_active: false, priority: 92,
+                always_active: false, player_visible: false, priority: 92,
                 content: format!("幕后主使正借「{}」掩盖真正的图谋，侦查成功者可获秘密纸条。", short_name),
             },
         ],

@@ -2,6 +2,7 @@ use anyhow::Result;
 use tavern_domain::{CardTheme, EngineResponse, IncomingMessage, RoomEvent};
 
 use crate::commands::check::ended_room_notice;
+use crate::commands::party_helpers::build_drop_in_briefing;
 use crate::engine::GameEngine;
 
 pub fn cmd_role_menu(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {
@@ -70,6 +71,7 @@ pub fn handle_quick_join(engine: &GameEngine, msg: &IncomingMessage) -> Result<E
     let Some(scenario) = engine.scenarios.get(&room.scenario_id) else {
         return Ok(EngineResponse::Ignore);
     };
+    let existed = engine.store.get_player(&msg.channel_id, &msg.user_id)?.is_some();
     let Some(player) = engine.store.ensure_player_atomic(
         &msg.channel_id,
         &msg.user_id,
@@ -88,6 +90,9 @@ pub fn handle_quick_join(engine: &GameEngine, msg: &IncomingMessage) -> Result<E
         channel_id: msg.channel_id.clone(),
         turn_number: room.turn_number,
     });
+    if !existed && room.turn_number >= 1 {
+        return Ok(build_drop_in_briefing(engine, &room, &scenario, &player, &msg.user_id));
+    }
     Ok(EngineResponse::Notice {
         title: format!("⚔️ 已就位：{}", player.character_name),
         body: format!(
@@ -171,6 +176,10 @@ pub fn handle_pick_role(
             theme: CardTheme::Success,
             show_actions: true,
         });
+    }
+
+    if !switched && room.turn_number >= 1 {
+        return Ok(build_drop_in_briefing(engine, &room, &scenario, &player, &msg.user_id));
     }
 
     let mut extra = String::new();

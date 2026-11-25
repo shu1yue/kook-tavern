@@ -3,11 +3,15 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use tavern_domain::{
-    NarrativeStyle, PendingAction, Player, RoomState, Scenario, TurnRecord, WorldEcho,
-    always_active_worldbook, format_batched_actions,
+    NarrativeStyle, PendingAction, Player, RoomState, Scenario, TurnRecord, WhisperRecord,
+    WorldEcho, always_active_worldbook, format_batched_actions,
 };
 use tracing::info;
 
+use crate::memory::{
+    detect_drop_in_players, format_dm_whisper_ledger, format_focused_clues,
+    render_memory_book_for_prompt, split_memory_book,
+};
 use crate::prompt_ext::{
     build_lore_corpus, format_act_progress, format_dynamic_director_sections,
     format_player_dnd_tail, format_static_rules_and_map, merge_dynamic_worldbook,
@@ -59,14 +63,20 @@ pub fn build_dm_messages(
 
 #[allow(clippy::too_many_arguments)]
 pub fn build_dm_messages_with_extra_lore(
-    prompts_dir: &Path,
-    scenario: &Scenario,
-    room: &RoomState,
-    players: &[Player],
-    recent_turns: &[TurnRecord],
-    actions: &[PendingAction],
-    world_echoes: &[WorldEcho],
+    prompts_dir: &Path, scenario: &Scenario, room: &RoomState, players: &[Player],
+    recent_turns: &[TurnRecord], actions: &[PendingAction], world_echoes: &[WorldEcho],
     extra_lore_ids: &[String],
+) -> Vec<ChatMessage> {
+    build_dm_messages_full(
+        prompts_dir, scenario, room, players, recent_turns, actions, world_echoes, &[], extra_lore_ids,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_dm_messages_full(
+    prompts_dir: &Path, scenario: &Scenario, room: &RoomState, players: &[Player],
+    recent_turns: &[TurnRecord], actions: &[PendingAction], world_echoes: &[WorldEcho],
+    room_whispers: &[WhisperRecord], extra_lore_ids: &[String],
 ) -> Vec<ChatMessage> {
     let sys_template = load_prompt_file(prompts_dir, "dm_system.md", DEFAULT_DM_SYSTEM);
     let style_guide = match room.narrative_style {
@@ -133,22 +143,23 @@ pub fn build_dm_messages_with_extra_lore(
         None
     };
 
-    let director_ext = format_dynamic_director_sections(
-        scenario,
-        room,
-        players,
-        recent_turns,
-        actions,
-        world_echoes,
+    let mut director_ext = format_dynamic_director_sections(
+        scenario, room, players, recent_turns, actions, world_echoes,
     );
+    let newcomers = detect_drop_in_players(room, players, recent_turns, actions);
+    if !newcomers.is_empty() {
+        director_ext.push_str(&format!(
+            "\n\n【半路空降新队友登场】角色「{}」本轮首次加入本局，请在剧情中自然安排一个符合当前地点的合理出场与汇合桥段！",
+            newcomers.join("、")
+        ));
+    }
+    let whisper_ledger = format_dm_whisper_ledger(room_whispers, 20);
+    if !whisper_ledger.is_empty() {
+        director_ext.push_str("\n\n");
+        director_ext.push_str(&whisper_ledger);
+    }
     let dynamic_block = format_dynamic_turn_prompt(
-        scenario,
-        room,
-        players,
-        &dynamic_lore,
-        &batched_input,
-        opening_recap,
-        &director_ext,
+        scenario, room, players, &dynamic_lore, &lore_corpus, &batched_input, opening_recap, &director_ext,
     );
     messages.push(ChatMessage {
         role: "user".to_string(),
@@ -175,31 +186,33 @@ pub fn build_summary_messages(
         ));
     }
 
+    let (_, active_notebook) = split_memory_book(existing_summary);
+    let notebook_hint = if !active_notebook.is_empty() {
+        active_notebook
+    } else if !existing_summary.trim().is_empty() {
+        existing_summary.chars().take(360).collect()
+    } else {
+        "（尚无未解伏笔便签）".to_string()
+    };
+
     vec![
-        ChatMessage {
-            role: "system".to_string(),
-            content: system_prompt,
-        },
+        ChatMessage { role: "system".to_string(), content: system_prompt },
         ChatMessage {
             role: "user".to_string(),
             content: format!(
-                "【既有前情提要】\n{}\n\n【需要并入的新增回合】\n{}",
-                if existing_summary.trim().is_empty() {
-                    "（无）"
-                } else {
-                    existing_summary
-                },
-                history_blob
+                "【当前未解伏笔便签（已解决请删去，未解决请保留或更新）】\n{notebook_hint}\n\n【需要封卷的新增回合】\n{history_blob}"
             ),
         },
     ]
 }
 
+#[allow(clippy::too_many_arguments)]
 fn format_dynamic_turn_prompt(
     scenario: &Scenario,
     room: &RoomState,
     players: &[Player],
     dynamic_lore: &[&tavern_domain::WorldbookEntry],
+    recall_corpus: &str,
     batched_input: &str,
     opening_recap: Option<&str>,
     director_ext: &str,
@@ -252,16 +265,7 @@ fn format_dynamic_turn_prompt(
             .join("\n")
     };
 
-    let clues_block = if room.clues.is_empty() {
-        "（尚未发现明确线索）".to_string()
-    } else {
-        room.clues
-            .iter()
-            .enumerate()
-            .map(|(i, c)| format!("{}. {}", i + 1, c))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
+    let clues_block = format_focused_clues(&room.clues, recall_corpus, 25, 12);
 
     let npc_block = if room.npc_states.is_empty() {
         "（暂无已记录态度的关键 NPC）".to_string()
@@ -269,11 +273,7 @@ fn format_dynamic_turn_prompt(
         room.npc_states
             .iter()
             .map(|n| {
-                let nloc = if n.location.trim().is_empty() {
-                    String::new()
-                } else {
-                    format!(" @{}", n.location.trim())
-                };
+                let nloc = if n.location.trim().is_empty() { String::new() } else { format!(" @{}", n.location.trim()) };
                 format!("- {}（{}{}）：{}", n.name, n.attitude, nloc, n.status)
             })
             .collect::<Vec<_>>()
@@ -283,18 +283,10 @@ fn format_dynamic_turn_prompt(
     let lore_block = if dynamic_lore.is_empty() {
         "（无新触发的隐藏世界书）".to_string()
     } else {
-        dynamic_lore
-            .iter()
-            .map(|e| format!("### {}\n{}", e.title, e.content.trim()))
-            .collect::<Vec<_>>()
-            .join("\n\n")
+        dynamic_lore.iter().map(|e| format!("### {}\n{}", e.title, e.content.trim())).collect::<Vec<_>>().join("\n\n")
     };
 
-    let summary_block = if room.summary.trim().is_empty() {
-        "（开局阶段，尚无历史摘要）".to_string()
-    } else {
-        room.summary.clone()
-    };
+    let summary_block = render_memory_book_for_prompt(&room.summary, recall_corpus, 6);
 
     let opening_section = opening_recap
         .map(|o| format!("【刚刚发生的开场场景】\n{o}\n\n"))

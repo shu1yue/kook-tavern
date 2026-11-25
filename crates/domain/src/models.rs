@@ -102,12 +102,12 @@ pub struct StarterCharacterDefaults {
 pub struct WorldbookEntry {
     pub id: String,
     pub title: String,
-    #[serde(default)]
-    pub keywords: Vec<String>,
-    #[serde(default)]
-    pub always_active: bool,
-    #[serde(default = "default_priority")]
-    pub priority: i32,
+    #[serde(default)] pub keywords: Vec<String>,
+    #[serde(default)] pub always_active: bool,
+    /// Explicitly marks spoiler-free player handouts safe to display in the Floating HUD Glossary.
+    /// Defaults to `false` (fail-closed) so DM-only `always_active` truths NEVER leak to players!
+    #[serde(default)] pub player_visible: bool,
+    #[serde(default = "default_priority")] pub priority: i32,
     pub content: String,
 }
 

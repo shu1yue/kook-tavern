@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use axum::Json;
 use axum::extract::{ConnectInfo, Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Response};
 use futures_util::stream::{self, Stream};
@@ -16,7 +16,7 @@ use tracing::warn;
 
 use crate::WebState;
 use crate::hud_views::build_player_hud_view;
-use crate::security::{constant_time_eq, security_headers};
+use crate::security::{constant_time_eq, extract_client_ip, security_headers};
 use crate::views::build_room_public_view;
 
 const DASHBOARD_HTML: &str = include_str!("../assets/dashboard.html");
@@ -46,9 +46,10 @@ struct HealthResp {
 
 pub async fn landing_page(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<WebState>,
 ) -> Response {
-    if !state.rate_limiter.allow(addr.ip()) {
+    if !state.rate_limiter.allow(extract_client_ip(addr, &headers)) {
         return too_many_requests();
     }
     (StatusCode::OK, security_headers(), Html(LANDING_HTML)).into_response()
@@ -61,18 +62,19 @@ pub async fn healthz() -> impl IntoResponse {
         Json(HealthResp {
             status: "ok",
             service: "kook-tavern-dm",
-            version: "1.7.4",
+            version: "1.8.0",
         }),
     )
 }
 
 pub async fn room_page(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<WebState>,
     Path(channel_id): Path<String>,
     Query(q): Query<TokenQuery>,
 ) -> Response {
-    if !state.rate_limiter.allow(addr.ip()) {
+    if !state.rate_limiter.allow(extract_client_ip(addr, &headers)) {
         return too_many_requests();
     }
     if authorize_room(&state, &channel_id, &q.token).is_none() {
@@ -83,11 +85,12 @@ pub async fn room_page(
 
 pub async fn room_api(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<WebState>,
     Path(channel_id): Path<String>,
     Query(q): Query<TokenQuery>,
 ) -> Response {
-    if !state.rate_limiter.allow(addr.ip()) {
+    if !state.rate_limiter.allow(extract_client_ip(addr, &headers)) {
         return too_many_requests();
     }
     let Some(room) = authorize_room(&state, &channel_id, &q.token) else {
@@ -115,11 +118,12 @@ pub async fn room_api(
 
 pub async fn room_events_sse(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<WebState>,
     Path(channel_id): Path<String>,
     Query(q): Query<TokenQuery>,
 ) -> Response {
-    if !state.rate_limiter.allow(addr.ip()) {
+    if !state.rate_limiter.allow(extract_client_ip(addr, &headers)) {
         return too_many_requests();
     }
     if authorize_room(&state, &channel_id, &q.token).is_none() {
@@ -185,11 +189,12 @@ fn make_sse_stream(
 
 pub async fn hud_page(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<WebState>,
     Path(channel_id): Path<String>,
     Query(q): Query<HudQuery>,
 ) -> Response {
-    if !state.rate_limiter.allow(addr.ip()) {
+    if !state.rate_limiter.allow(extract_client_ip(addr, &headers)) {
         return too_many_requests();
     }
     if authorize_hud_player(&state, &channel_id, &q.u, &q.ptoken).is_none() {
@@ -200,11 +205,12 @@ pub async fn hud_page(
 
 pub async fn hud_api(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<WebState>,
     Path(channel_id): Path<String>,
     Query(q): Query<HudQuery>,
 ) -> Response {
-    if !state.rate_limiter.allow(addr.ip()) {
+    if !state.rate_limiter.allow(extract_client_ip(addr, &headers)) {
         return too_many_requests();
     }
     let Some(room) = authorize_hud_player(&state, &channel_id, &q.u, &q.ptoken) else {
@@ -233,11 +239,12 @@ pub async fn hud_api(
 
 pub async fn hud_events_sse(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(state): State<WebState>,
     Path(channel_id): Path<String>,
     Query(q): Query<HudQuery>,
 ) -> Response {
-    if !state.rate_limiter.allow(addr.ip()) {
+    if !state.rate_limiter.allow(extract_client_ip(addr, &headers)) {
         return too_many_requests();
     }
     if authorize_hud_player(&state, &channel_id, &q.u, &q.ptoken).is_none() {
@@ -293,7 +300,7 @@ fn authorize_room(state: &WebState, channel_id: &str, token: &str) -> Option<Roo
         return None;
     }
     let room = state.store.get_room(channel_id).ok()??;
-    if room.web_token.is_empty() {
+    if !room.active || room.web_token.is_empty() {
         return None;
     }
     if constant_time_eq(room.web_token.as_bytes(), token.trim().as_bytes()) {

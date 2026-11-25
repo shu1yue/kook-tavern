@@ -19,6 +19,7 @@ impl LlmProvider for MockLlmProvider {
         _recent_turns: &'a [TurnRecord],
         actions: &'a [PendingAction],
         world_echoes: &'a [WorldEcho],
+        _room_whispers: &'a [tavern_domain::WhisperRecord],
         _allow_nudge: bool,
     ) -> BoxFuture<'a, Result<DmTurnOutput>> {
         Box::pin(async move {

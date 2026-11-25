@@ -149,7 +149,8 @@ pub trait RoomStore: DndStore + WorkshopStore + Send + Sync {
     fn update_summary_cas(
         &self,
         channel_id: &str,
-        expected_version: u64,
+        expected_prev_upto: u32,
+        expected_created_at: &str,
         summary: &str,
         summary_upto_turn: u32,
     ) -> Result<bool>;
@@ -162,6 +163,10 @@ pub trait RoomStore: DndStore + WorkshopStore + Send + Sync {
         user_id: &str,
         limit: usize,
     ) -> Result<Vec<WhisperRecord>>;
+
+    fn list_room_whispers(&self, channel_id: &str, limit: usize) -> Result<Vec<WhisperRecord>>;
+    fn get_active_story_card_msg(&self, channel_id: &str) -> Result<Option<(String, u32)>>;
+    fn set_active_story_card_msg(&self, channel_id: &str, msg_id: Option<(&str, u32)>) -> Result<()>;
 
     fn record_usage(&self, channel_id: &str, usage: &LlmUsage, estimated_cny: f64) -> Result<()>;
     fn get_room_usage(&self, channel_id: &str) -> Result<UsageSummary>;
@@ -190,6 +195,7 @@ pub trait LlmProvider: Send + Sync {
         recent_turns: &'a [TurnRecord],
         actions: &'a [PendingAction],
         world_echoes: &'a [WorldEcho],
+        room_whispers: &'a [WhisperRecord],
         allow_nudge: bool,
     ) -> BoxFuture<'a, Result<DmTurnOutput>>;
 

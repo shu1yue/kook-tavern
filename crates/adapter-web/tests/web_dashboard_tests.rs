@@ -92,8 +92,8 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
         }],
         check_system: tavern_domain::CheckSystem::D20,
         last_rest_turn: 0,
-        summary: String::new(),
-        summary_upto_turn: 0,
+        summary: "【编年史封卷（永不覆写）】\n### 卷 1（第 1~2 轮）· 酒馆密会\n老雷恩交出钥匙。".into(),
+        summary_upto_turn: 2,
         active: true,
         created_at: now,
         updated_at: now,
@@ -300,8 +300,8 @@ async fn player_floating_hud_enforces_hmac_isolation_spoiler_safety_and_live_sse
         bulletins: vec![],
         check_system: tavern_domain::CheckSystem::TwoD6,
         last_rest_turn: 0,
-        summary: String::new(),
-        summary_upto_turn: 0,
+        summary: "【编年史封卷（永不覆写）】\n### 卷 1（第 1~2 轮）· 酒馆密会\n老雷恩交出钥匙。".into(),
+        summary_upto_turn: 2,
         active: true,
         created_at: now,
         updated_at: now,
@@ -379,6 +379,35 @@ async fn player_floating_hud_enforces_hmac_isolation_spoiler_safety_and_live_sse
             )
             .unwrap()
     );
+    // Add a newer Turn 3 whisper for Alice to verify HUD surfaces newest whisper FIRST!
+    let lease3 = store.try_begin_resolving("chan_hud_1").unwrap().unwrap();
+    let snap3 = tavern_domain::RoomSnapshot {
+        room: lease3.room.clone(),
+        players: seeded_players.clone(),
+        pending_actions: vec![],
+    };
+    let mut updated_room3 = lease3.room.clone();
+    updated_room3.turn_number = 3;
+    updated_room3.turn_phase = TurnPhase::Collecting;
+    let mut turn_rec3 = turn_rec.clone();
+    turn_rec3.turn_number = 3;
+    assert!(
+        store
+            .commit_turn_cas(
+                lease3.expected_version,
+                &snap3,
+                &updated_room3,
+                &seeded_players,
+                &turn_rec3,
+                3,
+                &[tavern_domain::DirectMessageOut {
+                    user_id: "u_alice".into(),
+                    player_name: "魂芳白".into(),
+                    content: "ALICE_NEWER_TURN3_SECRET".into(),
+                }],
+            )
+            .unwrap()
+    );
 
     let alice_tok = tavern_core::hud_token::sign_hud_token(
         &state.hud_secret,
@@ -420,6 +449,12 @@ async fn player_floating_hud_enforces_hmac_isolation_spoiler_safety_and_live_sse
     assert!(body.contains("老雷恩"));
     assert!(body.contains("\"attitude_tier\":\"ally\""));
     assert!(body.contains("ALICE_ONLY_BELLTOWER_SECRET"));
+    assert!(body.contains("ALICE_NEWER_TURN3_SECRET"));
+    assert!(body.contains("酒馆密会"));
+    assert!(body.contains("\"summary_upto_turn\":2"));
+    let idx_t3 = body.find("ALICE_NEWER_TURN3_SECRET").unwrap();
+    let idx_t2 = body.find("ALICE_ONLY_BELLTOWER_SECRET").unwrap();
+    assert!(idx_t3 < idx_t2, "newest whisper MUST appear before older whisper in HUD");
     assert!(body.contains("灰烬港与余烬酒馆常识"));
     // Cross-player & spoiler isolation redlines!
     assert!(!body.contains("BOB_ONLY_CELLAR_SECRET"));
@@ -457,4 +492,33 @@ async fn player_floating_hud_enforces_hmac_isolation_spoiler_safety_and_live_sse
         .await
         .unwrap();
     assert_eq!(revoked.status(), StatusCode::FORBIDDEN);
+
+    // 5. Gate 10 P0-1 & P1-8 regressions: `fog_manor` & `midnight_metro` HUD glossaries NEVER spoil
+    //    DM-only `always_active` plot twists, AND `"不信任"` is `wary` while `"友好"` is `ally`!
+    for (chan, sc_id, expected_public, forbidden_spoiler) in [
+        ("ch_fog_hud", "fog_manor", "黑杉庄园共三层", "镜中替身骗进并困在了镜界"),
+        ("ch_metro_hud", "midnight_metro", "四号线末班车乘客守则", "被黑笔偷偷篡改的假规则"),
+        ("ch_dnd_hud", "sunforge_keep", "晨日核心", "/rest short"),
+    ] {
+        let mut r = room.clone();
+        r.channel_id = chan.into();
+        r.scenario_id = sc_id.into();
+        r.web_token = format!("tok_{sc_id}");
+        r.npc_states = vec![
+            NpcState { name: "可疑管家".into(), attitude: "不信任".into(), status: "冷眼旁观".into(), location: "大厅".into() },
+            NpcState { name: "善意阿婆".into(), attitude: "友好".into(), status: "递来栗子".into(), location: "车厢".into() },
+        ];
+        store.upsert_room(&r).unwrap();
+        let mut p = seeded_players[0].clone();
+        p.channel_id = chan.into();
+        store.upsert_player(&p).unwrap();
+        let tok = tavern_core::hud_token::sign_hud_token(&state.hud_secret, &r.web_token, chan, "u_alice");
+        let resp = http.get(format!("{base}/api/hud/{chan}?u=u_alice&ptoken={tok}")).send().await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let txt = resp.text().await.unwrap();
+        assert!(txt.contains(expected_public), "{sc_id} missing player-visible handout");
+        assert!(!txt.contains(forbidden_spoiler), "{sc_id} LEAKED DM-only spoiler to HUD!");
+        assert!(txt.contains("\"attitude\":\"不信任\",\"attitude_tier\":\"wary\""));
+        assert!(txt.contains("\"attitude\":\"友好\",\"attitude_tier\":\"ally\""));
+    }
 }

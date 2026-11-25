@@ -562,7 +562,7 @@ async fn openai_provider_wires_jev_lore_recall_and_whisper_redaction_end_to_end(
         .unwrap()
         .with_decision_gate(gate, 0.80);
     let out = provider
-        .generate_turn(&sc, &room, &players, &[], &actions, &[], true)
+        .generate_turn(&sc, &room, &players, &[], &actions, &[], &[], true)
         .await
         .unwrap();
 

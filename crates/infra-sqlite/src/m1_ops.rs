@@ -196,6 +196,73 @@ pub fn list_player_whispers_query(
     Ok(out)
 }
 
+pub fn list_room_whispers_query(
+    conn: &Connection,
+    channel_id: &str,
+    limit: usize,
+) -> Result<Vec<WhisperRecord>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, channel_id, turn_number, user_id, player_name, content, created_at \
+         FROM whispers WHERE channel_id = ?1 ORDER BY id DESC LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(params![channel_id, limit as i64], |r| {
+        let created_str: String = r.get(6)?;
+        Ok(WhisperRecord {
+            id: r.get(0)?,
+            channel_id: r.get(1)?,
+            turn_number: r.get(2)?,
+            user_id: r.get(3)?,
+            player_name: r.get(4)?,
+            content: r.get(5)?,
+            created_at: DateTime::parse_from_rfc3339(&created_str)
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now()),
+        })
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    out.reverse();
+    Ok(out)
+}
+
+pub fn get_active_story_card_msg_query(
+    conn: &Connection,
+    channel_id: &str,
+) -> Result<Option<(String, u32)>> {
+    use rusqlite::OptionalExtension;
+    conn.query_row(
+        "SELECT msg_id, turn_number FROM live_story_cards WHERE channel_id = ?1",
+        params![channel_id],
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?)),
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+pub fn set_active_story_card_msg_query(
+    conn: &Connection,
+    channel_id: &str,
+    msg_id: Option<(&str, u32)>,
+) -> Result<()> {
+    match msg_id {
+        Some((mid, turn)) => {
+            conn.execute(
+                "INSERT INTO live_story_cards (channel_id, msg_id, turn_number, updated_at) \
+                 VALUES (?1, ?2, ?3, ?4) \
+                 ON CONFLICT(channel_id) DO UPDATE SET msg_id = excluded.msg_id, \
+                 turn_number = excluded.turn_number, updated_at = excluded.updated_at",
+                params![channel_id, mid, turn, Utc::now().to_rfc3339()],
+            )?;
+        }
+        None => {
+            conn.execute("DELETE FROM live_story_cards WHERE channel_id = ?1", params![channel_id])?;
+        }
+    }
+    Ok(())
+}
+
 pub fn record_usage_query(
     conn: &Connection,
     channel_id: &str,

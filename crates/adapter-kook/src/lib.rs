@@ -7,6 +7,7 @@ mod dispatcher;
 pub mod events;
 pub mod gateway;
 pub mod live_cards;
+mod live_sync;
 pub mod plain;
 pub mod sanitize;
 

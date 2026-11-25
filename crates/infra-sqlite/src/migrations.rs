@@ -242,6 +242,20 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
         Ok(())
     })?;
 
+    apply_if_needed(conn, 12, "0012_v18_live_story_cards", |tx| {
+        tx.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS live_story_cards (
+                channel_id TEXT PRIMARY KEY,
+                msg_id TEXT NOT NULL,
+                turn_number INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            "#,
+        )?;
+        Ok(())
+    })?;
+
     Ok(())
 }
 

@@ -480,10 +480,11 @@ async fn wave1_three_scenarios_preset_roles_anti_farm_npc_memory_and_wall_export
     let scenarios = Arc::new(FsScenarioCatalog::load_from_dir(&cfg.scenarios_dir).unwrap());
     let engine = GameEngine::new(cfg, store.clone(), scenarios.clone(), Arc::new(MockLlmProvider));
 
-    // All 3 scenarios load with 10 lore entries, 4 preset roles, and 3 opening actions
+    // All 3 scenarios load with >=10 lore entries (incl. spoiler-safe public handout), 4 preset roles, and 3 opening actions
     for id in ["ember_tavern", "fog_manor", "midnight_metro"] {
         let sc = scenarios.get(id).expect("built-in scenario exists");
-        assert_eq!(sc.worldbook.len(), 10, "{id} should have 10 lore entries");
+        assert!(sc.worldbook.len() >= 10, "{id} should have at least 10 lore entries");
+        assert!(sc.worldbook.iter().any(|w| w.player_visible), "{id} should have at least one spoiler-safe player_visible handout");
         assert_eq!(sc.preset_roles.len(), 4, "{id} should have 4 preset roles");
         assert_eq!(sc.opening_actions.len(), 3, "{id} should have 3 opening actions");
     }

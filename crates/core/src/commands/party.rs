@@ -2,7 +2,9 @@ use anyhow::Result;
 use tavern_domain::{CardTheme, EngineResponse, IncomingMessage, Player, RoomEvent, roll_dice};
 
 use crate::commands::check::ended_room_notice;
-use crate::commands::party_helpers::{ensure_player, format_party_progress, parse_join_args};
+use crate::commands::party_helpers::{
+    build_drop_in_briefing, ensure_player, format_party_progress, parse_join_args,
+};
 use crate::commands::turn;
 use crate::engine::GameEngine;
 use crate::ports::JoinPlayerOutcome;
@@ -37,6 +39,7 @@ pub fn cmd_join(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result
         });
     };
 
+    let existed = engine.store.get_player(&msg.channel_id, &msg.user_id)?.is_some();
     let (character_name, role_desc, traits) = parse_join_args(arg, &msg.user_name);
     let player = match engine.store.join_player_atomic(
         &msg.channel_id,
@@ -70,6 +73,9 @@ pub fn cmd_join(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result
         channel_id: msg.channel_id.clone(),
         turn_number: room.turn_number,
     });
+    if !existed && room.turn_number >= 1 {
+        return Ok(build_drop_in_briefing(engine, &room, &scenario, &player, &msg.user_id));
+    }
 
     let traits_text = if player.traits.is_empty() {
         "无".to_string()

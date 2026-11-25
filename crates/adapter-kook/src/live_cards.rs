@@ -16,14 +16,52 @@ pub struct ActiveStoryCard {
     pub msg_id: String,
     pub turn_number: u32,
     pub story: Box<EngineResponse>,
+    pub last_card_json: String,
+}
+
+/// Compact archived fallback card used ONLY when a channel's previous live card is archived after
+/// both a process restart AND a `/reset` room wipe (when the original turn text no longer exists).
+pub fn render_orphan_archived_card(turn_number: u32) -> String {
+    json!([{
+        "type": "card",
+        "theme": "secondary",
+        "size": "lg",
+        "modules": [{
+            "type": "context",
+            "elements": [{
+                "type": "kmarkdown",
+                "content": format!("📖 第 **{turn_number}** 回合旧剧情卡已归档（房间已重置或推进，按钮已收起）")
+            }]
+        }]
+    }])
+    .to_string()
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct LiveCardRegistry {
     cards: Arc<RwLock<HashMap<String, ActiveStoryCard>>>,
+    locks: Arc<RwLock<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
 }
 
 impl LiveCardRegistry {
+    pub fn channel_lock(&self, channel_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+        if let Ok(map) = self.locks.read()
+            && let Some(l) = map.get(channel_id)
+        {
+            return Arc::clone(l);
+        }
+        if let Ok(mut map) = self.locks.write() {
+            if map.len() >= MAX_TRACKED_STORY_CARDS && !map.contains_key(channel_id) {
+                map.retain(|_, v| Arc::strong_count(v) > 1);
+            }
+            return Arc::clone(
+                map.entry(channel_id.to_string())
+                    .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))),
+            );
+        }
+        Arc::new(tokio::sync::Mutex::new(()))
+    }
+
     pub fn get(&self, channel_id: &str) -> Option<ActiveStoryCard> {
         self.cards
             .read()

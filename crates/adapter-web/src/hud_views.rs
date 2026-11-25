@@ -27,6 +27,8 @@ pub struct PlayerHudView {
     pub acts: Vec<ActPublicView>,
     pub world_flags: Vec<String>,
     pub suggested_actions: Vec<String>,
+    pub summary: String,
+    pub summary_upto_turn: u32,
     pub ended_id: Option<String>,
     pub ended_title: Option<String>,
     pub dashboard_path: String,
@@ -162,11 +164,11 @@ pub fn build_player_hud_view(
         })
         .unwrap_or_default();
 
-    // Spoiler-safe public glossary: ONLY `always_active == true` entries!
+    // Strictly spoiler-safe public glossary: ONLY entries explicitly marked `player_visible == true`!
     let glossary: Vec<GlossaryEntryView> = scenario
         .as_ref()
         .map(|s| {
-            s.worldbook.iter().filter(|w| w.always_active).map(|w| GlossaryEntryView {
+            s.worldbook.iter().filter(|w| w.player_visible).map(|w| GlossaryEntryView {
                 title: w.title.clone(),
                 keywords: w.keywords.clone(),
                 content: w.content.trim().to_string(),
@@ -174,8 +176,10 @@ pub fn build_player_hud_view(
         })
         .unwrap_or_default();
 
+    // `list_player_whispers` returns chronological (oldest-first); reverse so newest whisper is FIRST (`✨ 最新`)!
     let whispers: Vec<WhisperItemView> = whispers_raw
         .into_iter()
+        .rev()
         .map(|w| WhisperItemView { turn_number: w.turn_number, content: w.content })
         .collect();
 
@@ -249,6 +253,7 @@ pub fn build_player_hud_view(
         turn_phase: room.turn_phase.as_str(), check_system: room.check_system.short_badge(),
         active: room.active, current_act: room.current_act, acts, world_flags: room.world_flags,
         suggested_actions: room.suggested_actions,
+        summary: room.summary, summary_upto_turn: room.summary_upto_turn,
         ended_id: room.ended_id, ended_title: room.ended_title, dashboard_path,
         me, party, npcs, clues: room.clues, glossary, bulletins: room.bulletins, map, recent_turns,
     }))
@@ -256,12 +261,17 @@ pub fn build_player_hud_view(
 
 fn classify_attitude(att: &str) -> &'static str {
     let a = att.trim();
-    if a.contains("信任") || a.contains("友善") || a.contains("盟友") || a.contains("感激") || a.contains("好感") || a.contains("亲近") {
-        "ally"
-    } else if a.contains("敌对") || a.contains("仇恨") || a.contains("敌意") || a.contains("暴怒") || a.contains("追杀") {
+    // Check hostile & negative/wary phrases BEFORE positive phrases so "不信任" never matches "信任"!
+    if a.contains("敌对") || a.contains("仇恨") || a.contains("敌意") || a.contains("暴怒") || a.contains("追杀") {
         "hostile"
-    } else if a.contains("警惕") || a.contains("戒备") || a.contains("怀疑") || a.contains("冷淡") || a.contains("不信任") || a.contains("试探") {
+    } else if a.contains("不信任") || a.contains("警惕") || a.contains("戒备") || a.contains("怀疑")
+        || a.contains("冷淡") || a.contains("试探") || a.contains("防备") || a.contains("惶恐")
+    {
         "wary"
+    } else if a.contains("信任") || a.contains("信赖") || a.contains("友善") || a.contains("友好")
+        || a.contains("盟友") || a.contains("感激") || a.contains("好感") || a.contains("亲近")
+    {
+        "ally"
     } else {
         "neutral"
     }

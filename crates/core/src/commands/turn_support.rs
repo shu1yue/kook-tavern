@@ -84,17 +84,17 @@ pub fn check_daily_budget_for_slot(
 
 pub fn schedule_background_summary(engine: &GameEngine, scenario: Scenario, room: RoomState) {
     let keep_recent = (engine.cfg.recent_turns_window / 2).max(2) as u32;
-    if room.turn_number < room.summary_upto_turn + engine.cfg.summary_interval_turns
-        || room.turn_number <= keep_recent
-    {
+    if room.turn_number <= keep_recent {
         return;
     }
 
     let target_upto = room.turn_number - keep_recent;
-    if target_upto <= room.summary_upto_turn {
+    // Seal only once a full `summary_interval_turns` batch of unsummarized turns has accumulated!
+    if target_upto < room.summary_upto_turn + engine.cfg.summary_interval_turns {
         return;
     }
 
+    let expected_created_at = room.created_at.to_rfc3339();
     let engine_bg = engine.clone();
     engine.bg_runner.spawn(Box::pin(async move {
         let slot = InFlightLlmGuard::acquire(engine_bg.in_flight_llm.clone());
@@ -124,23 +124,34 @@ pub fn schedule_background_summary(engine: &GameEngine, scenario: Scenario, room
                 let _ = engine_bg
                     .store
                     .record_usage(&room.channel_id, &out.usage, est);
-                if !out.summary.trim().is_empty()
-                    && let Ok(true) = engine_bg.store.update_summary_cas(
+                if !out.summary.trim().is_empty() {
+                    match engine_bg.store.update_summary_cas(
                         &room.channel_id,
-                        room.state_version,
+                        room.summary_upto_turn,
+                        &expected_created_at,
                         &out.summary,
                         target_upto,
-                    )
-                {
-                    info!(
-                        channel_id = %room.channel_id,
-                        upto = target_upto,
-                        "后台已自动压缩历史回合至前情提要"
-                    );
-                    engine_bg.emit_event(RoomEvent::RoomUpdated {
-                        channel_id: room.channel_id.clone(),
-                        turn_number: room.turn_number,
-                    });
+                    ) {
+                        Ok(true) => {
+                            info!(
+                                channel_id = %room.channel_id,
+                                upto = target_upto,
+                                "后台已自动封存章节记忆至长期回忆录"
+                            );
+                            engine_bg.emit_event(RoomEvent::RoomUpdated {
+                                channel_id: room.channel_id.clone(),
+                                turn_number: room.turn_number,
+                            });
+                        }
+                        Ok(false) => {
+                            warn!(
+                                channel_id = %room.channel_id,
+                                upto = target_upto,
+                                "后台章节记忆 CAS 未命中（房间已回档/重置或已被并发写入）"
+                            );
+                        }
+                        Err(err) => warn!(error = %err, "写入后台章节记忆失败"),
+                    }
                 }
             }
             Err(err) => warn!(error = %err, "后台自动摘要压缩失败，不影响主线游玩"),

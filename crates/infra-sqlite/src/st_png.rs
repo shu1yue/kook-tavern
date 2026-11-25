@@ -23,7 +23,7 @@ pub fn extract_png_chara_json(bytes: &[u8]) -> Result<String> {
         if chunk_count > MAX_PNG_CHUNKS {
             bail!("PNG chunk 数量超过安全上限（{MAX_PNG_CHUNKS}），已拒绝解析");
         }
-        let len = u32::from_be_bytes(bytes[pos..pos + 4].try_into().unwrap()) as usize;
+        let len = u32::from_be_bytes([bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]]) as usize;
         let chunk_type = &bytes[pos + 4..pos + 8];
         let Some(data_start) = pos.checked_add(8) else {
             break;

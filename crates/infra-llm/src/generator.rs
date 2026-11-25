@@ -270,6 +270,7 @@ pub fn finalize_forged_scenario(
                 title: format!("{} · 世界观底色", sc.name),
                 keywords: vec![sc.name.clone()],
                 always_active: true,
+                player_visible: true,
                 priority: 100,
                 content: format!("围绕「{}」展开的冒险，危机正在步步逼近。", d.premise.trim()),
             });

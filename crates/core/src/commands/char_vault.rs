@@ -223,11 +223,17 @@ fn load_into_room(engine: &GameEngine, msg: &IncomingMessage, name: &str) -> Res
     let Some(saved) = list.into_iter().find(|c| c.character_name.eq_ignore_ascii_case(target)) else {
         return Ok(warn_box("❓ 角色库里找不到该角色", &format!("找不到 `{target}`，发 `/char` 查看已有角色列表。")));
     };
+    let existed = engine.store.get_player(&msg.channel_id, &msg.user_id)?.is_some();
     match engine.store.load_saved_character_into_room(&msg.channel_id, &msg.user_id, &saved, &sc.player_defaults)? {
         JoinPlayerOutcome::RoomUnavailable => Ok(warn_box("⏳ 当前房间不可载入", "房间已结束或正在结算中，请稍后再试。")),
         JoinPlayerOutcome::DuplicateName => Ok(warn_box("⚠️ 角色名已被队友占用", &format!("本房间已有队友叫 `{}`，请先换名或选用其他角色。", saved.character_name))),
         JoinPlayerOutcome::Joined(p) => {
             engine.emit_event(RoomEvent::RoomUpdated { channel_id: msg.channel_id.clone(), turn_number: room.turn_number });
+            if !existed && room.turn_number >= 1 {
+                return Ok(crate::commands::party_helpers::build_drop_in_briefing(
+                    engine, &room, &sc, &p, &msg.user_id,
+                ));
+            }
             Ok(EngineResponse::Notice {
                 title: format!("🪪 欢迎回归！【{}】已跨团上桌", p.character_name),
                 body: format!(

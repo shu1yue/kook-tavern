@@ -67,7 +67,7 @@ pub async fn dispatch_button(
         "endings" => check::cmd_endings(engine, &mk_msg("/endings".into())),
         "help" => Ok(room::cmd_help()),
         "menu" => Ok(room::cmd_list_scenarios(engine, channel_id)),
-        "rolemenu" => button_roles::cmd_role_menu(engine, channel_id),
+        "rolemenu" | "roles" => button_roles::cmd_role_menu(engine, channel_id),
         "export" => export::cmd_export(engine, channel_id, false),
         "start" => {
             let scenario_id = parts.get(3).copied().unwrap_or("").trim();

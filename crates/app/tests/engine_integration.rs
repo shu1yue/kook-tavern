@@ -79,6 +79,7 @@ impl LlmProvider for ControlledSlowLlm {
         _recent_turns: &'a [TurnRecord],
         _actions: &'a [PendingAction],
         _world_echoes: &'a [tavern_domain::WorldEcho],
+        _room_whispers: &'a [tavern_domain::WhisperRecord],
         _allow_nudge: bool,
     ) -> BoxFuture<'a, Result<DmTurnOutput>> {
         let entered = self.entered.clone();

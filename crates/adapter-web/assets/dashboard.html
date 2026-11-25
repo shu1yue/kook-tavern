@@ -654,7 +654,7 @@
         }
 
         ctx.fillStyle = pal.muted; ctx.font = "12px PingFang SC, sans-serif";
-        ctx.fillText("🍺 KOOK AI 群酒馆 · 实况纪念长图（v1.4）", pad, H - 30, colW);
+        ctx.fillText("🍺 KOOK AI 群酒馆 · 实况纪念长图（v1.8）", pad, H - 30, colW);
 
         const a = document.createElement("a");
         a.download = "tavern_" + (d.scenario_id || "story") + "_turn" + d.turn_number + ".png";
@@ -898,9 +898,16 @@
 
       function connectSse() {
         if (stopped) return;
+        let openedOnce = false;
         const url = basePrefix + "/api/room/" + encodeURIComponent(channelId) + "/events?token=" + encodeURIComponent(token);
         es = new EventSource(url);
-        es.onopen = () => { if (!stopped) setLiveState(true, "实时同步中"); };
+        es.onopen = () => {
+          if (!stopped) {
+            setLiveState(true, "实时同步中");
+            if (openedOnce) fetchState();
+            openedOnce = true;
+          }
+        };
         es.addEventListener("update", () => { if (!stopped) fetchState(); });
         es.addEventListener("reset", () => {
           stopLive("已结团", "🧹 本局已在 KOOK 结团清空，看板已停止更新。开新团后点击「🌐 Web 看板」即可查看新局！");

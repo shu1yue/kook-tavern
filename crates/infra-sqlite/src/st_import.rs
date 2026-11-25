@@ -104,6 +104,7 @@ fn convert_st_json(
             title: format!("{name} · 核心设定"),
             keywords: vec![name.clone()],
             always_active: true,
+            player_visible: false,
             priority: 100,
             content: base_lore.join("\n\n"),
         });
@@ -122,6 +123,7 @@ fn convert_st_json(
             title: format!("{name} · 背景底色"),
             keywords: vec![],
             always_active: true,
+            player_visible: true,
             priority: 100,
             content: format!("由 SillyTavern 导入的冒险剧本《{name}》。"),
         });
@@ -251,6 +253,7 @@ fn collect_lore_entries(entries: &Value, out: &mut Vec<WorldbookEntry>) {
             title,
             keywords,
             always_active,
+            player_visible: false,
             priority,
             content,
         });

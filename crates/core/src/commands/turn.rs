@@ -165,11 +165,12 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
     let scope_key = ending_scope_key(Some(&lease.room.guild_id), &lease.room.channel_id);
     let before_ts = lease.room.created_at.to_rfc3339();
     let world_echoes = engine.store.list_world_echoes(&scope_key, &scenario.id, Some(&before_ts), 3).unwrap_or_default();
+    let room_whispers = engine.store.list_room_whispers(channel_id, 20).unwrap_or_default();
     let allow_nudge = check_daily_budget_for_slot(engine, slot.prior_in_flight() + 1).ok().flatten().is_none();
 
     let turn_output = engine
         .llm
-        .generate_turn(&scenario, &lease.room, &lease.players, &recent_turns, &actions, &world_echoes, allow_nudge)
+        .generate_turn(&scenario, &lease.room, &lease.players, &recent_turns, &actions, &world_echoes, &room_whispers, allow_nudge)
         .await?;
 
     let est_cny = engine.cfg.estimate_usage_cny(&turn_output.usage);
