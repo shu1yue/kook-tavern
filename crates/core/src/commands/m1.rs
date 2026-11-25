@@ -232,6 +232,44 @@ pub fn cmd_cost(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse>
     })
 }
 
+pub fn cmd_reload(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResponse> {
+    if !engine.cfg.is_admin(&msg.user_id) {
+        return Ok(EngineResponse::Notice {
+            title: "🔒 权限不足".to_string(),
+            body: "只有配置文件 `ADMIN_USER_IDS` 中的管理员才能执行 `/reload` 热重载剧本库。".to_string(),
+            theme: CardTheme::Danger,
+            show_actions: false,
+        });
+    }
+    match engine.scenarios.reload() {
+        Ok(count) => {
+            let names = engine
+                .scenarios
+                .list()
+                .into_iter()
+                .map(|s| format!("- **《{}》** (`{}`)", s.name, s.id))
+                .collect::<Vec<_>>()
+                .join("\n");
+            Ok(EngineResponse::Notice {
+                title: format!("🔄 剧本库热重载成功（共 {count} 个剧本）"),
+                body: format!(
+                    "已从磁盘原子刷新并全部通过强类型 Schema 校验，零重启即时生效！\n\n{names}\n\n现在可直接发 `/menu` 或 `/start <剧本ID>` 开新团。"
+                ),
+                theme: CardTheme::Success,
+                show_actions: false,
+            })
+        }
+        Err(err) => Ok(EngineResponse::Notice {
+            title: "❌ 剧本热重载已安全中止（原线上剧本不受影响）".to_string(),
+            body: format!(
+                "检测到新剧本 YAML 格式或 Schema 校验未通过，已保留原有可用剧本库：\n> {err:#}"
+            ),
+            theme: CardTheme::Danger,
+            show_actions: false,
+        }),
+    }
+}
+
 pub fn cmd_web(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {
     let Some(room) = engine.store.get_room(channel_id)? else {
         return Ok(EngineResponse::Notice {

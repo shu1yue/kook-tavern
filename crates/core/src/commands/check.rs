@@ -222,3 +222,120 @@ pub fn ending_kind_badge(kind: &str) -> &'static str {
         _ => "📜 普通结局",
     }
 }
+
+/// Private personal character sheet (`/me` or `🪪 我的角色卡` button).
+/// Always returned as `EngineResponse::PrivateNotice` so teammates NEVER see private whispers!
+pub fn cmd_me(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResponse> {
+    let Some(room) = engine.store.get_room(&msg.channel_id)? else {
+        return Ok(EngineResponse::PrivateNotice {
+            user_id: msg.user_id.clone(),
+            title: "🪪 个人角色卡".to_string(),
+            body: "当前频道尚未开团，点置顶卡里的绿色「▶️ 开启剧本」按钮先开一桌吧！".to_string(),
+        });
+    };
+    let Some(p) = engine.store.get_player(&msg.channel_id, &msg.user_id)? else {
+        return Ok(EngineResponse::PrivateNotice {
+            user_id: msg.user_id.clone(),
+            title: format!("🪪 《{}》尚未入团", room.title),
+            body: "你还没有在本局创建角色卡！\n点「🎛️ 面板/设置」→「🎭 选职业入团」一键挑职业拿五维属性与专属装备，或直接打人话自动上桌。".to_string(),
+        });
+    };
+
+    let next_turn = if room.turn_phase == tavern_domain::TurnPhase::Resolving {
+        room.turn_number + 2
+    } else {
+        room.turn_number + 1
+    };
+    let pending = engine
+        .store
+        .list_pending_actions(&msg.channel_id, next_turn)?;
+    let my_act = pending.iter().find(|a| a.user_id == msg.user_id);
+
+    let act_status = if room.ended_id.is_some() {
+        "🏆 本局已收束"
+    } else if p.is_afk {
+        "💤 暂离中（自动结算跳过）"
+    } else if my_act.is_some_and(|a| !a.action_text.trim().is_empty()) {
+        "✅ 本轮已提交行动"
+    } else {
+        "⏳ 等待你行动"
+    };
+
+    let hp_bar = mini_meter(p.hp, p.max_hp, "🟥", "⬜");
+    let san_bar = mini_meter(p.san, p.max_san, "🟦", "⬜");
+    let traits = if p.traits.is_empty() {
+        "无".to_string()
+    } else {
+        p.traits.join(" / ")
+    };
+    let inv = if p.inventory.is_empty() {
+        "空".to_string()
+    } else {
+        p.inventory.join(" · ")
+    };
+    let status_txt = if p.status_note.trim().is_empty() {
+        "正常"
+    } else {
+        p.status_note.trim()
+    };
+
+    let mut sections = vec![
+        format!(
+            "🎭 **《{}》** ｜ 第 **{}** 回合 ｜ `{act_status}`",
+            room.title, room.turn_number
+        ),
+        format!(
+            "❤️ **HP**：{hp_bar}\n🧠 **SAN**：{san_bar}\n🏷️ **当前状态**：{status_txt}\n✦ **特质**：{traits}"
+        ),
+        format!(
+            "📊 **五维属性（`/check <属性>`）**\n{}",
+            p.stats.format_inline()
+        ),
+        format!("🎒 **背包行囊**：{inv}"),
+    ];
+
+    if let Some(a) = my_act {
+        let mut cur_lines = Vec::new();
+        if !a.action_text.trim().is_empty() {
+            cur_lines.push(format!("- 已提交行动：{}", a.action_text.trim()));
+        }
+        for r in &a.roll_notes {
+            cur_lines.push(format!("- 已绑定检定/骰子：{r}"));
+        }
+        if !cur_lines.is_empty() {
+            sections.push(format!("📝 **第 {next_turn} 轮准备中**\n{}", cur_lines.join("\n")));
+        }
+    }
+
+    let whispers = engine
+        .store
+        .list_player_whispers(&msg.channel_id, &msg.user_id, 5)?;
+    if whispers.is_empty() {
+        sections.push("🤫 **我的专属秘密纸条**：暂无（单独察觉暗线情报时会自动收进这里，队友不可见）".to_string());
+    } else {
+        let w_lines = whispers
+            .iter()
+            .rev()
+            .map(|w| format!("- **第 {} 回合**：{}", w.turn_number, w.content.replace('\n', " ")))
+            .collect::<Vec<_>>()
+            .join("\n");
+        sections.push(format!(
+            "🤫 **我的专属秘密纸条（仅你可见，最近 {} 条）**\n{w_lines}",
+            whispers.len()
+        ));
+    }
+
+    Ok(EngineResponse::PrivateNotice {
+        user_id: msg.user_id.clone(),
+        title: format!("🪪 个人角色卡 · {}（{}）", p.character_name, p.role_desc),
+        body: sections.join("\n\n"),
+    })
+}
+
+fn mini_meter(cur: i32, max: i32, filled: &str, empty: &str) -> String {
+    let max = max.max(1);
+    let clamped = cur.clamp(0, max);
+    let slots = 5usize;
+    let lit = (((clamped as f32 / max as f32) * slots as f32).round() as usize).min(slots);
+    format!("{}{} `{cur}/{max}`", filled.repeat(lit), empty.repeat(slots - lit))
+}

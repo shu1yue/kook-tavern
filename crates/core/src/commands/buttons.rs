@@ -53,6 +53,7 @@ pub async fn dispatch_button(
         "undo" => turn::cmd_undo(engine, channel_id),
         "cost" => m1::cmd_cost(engine, channel_id),
         "web" => m1::cmd_web(engine, channel_id),
+        "me" => check::cmd_me(engine, &mk_msg("/me".into())),
         "endings" => check::cmd_endings(engine, &mk_msg("/endings".into())),
         "help" => Ok(room::cmd_help()),
         "menu" => Ok(room::cmd_list_scenarios(engine, channel_id)),

@@ -6,7 +6,7 @@ use tracing::{error, warn};
 
 use crate::api::KookClient;
 use crate::card_menus::render_wall_report_card;
-use crate::cards::{chunk_kmarkdown, render_kook_card_json};
+use crate::cards::{chunk_kmarkdown, render_kook_card_json, render_private_card_json};
 use crate::plain::render_plain_fallback;
 
 impl KookClient {
@@ -23,28 +23,39 @@ impl KookClient {
         } = resp
         {
             let content = format!("**{title}**\n{body}");
-            let mut dm_failed = false;
+            let is_dm_chan = channel_id.starts_with("dm:");
+            if !is_dm_chan && body.chars().count() <= 3800 {
+                let card_json = render_private_card_json(&title, &body);
+                if self
+                    .send_channel_temp_card(channel_id, &user_id, &card_json)
+                    .await
+                    .is_ok()
+                {
+                    return;
+                }
+                warn!(
+                    user_id,
+                    "频道仅本人可见卡片发送失败，自动降级为临时文本/私信"
+                );
+            }
+            let mut prefer_temp = !is_dm_chan;
             for (idx, chunk) in chunk_kmarkdown(&content, 3500).into_iter().enumerate() {
                 if idx > 0 {
                     sleep(Duration::from_millis(250)).await;
                 }
-                if !dm_failed {
-                    if let Err(dm_err) = self.send_direct_kmarkdown(&user_id, &chunk).await {
-                        warn!(
-                            user_id,
-                            error = %dm_err,
-                            "私信发送专属纸条失败，自动降级为频道仅本人可见临时消息"
-                        );
-                        dm_failed = true;
-                    } else {
+                if prefer_temp {
+                    if self
+                        .send_channel_temp_kmarkdown(channel_id, &user_id, &chunk)
+                        .await
+                        .is_ok()
+                    {
                         continue;
                     }
+                    warn!(user_id, "频道临时消息发送失败，自动降级为私信发送");
+                    prefer_temp = false;
                 }
-                if let Err(tmp_err) = self
-                    .send_channel_temp_kmarkdown(channel_id, &user_id, &chunk)
-                    .await
-                {
-                    warn!(user_id, error = %tmp_err, "专属纸条临时消息降级同样失败");
+                if let Err(dm_err) = self.send_direct_kmarkdown(&user_id, &chunk).await {
+                    warn!(user_id, error = %dm_err, "私密通知私信兜底同样失败");
                     break;
                 }
             }
@@ -109,7 +120,9 @@ impl KookClient {
                             error = %dm_err,
                             "私信递纸条失败，降级为频道仅本人可见临时消息"
                         );
-                        if let Err(tmp_err) = client
+                        if chan.starts_with("dm:") {
+                            undelivered_names.push(dm.player_name);
+                        } else if let Err(tmp_err) = client
                             .send_channel_temp_kmarkdown(&chan, &dm.user_id, &dm.content)
                             .await
                         {
@@ -123,11 +136,11 @@ impl KookClient {
                         }
                     }
                 }
-                if !undelivered_names.is_empty() {
+                if !undelivered_names.is_empty() && !chan.starts_with("dm:") {
                     let notice = EngineResponse::Notice {
                         title: "⚠️ 秘密纸条送达提醒".to_string(),
                         body: format!(
-                            "给 **{}** 的秘密纸条未能直接送达（可能关闭了私信或遇临时限流）。\n请随时点击剧情卡上的 **「🤫 查纸条」** 按钮（仅本人可见）补领查看喵！",
+                            "给 **{}** 的秘密纸条未能直接送达（可能关闭了私信或遇临时限流）。\n请随时点击剧情卡上的 **「🪪 我的角色卡」** 按钮（或发 `/me`、`/whisper`，均仅本人可见）补领查看喵！",
                             undelivered_names.join("、")
                         ),
                         theme: CardTheme::Warning,

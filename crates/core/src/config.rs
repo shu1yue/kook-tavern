@@ -167,6 +167,11 @@ impl AppConfig {
         self.admin_user_ids.iter().any(|a| a == user_id)
     }
 
+    /// Strict fail-closed admin check: only explicitly listed `ADMIN_USER_IDS` are admins.
+    pub fn is_admin(&self, user_id: &str) -> bool {
+        !user_id.is_empty() && self.admin_user_ids.iter().any(|a| a == user_id)
+    }
+
     pub fn is_gm_or_admin(&self, user_id: &str, room_gm_id: &str) -> bool {
         (!room_gm_id.is_empty() && room_gm_id == user_id)
             || self.admin_user_ids.iter().any(|a| a == user_id)

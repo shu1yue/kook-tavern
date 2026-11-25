@@ -830,6 +830,7 @@ dependencies = [
  "chrono",
  "clap",
  "dotenvy",
+ "serde_json",
  "tavern-adapter-cli",
  "tavern-adapter-kook",
  "tavern-adapter-web",
@@ -1608,6 +1609,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "flate2",
  "rusqlite",
  "serde_json",
  "serde_yaml",

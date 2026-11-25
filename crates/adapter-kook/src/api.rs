@@ -230,12 +230,43 @@ impl KookClient {
         Ok(())
     }
 
+    pub async fn send_channel_temp_card(
+        &self,
+        channel_id: &str,
+        temp_target_id: &str,
+        card_json: &str,
+    ) -> Result<()> {
+        if channel_id.trim().is_empty()
+            || channel_id.starts_with("dm:")
+            || temp_target_id.trim().is_empty()
+        {
+            bail!("拒绝发送频道仅本人可见卡片：channel_id 或 temp_target_id 非法");
+        }
+        let url = format!("{KOOK_API_BASE}/message/create");
+        let payload = json!({
+            "type": 10,
+            "target_id": channel_id,
+            "temp_target_id": temp_target_id,
+            "content": card_json,
+        });
+        let _ = self
+            .post_checked(&url, &payload, "发送 KOOK 频道仅本人可见卡片")
+            .await?;
+        Ok(())
+    }
+
     pub async fn send_channel_temp_kmarkdown(
         &self,
         channel_id: &str,
         temp_target_id: &str,
         content: &str,
     ) -> Result<()> {
+        if channel_id.trim().is_empty()
+            || channel_id.starts_with("dm:")
+            || temp_target_id.trim().is_empty()
+        {
+            bail!("拒绝发送频道临时消息：channel_id 或 temp_target_id 非法");
+        }
         let url = format!("{KOOK_API_BASE}/message/create");
         let payload = json!({
             "type": 9,

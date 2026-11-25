@@ -23,6 +23,25 @@ pub fn thinking_placeholder_card_json() -> String {
     .to_string()
 }
 
+pub fn render_private_card_json(title: &str, body: &str) -> String {
+    let mut modules = vec![
+        json!({
+            "type": "header",
+            "text": { "type": "plain-text", "content": truncate_chars(title, 100) }
+        }),
+        json!({
+            "type": "context",
+            "elements": [{
+                "type": "kmarkdown",
+                "content": "🔒 **仅你可见** · 队友完全看不到这张私密卡片（包含你的个人底牌与秘密纸条）"
+            }]
+        }),
+        json!({ "type": "divider" }),
+    ];
+    push_chunked_sections(&mut modules, body, 3200);
+    json!([{ "type": "card", "theme": "info", "size": "lg", "modules": modules }]).to_string()
+}
+
 pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String {
     match resp {
         EngineResponse::Ignore | EngineResponse::PrivateNotice { .. } => "[]".to_string(),
@@ -303,7 +322,7 @@ mod tests {
         assert_valid_kook_card(&raw);
         assert!(raw.contains("tavern:pick:ch_99:2:0"));
         assert!(raw.contains("tavern:check:ch_99:investigate"));
-        assert!(raw.contains("tavern:whisper:ch_99"));
+        assert!(raw.contains("tavern:me:ch_99"));
         assert!(!raw.contains("绝密暗格密码0317"));
 
         let menu = EngineResponse::ScenarioMenu {

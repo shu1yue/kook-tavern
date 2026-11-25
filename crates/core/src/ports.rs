@@ -188,6 +188,9 @@ pub trait ScenarioCatalog: Send + Sync {
     fn list(&self) -> Vec<Scenario>;
     fn get(&self, id: &str) -> Option<Scenario>;
     fn default_scenario(&self) -> Option<Scenario>;
+    fn reload(&self) -> Result<usize> {
+        Ok(self.list().len())
+    }
 }
 
 pub trait EventBus: Send + Sync {

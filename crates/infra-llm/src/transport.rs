@@ -113,6 +113,16 @@ impl OpenAiLlmProvider {
         })
     }
 
+    pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
+        self.max_tokens = max_tokens;
+        self
+    }
+
+    pub async fn complete_json(&self, messages: Vec<ChatMessage>) -> Result<String> {
+        let (text, _) = self.chat_completion(&self.model, messages, true).await?;
+        Ok(text)
+    }
+
     async fn chat_completion(
         &self,
         model: &str,
@@ -263,50 +273,26 @@ fn extract_choice(resp: ChatCompletionResponse) -> Result<(String, LlmUsage)> {
 
 impl LlmProvider for OpenAiLlmProvider {
     fn generate_turn<'a>(
-        &'a self,
-        scenario: &'a Scenario,
-        room: &'a RoomState,
-        players: &'a [Player],
-        recent_turns: &'a [TurnRecord],
-        actions: &'a [PendingAction],
+        &'a self, scenario: &'a Scenario, room: &'a RoomState, players: &'a [Player],
+        recent_turns: &'a [TurnRecord], actions: &'a [PendingAction],
     ) -> BoxFuture<'a, Result<DmTurnOutput>> {
         Box::pin(async move {
-            let messages = build_dm_messages(
-                &self.prompts_dir,
-                scenario,
-                room,
-                players,
-                recent_turns,
-                actions,
-            );
+            let messages = build_dm_messages(&self.prompts_dir, scenario, room, players, recent_turns, actions);
             let (raw, usage) = self.chat_completion(&self.model, messages, true).await?;
-            let reply = parse_dm_reply(&raw, room);
-            Ok(DmTurnOutput { reply, usage })
+            Ok(DmTurnOutput { reply: parse_dm_reply(&raw, room), usage })
         })
     }
 
     fn summarize_turns<'a>(
-        &'a self,
-        scenario: &'a Scenario,
-        existing_summary: &'a str,
-        turns: &'a [TurnRecord],
+        &'a self, scenario: &'a Scenario, existing_summary: &'a str, turns: &'a [TurnRecord],
     ) -> BoxFuture<'a, Result<SummaryOutput>> {
         Box::pin(async move {
             if turns.is_empty() {
-                return Ok(SummaryOutput {
-                    summary: existing_summary.to_string(),
-                    usage: LlmUsage::default(),
-                });
+                return Ok(SummaryOutput { summary: existing_summary.to_string(), usage: LlmUsage::default() });
             }
-            let messages =
-                build_summary_messages(&self.prompts_dir, scenario, existing_summary, turns);
-            let (summary, usage) = self
-                .chat_completion(&self.summary_model, messages, false)
-                .await?;
-            Ok(SummaryOutput {
-                summary: summary.trim().to_string(),
-                usage,
-            })
+            let messages = build_summary_messages(&self.prompts_dir, scenario, existing_summary, turns);
+            let (summary, usage) = self.chat_completion(&self.summary_model, messages, false).await?;
+            Ok(SummaryOutput { summary: summary.trim().to_string(), usage })
         })
     }
 }

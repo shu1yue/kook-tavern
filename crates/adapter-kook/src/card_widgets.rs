@@ -84,7 +84,7 @@ pub fn story_toolbar(channel_id: &str, suggested_check: Option<&SuggestedCheck>)
     action_group(vec![
         dice_btn,
         btn("primary", format!("tavern:resolve:{channel_id}"), "⚡ 立刻结算"),
-        btn("info", format!("tavern:whisper:{channel_id}"), "🤫 查纸条"),
+        btn("info", format!("tavern:me:{channel_id}"), "🪪 我的角色卡"),
         btn("secondary", format!("tavern:status:{channel_id}"), "🎛️ 面板/设置"),
     ])
 }

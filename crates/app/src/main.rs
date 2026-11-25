@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -5,8 +6,11 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tavern_adapter_web::{BroadcastEventBus, WebState};
 use tavern_core::{AppConfig, BackgroundTaskRunner, BoxFuture, GameEngine, RoomStore};
-use tavern_infra_llm::build_llm_provider;
-use tavern_infra_sqlite::{FsExportWriter, FsScenarioCatalog, SqliteRoomStore};
+use tavern_infra_llm::{build_llm_provider, generate_scenario_with_llm};
+use tavern_infra_sqlite::{
+    FsExportWriter, FsScenarioCatalog, SqliteRoomStore, import_sillytavern_file,
+    write_scenario_yaml,
+};
 use tokio::sync::{Semaphore, oneshot};
 use tracing::{error, warn};
 use tracing_subscriber::EnvFilter;
@@ -38,6 +42,37 @@ enum Commands {
         /// 使用离线模拟 DM（无需大模型 API Key 即可体验完整流程）
         #[arg(long, default_value_t = false)]
         mock_llm: bool,
+    },
+    /// AI 一键生成并校验合规 v2 多幕多结局 YAML 剧本
+    GenScenario {
+        /// 题材脑洞描述（例如："深夜高校旧图书馆规则怪谈"）
+        premise: String,
+        /// 自定义英文剧本 ID（默认由 AI 自动生成并安全清洗）
+        #[arg(long)]
+        id: Option<String>,
+        /// 指定 Web 伴生大屏氛围主题（ember / fog / metro）
+        #[arg(long)]
+        theme: Option<String>,
+        /// 允许覆盖已存在的同名剧本文件
+        #[arg(long, default_value_t = false)]
+        overwrite: bool,
+        /// 离线模拟生成（无需 API Key，用于本地演练）
+        #[arg(long, default_value_t = false)]
+        mock_llm: bool,
+    },
+    /// 导入 SillyTavern PNG/JSON 角色卡或世界书为本引擎 YAML 剧本
+    ImportSt {
+        /// SillyTavern `.png` 或 `.json` 文件路径
+        input: PathBuf,
+        /// 自定义英文剧本 ID（默认取文件名并安全清洗）
+        #[arg(long)]
+        id: Option<String>,
+        /// 指定 Web 伴生大屏氛围主题（ember / fog / metro）
+        #[arg(long)]
+        theme: Option<String>,
+        /// 允许覆盖已存在的同名剧本文件
+        #[arg(long, default_value_t = false)]
+        overwrite: bool,
     },
 }
 
@@ -96,6 +131,55 @@ async fn main() -> Result<()> {
             let res = tavern_adapter_cli::run_local_cli(runtime.engine, channel, mock_llm).await;
             shutdown_web(web_handle).await;
             res
+        }
+        Commands::GenScenario {
+            premise,
+            id,
+            theme,
+            overwrite,
+            mock_llm,
+        } => {
+            let sc = generate_scenario_with_llm(
+                &cfg,
+                &premise,
+                id.as_deref(),
+                theme.as_deref(),
+                mock_llm,
+            )
+            .await?;
+            let saved = write_scenario_yaml(&cfg.scenarios_dir, &sc, overwrite)?;
+            println!(
+                "✅ AI 剧本生成并校验通过！\n- 剧本名：《{}》 (`{}`)\n- 主题：{}\n- 预设职业：{} 个 ｜ 幕次：{} 幕 ｜ 结局：{} 个 ｜ 世界书：{} 条\n- 已保存：{}\n\n👉 现在去 KOOK 频道发 `/reload`（无需重启服务），即可立刻 `/start {}` 开玩！",
+                sc.name,
+                sc.id,
+                sc.theme,
+                sc.preset_roles.len(),
+                sc.acts.len(),
+                sc.endings.len(),
+                sc.worldbook.len(),
+                saved.display(),
+                sc.id
+            );
+            Ok(())
+        }
+        Commands::ImportSt {
+            input,
+            id,
+            theme,
+            overwrite,
+        } => {
+            let sc = import_sillytavern_file(&input, id.as_deref(), theme.as_deref())?;
+            let saved = write_scenario_yaml(&cfg.scenarios_dir, &sc, overwrite)?;
+            println!(
+                "✅ SillyTavern 导入并校验通过！\n- 剧本名：《{}》 (`{}`)\n- 主题：{} ｜ 世界书：{} 条\n- 已保存：{}\n\n👉 现在去 KOOK 频道发 `/reload`（无需重启服务），即可立刻 `/start {}` 开玩！",
+                sc.name,
+                sc.id,
+                sc.theme,
+                sc.worldbook.len(),
+                saved.display(),
+                sc.id
+            );
+            Ok(())
         }
     }
 }

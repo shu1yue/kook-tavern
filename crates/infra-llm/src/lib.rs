@@ -1,3 +1,4 @@
+pub mod generator;
 pub mod mock;
 pub mod parser;
 pub mod prompts;
@@ -8,6 +9,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use tavern_core::{AppConfig, LlmProvider};
 
+pub use generator::generate_scenario_with_llm;
 pub use mock::MockLlmProvider;
 pub use transport::OpenAiLlmProvider;
 

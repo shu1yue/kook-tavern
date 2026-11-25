@@ -4,6 +4,7 @@ pub mod models;
 pub mod patch;
 pub mod protocol;
 pub mod stats;
+pub mod validate;
 
 pub use dice::{DiceRollResult, roll_dice, roll_dice_with_rng};
 pub use lorebook::{always_active_worldbook, match_dynamic_worldbook, match_worldbook};
@@ -14,3 +15,4 @@ pub use stats::{
     CharacterStats, CheckTier, EndingUnlock, ScenarioAct, ScenarioEnding, StatCheckResult,
     StatKind, SuggestedCheck, ending_scope_key, perform_stat_check, perform_stat_check_with_rng,
 };
+pub use validate::{normalize_theme, sanitize_scenario_id, validate_scenario};
