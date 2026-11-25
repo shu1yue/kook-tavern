@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🍺 AI 群酒馆 · 实况只读看板</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --surface: #131924;
+      --surface-2: #1a2232;
+      --border: #283347;
+      --gold: #f0b429;
+      --gold-soft: rgba(240, 180, 41, 0.14);
+      --text: #e6edf3;
+      --muted: #8b9bb4;
+      --hp: #f85149;
+      --san: #58a6ff;
+      --ok: #3fb950;
+      --warn: #d29922;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top right, #1b2236 0%, var(--bg) 55%);
+      color: var(--text);
+      font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1240px; margin: 0 auto; padding: 18px 16px 40px; }
+    .topbar {
+      background: linear-gradient(135deg, rgba(240,180,41,0.12), rgba(26,34,50,0.92));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+    .title-area h1 { margin: 0 0 6px; font-size: 22px; color: var(--gold); letter-spacing: 0.5px; }
+    .meta-row { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--muted); }
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      padding: 3px 10px; border-radius: 999px; font-size: 12px; color: var(--text);
+    }
+    .pill.live { border-color: rgba(63, 185, 80, 0.45); color: #7ee787; }
+    .pill.warn { border-color: rgba(210, 153, 34, 0.5); color: #f2cc60; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    .dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+    .controls { display: flex; gap: 8px; align-items: center; }
+    button.btn {
+      background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 10px; padding: 7px 12px; font-size: 12px; cursor: pointer;
+    }
+    button.btn:hover { border-color: var(--gold); color: var(--gold); }
+    .grid { display: grid; grid-template-columns: 360px 1fr; gap: 18px; align-items: start; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .panel {
+      background: rgba(19, 25, 36, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .panel h2 {
+      margin: 0 0 12px; font-size: 15px; color: var(--gold);
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border); padding-bottom: 8px;
+    }
+    .player-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .player-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .player-name { font-weight: 700; font-size: 15px; }
+    .player-role { font-size: 12px; color: var(--muted); }
+    .bar-row { display: grid; grid-template-columns: 44px 1fr 48px; gap: 8px; align-items: center; font-size: 12px; margin: 5px 0; }
+    .bar-track { height: 8px; background: #0d1117; border-radius: 999px; overflow: hidden; border: 1px solid #263143; }
+    .bar-fill { height: 100%; border-radius: 999px; transition: width 0.35s ease; }
+    .bar-fill.hp { background: linear-gradient(90deg, #da3633, #ff7b72); }
+    .bar-fill.san { background: linear-gradient(90deg, #1f6feb, #79c0ff); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #0f1622; border: 1px solid var(--border); color: #c9d1d9; }
+    .chip.gold { border-color: rgba(240,180,41,0.4); color: #f2cc60; }
+    .list-item { padding: 8px 10px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); margin-bottom: 8px; font-size: 13px; line-height: 1.5; }
+    .npc-head { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 3px; }
+    .turn-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--gold);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    .turn-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
+    .turn-title { font-weight: 700; color: var(--gold); font-size: 15px; }
+    .turn-meta { font-size: 12px; color: var(--muted); }
+    .turn-input {
+      font-size: 12px; color: #a5d6ff; background: rgba(88,166,255,0.08);
+      border-left: 2px solid var(--san); padding: 6px 10px; border-radius: 6px;
+      white-space: pre-wrap; margin-bottom: 10px;
+    }
+    .turn-story { font-size: 14px; line-height: 1.75; white-space: pre-wrap; color: var(--text); }
+    .turn-diff { margin-top: 10px; font-size: 12px; color: #f2cc60; background: var(--gold-soft); padding: 6px 10px; border-radius: 8px; }
+    .empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
+    .banner {
+      display: none; background: rgba(248, 81, 73, 0.14); border: 1px solid rgba(248, 81, 73, 0.45);
+      color: #ffa198; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="banner" class="banner"></div>
+    <header class="topbar">
+      <div class="title-area">
+        <h1 id="room-title">🍺 加载冒险战局中…</h1>
+        <div class="meta-row" id="room-meta"></div>
+      </div>
+      <div class="controls">
+        <span id="sse-pill" class="pill live"><span id="sse-dot" class="dot"></span><span id="sse-text">实时同步中</span></span>
+        <button id="order-btn" class="btn" type="button">最新在顶</button>
+        <button id="refresh-btn" class="btn" type="button">↻ 刷新</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <aside>
+        <section class="panel">
+          <h2><span>⚔️ 冒险小队</span><span id="party-count" class="pill">0 人</span></h2>
+          <div id="party-list"></div>
+        </section>
+        <section class="panel">
+          <h2><span>🗣️ 关键 NPC 态度</span><span id="npc-count" class="pill">0</span></h2>
+          <div id="npc-list"></div>
+        </section>
+        <section class="panel">
+          <h2><span>🔎 已掌握线索</span><span id="clue-count" class="pill">0</span></h2>
+          <div id="clue-list"></div>
+        </section>
+      </aside>
+
+      <main>
+        <section class="panel" id="summary-panel" style="display:none">
+          <h2><span>📖 前情提要</span><span id="summary-upto" class="pill"></span></h2>
+          <div id="summary-body" class="turn-story"></div>
+        </section>
+        <section class="panel">
+          <h2><span>🎭 实况剧情流</span><span id="turn-count" class="pill">序幕</span></h2>
+          <div id="story-feed"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const m = window.location.pathname.match(/^(.*)\/room\/([^/]+)\/?$/);
+      const basePrefix = m ? m[1] : "";
+      const rawChannel = m ? m[2] : "";
+      let channelId = rawChannel;
+      try { channelId = decodeURIComponent(rawChannel); } catch (_) {}
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token") || "";
+      let newestFirst = true;
+      let lastData = null;
+      let es = null;
+      let stopped = false;
+
+      function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = String(text);
+        return node;
+      }
+
+      function clear(node) {
+        while (node.firstChild) node.removeChild(node.firstChild);
+      }
+
+      function setBanner(msg) {
+        const b = document.getElementById("banner");
+        if (!msg) { b.style.display = "none"; return; }
+        b.textContent = msg;
+        b.style.display = "block";
+      }
+
+      function setLiveState(ok, label) {
+        const pill = document.getElementById("sse-pill");
+        const dot = document.getElementById("sse-dot");
+        const txt = document.getElementById("sse-text");
+        pill.className = ok ? "pill live" : "pill warn";
+        dot.className = ok ? "dot" : "dot warn";
+        txt.textContent = label;
+      }
+
+      function renderBar(label, cur, max, cls) {
+        const row = el("div", "bar-row");
+        row.appendChild(el("span", "", label));
+        const track = el("div", "bar-track");
+        const fill = el("div", "bar-fill " + cls);
+        const pct = max > 0 ? Math.max(0, Math.min(100, (cur / max) * 100)) : 0;
+        fill.style.width = pct.toFixed(1) + "%";
+        track.appendChild(fill);
+        row.appendChild(track);
+        row.appendChild(el("span", "", cur + "/" + max));
+        return row;
+      }
+
+      function render(data) {
+        lastData = data;
+        document.title = "🍺 " + data.title + " · 实况看板";
+        document.getElementById("room-title").textContent = "🎭 《" + data.title + "》";
+
+        const meta = document.getElementById("room-meta");
+        clear(meta);
+        const phaseTxt = data.turn_phase === "resolving" ? "⏳ DM 推演中…" : "🟢 等待行动";
+        const modeTxt = data.chat_mode === "roleplay" ? "💬 直接说话" : "⌨️ 指令前缀";
+        const styleTxt = data.narrative_style === "voice" ? "🎙️ 语音极简" : "📖 文字沉浸";
+        [
+          "📍 " + data.location,
+          "🕒 " + data.world_time,
+          "🎲 第 " + data.turn_number + " 回合",
+          phaseTxt,
+          modeTxt,
+          styleTxt
+        ].forEach(t => meta.appendChild(el("span", "pill", t)));
+
+        // Party
+        const partyEl = document.getElementById("party-list");
+        clear(partyEl);
+        document.getElementById("party-count").textContent = data.players.length + " 人";
+        if (!data.players.length) {
+          partyEl.appendChild(el("div", "empty", "暂无已入团角色，请在 KOOK 频道点「🎭 选职业入团」或直接发消息！"));
+        } else {
+          data.players.forEach(p => {
+            const card = el("div", "player-card");
+            const head = el("div", "player-head");
+            const left = el("div");
+            left.appendChild(el("div", "player-name", p.character_name));
+            left.appendChild(el("div", "player-role", p.role_desc + (p.status_note ? " · " + p.status_note : "")));
+            const badge = p.is_afk ? "💤 暂离" : (p.action_ready ? "✅ 已就绪" : "⏳ 思考中");
+            head.appendChild(left);
+            head.appendChild(el("span", "pill" + (p.action_ready ? " live" : ""), badge));
+            card.appendChild(head);
+            card.appendChild(renderBar("❤️ HP", p.hp, p.max_hp, "hp"));
+            card.appendChild(renderBar("🧠 SAN", p.san, p.max_san, "san"));
+            const chips = el("div", "chips");
+            (p.traits || []).forEach(tr => chips.appendChild(el("span", "chip gold", "✦ " + tr)));
+            (p.inventory || []).forEach(it => chips.appendChild(el("span", "chip", "🎒 " + it)));
+            (p.roll_notes || []).forEach(rn => chips.appendChild(el("span", "chip gold", rn)));
+            if (chips.childNodes.length) card.appendChild(chips);
+            partyEl.appendChild(card);
+          });
+        }
+
+        // NPCs
+        const npcEl = document.getElementById("npc-list");
+        clear(npcEl);
+        document.getElementById("npc-count").textContent = String(data.npc_states.length);
+        if (!data.npc_states.length) {
+          npcEl.appendChild(el("div", "empty", "尚未触发关键 NPC 态度变化。"));
+        } else {
+          data.npc_states.forEach(n => {
+            const item = el("div", "list-item");
+            const nh = el("div", "npc-head");
+            nh.appendChild(el("span", "", n.name));
+            nh.appendChild(el("span", "pill", n.attitude || "中立"));
+            item.appendChild(nh);
+            if (n.status) item.appendChild(el("div", "player-role", n.status));
+            npcEl.appendChild(item);
+          });
+        }
+
+        // Clues
+        const clueEl = document.getElementById("clue-list");
+        clear(clueEl);
+        document.getElementById("clue-count").textContent = String(data.clues.length);
+        if (!data.clues.length) {
+          clueEl.appendChild(el("div", "empty", "尚未发现明确线索。"));
+        } else {
+          data.clues.forEach((c, i) => clueEl.appendChild(el("div", "list-item", (i + 1) + ". " + c)));
+        }
+
+        // Summary
+        const sumPanel = document.getElementById("summary-panel");
+        if (data.summary && data.summary.trim()) {
+          sumPanel.style.display = "block";
+          document.getElementById("summary-upto").textContent = "已压缩至第 " + data.summary_upto_turn + " 回合";
+          document.getElementById("summary-body").textContent = data.summary;
+        } else {
+          sumPanel.style.display = "none";
+        }
+
+        // Story feed
+        const feed = document.getElementById("story-feed");
+        clear(feed);
+        document.getElementById("turn-count").textContent = "共 " + data.turns.length + " 幕";
+        const items = [];
+        if (data.opening_scene) {
+          items.push({
+            turn_number: 0,
+            scene_title: data.title + " · 序幕",
+            location: data.location,
+            world_time: "开局",
+            batched_input: "",
+            narrative: data.opening_scene,
+            state_summary: ""
+          });
+        }
+        data.turns.forEach(t => items.push(t));
+        if (newestFirst) items.reverse();
+        items.forEach(t => {
+          const card = el("article", "turn-card");
+          const h = el("div", "turn-head");
+          h.appendChild(el("div", "turn-title", (t.turn_number === 0 ? "🕯️ " : "第 " + t.turn_number + " 幕 · ") + t.scene_title));
+          h.appendChild(el("div", "turn-meta", t.location + " ｜ " + t.world_time));
+          card.appendChild(h);
+          if (t.batched_input) card.appendChild(el("div", "turn-input", t.batched_input));
+          card.appendChild(el("div", "turn-story", t.narrative));
+          if (t.state_summary) card.appendChild(el("div", "turn-diff", "⚡ 状态变动：" + t.state_summary));
+          feed.appendChild(card);
+        });
+      }
+
+      function stopLive(label, bannerMsg) {
+        stopped = true;
+        if (es) { es.close(); es = null; }
+        setLiveState(false, label);
+        if (bannerMsg) setBanner(bannerMsg);
+      }
+
+      async function fetchState() {
+        const url = basePrefix + "/api/room/" + encodeURIComponent(channelId) + "?token=" + encodeURIComponent(token);
+        try {
+          const res = await fetch(url, { cache: "no-store" });
+          if (res.status === 403) {
+            stopLive("已失效", "🔒 访问凭证已失效或房间已被结团清空，请在 KOOK 重新点「🌐 Web 看板」获取新链接。");
+            return;
+          }
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const data = await res.json();
+          setBanner("");
+          render(data);
+        } catch (err) {
+          if (!stopped) setLiveState(false, "等待重连");
+        }
+      }
+
+      function connectSse() {
+        if (stopped) return;
+        const url = basePrefix + "/api/room/" + encodeURIComponent(channelId) + "/events?token=" + encodeURIComponent(token);
+        es = new EventSource(url);
+        es.onopen = () => { if (!stopped) setLiveState(true, "实时同步中"); };
+        es.addEventListener("update", () => { if (!stopped) fetchState(); });
+        es.addEventListener("reset", () => {
+          stopLive("已结团", "🧹 本局已在 KOOK 结团清空，看板已停止更新。开新团后点击「🌐 Web 看板」即可查看新局！");
+        });
+        es.onerror = () => { if (!stopped) setLiveState(false, "自动重连中…"); };
+      }
+
+      document.getElementById("refresh-btn").addEventListener("click", fetchState);
+      document.getElementById("order-btn").addEventListener("click", (e) => {
+        newestFirst = !newestFirst;
+        e.target.textContent = newestFirst ? "最新在顶" : "时间正序";
+        if (lastData) render(lastData);
+      });
+
+      fetchState();
+      connectSse();
+    })();
+  </script>
+</body>
+</html>

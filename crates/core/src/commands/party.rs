@@ -285,6 +285,10 @@ pub fn cmd_roll(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result
         attached_note = format!(
             "\n\n（已将该确定性掷骰结果自动绑定到第 {target_turn} 轮行动中，结算时 DM 会严格按此点数裁决）"
         );
+        engine.emit_event(RoomEvent::RoomUpdated {
+            channel_id: msg.channel_id.clone(),
+            turn_number: target_turn.saturating_sub(1),
+        });
     }
 
     let display_name = existing_player

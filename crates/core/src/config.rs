@@ -25,6 +25,8 @@ pub struct AppConfig {
     pub allowed_channel_ids: Vec<String>,
     pub admin_user_ids: Vec<String>,
     pub export_channel_id: Option<String>,
+    pub web_bind_addr: Option<String>,
+    pub web_public_base_url: Option<String>,
     pub daily_max_llm_calls: u64,
     pub daily_max_cny: f64,
     pub price_cache_hit_cny_per_m: f64,
@@ -93,6 +95,9 @@ impl AppConfig {
         let allowed_channel_ids = env_csv("ALLOWED_CHANNEL_IDS");
         let admin_user_ids = env_csv("ADMIN_USER_IDS");
         let export_channel_id = env_non_empty("EXPORT_CHANNEL_ID");
+        let web_bind_addr = env_non_empty("WEB_BIND_ADDR");
+        let web_public_base_url = env_non_empty("WEB_PUBLIC_BASE_URL")
+            .map(|u| u.trim_end_matches('/').to_string());
         let daily_max_llm_calls = env_u64("DAILY_MAX_LLM_CALLS", 200);
         let daily_max_cny = env_f64("DAILY_MAX_CNY", 20.0).max(0.0);
 
@@ -120,6 +125,8 @@ impl AppConfig {
             allowed_channel_ids,
             admin_user_ids,
             export_channel_id,
+            web_bind_addr,
+            web_public_base_url,
             daily_max_llm_calls,
             daily_max_cny,
             price_cache_hit_cny_per_m,
@@ -261,6 +268,8 @@ mod tests {
             allowed_channel_ids: vec![],
             admin_user_ids: vec!["admin_1".into()],
             export_channel_id: None,
+            web_bind_addr: None,
+            web_public_base_url: None,
             daily_max_llm_calls: 200,
             daily_max_cny: 20.0,
             price_cache_hit_cny_per_m: 0.2,

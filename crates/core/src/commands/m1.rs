@@ -225,3 +225,52 @@ pub fn cmd_cost(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse>
         show_actions: false,
     })
 }
+
+pub fn cmd_web(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {
+    let Some(room) = engine.store.get_room(channel_id)? else {
+        return Ok(EngineResponse::Notice {
+            title: "ℹ️ 当前频道尚未开团".to_string(),
+            body: "先开启一局冒险，再来点「🌐 Web 看板」获取本桌专属实况大屏链接喵！".to_string(),
+            theme: CardTheme::Info,
+            show_actions: false,
+        });
+    };
+    if room.web_token.trim().is_empty() {
+        return Ok(EngineResponse::Notice {
+            title: "ℹ️ 旧版存档未生成看板凭证".to_string(),
+            body: "本局为旧版本存档，重新开新团后即可使用实时 Web 看板喵！".to_string(),
+            theme: CardTheme::Warning,
+            show_actions: false,
+        });
+    }
+    let Some(ref bind) = engine.cfg.web_bind_addr else {
+        return Ok(EngineResponse::Notice {
+            title: "ℹ️ 伴生 Web 看板未启用".to_string(),
+            body: "房主尚未在 `.env` 中配置 `WEB_BIND_ADDR`（如 `0.0.0.0:8787`）。".to_string(),
+            theme: CardTheme::Info,
+            show_actions: false,
+        });
+    };
+    let base = match engine.cfg.web_public_base_url.as_deref() {
+        Some(url) => url.to_string(),
+        None if bind.starts_with("0.0.0.0:") || bind.starts_with("[::]:") => {
+            return Ok(EngineResponse::Notice {
+                title: "⚙️ 请先配置公网访问前缀".to_string(),
+                body: "看板服务已在监听，但 `.env` 尚未填写 `WEB_PUBLIC_BASE_URL`（例如 `http://你的服务器地址:8787`），配置后点此按钮即可生成可直达链接喵！".to_string(),
+                theme: CardTheme::Warning,
+                show_actions: false,
+            });
+        }
+        None => format!("http://{bind}"),
+    };
+    let encoded_chan = room.channel_id.replace(':', "%3A");
+    let url = format!("{base}/room/{encoded_chan}?token={}", room.web_token);
+    Ok(EngineResponse::Notice {
+        title: format!("🌐 《{}》实况只读 Web 看板", room.title),
+        body: format!(
+            "点击链接在手机或电脑副屏打开实况大屏（无需刷新，1 秒内同步血条/NPC/线索与剧情）：\n\n{url}\n\n🔒 **安全说明**：本链接仅支持只读观看，绝不泄露任何人的秘密纸条；本局 `/reset` 结团后旧链接自动失效喵！"
+        ),
+        theme: CardTheme::Info,
+        show_actions: false,
+    })
+}

@@ -14,6 +14,7 @@ clap.workspace = true
 dotenvy.workspace = true
 tavern-adapter-cli.workspace = true
 tavern-adapter-kook.workspace = true
+tavern-adapter-web.workspace = true
 tavern-core.workspace = true
 tavern-domain.workspace = true
 tavern-infra-llm.workspace = true

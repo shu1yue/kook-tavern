@@ -88,8 +88,11 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
                 show_actions: true,
             });
         }
-        // Clean archived inactive room cascade before creating a fresh session
+        // Clean archived inactive room cascade and revoke any lingering SSE streams
         engine.store.delete_room(&msg.channel_id)?;
+        engine.emit_event(RoomEvent::RoomReset {
+            channel_id: msg.channel_id.clone(),
+        });
     }
 
     let mut opening_actions: Vec<String> = scenario
@@ -213,6 +216,10 @@ pub fn cmd_mode(engine: &GameEngine, channel_id: &str, arg: &str) -> Result<Engi
 
     // Targeted column update ONLY — never touches `turn_phase` or `state_version`!
     engine.store.update_chat_mode(channel_id, mode)?;
+    engine.emit_event(RoomEvent::RoomUpdated {
+        channel_id: channel_id.to_string(),
+        turn_number: room.turn_number,
+    });
 
     Ok(EngineResponse::Notice {
         title: "✅ 发言模式已切换".to_string(),

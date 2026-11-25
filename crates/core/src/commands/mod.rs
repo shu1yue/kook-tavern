@@ -103,6 +103,7 @@ async fn match_known_command(
         "leave" | "quit" | "退团" => m1::cmd_leave(engine, msg)?,
         "whisper" | "纸条" | "秘密" => m1::cmd_whisper(engine, msg)?,
         "cost" | "账单" | "费用" => m1::cmd_cost(engine, &msg.channel_id)?,
+        "web" | "看板" | "大屏" => m1::cmd_web(engine, &msg.channel_id)?,
         "gm" | "房主" => gm::cmd_gm(engine, msg, arg)?,
         "undo" | "回档" => turn::cmd_undo(engine, &msg.channel_id)?,
         "summary" | "recap" | "前情" => room::cmd_summary(engine, &msg.channel_id)?,

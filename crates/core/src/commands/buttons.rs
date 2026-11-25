@@ -47,6 +47,7 @@ pub async fn dispatch_button(
         "status" => room::cmd_status(engine, channel_id),
         "undo" => turn::cmd_undo(engine, channel_id),
         "cost" => m1::cmd_cost(engine, channel_id),
+        "web" => m1::cmd_web(engine, channel_id),
         "help" => Ok(room::cmd_help()),
         "menu" => Ok(room::cmd_list_scenarios(engine, channel_id)),
         "rolemenu" => button_roles::cmd_role_menu(engine, channel_id),
