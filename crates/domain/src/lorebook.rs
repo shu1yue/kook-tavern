@@ -63,6 +63,7 @@ mod tests {
             initial_location: "Tavern".into(),
             initial_time: "Night".into(),
             opening_scene: "Opening".into(),
+            opening_actions: vec![],
             player_defaults: StarterCharacterDefaults {
                 max_hp: 10,
                 max_san: 10,

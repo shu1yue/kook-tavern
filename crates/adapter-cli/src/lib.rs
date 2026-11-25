@@ -171,6 +171,18 @@ async fn print_response(stdout: &mut io::Stdout, resp: &EngineResponse) -> Resul
             );
             stdout.write_all(out.as_bytes()).await?;
         }
+        EngineResponse::ScenarioMenu { scenarios, .. } => {
+            let mut buf =
+                String::from("\n┌────────────────── 🍺 可选冒险剧本大厅 ──────────────────\n");
+            for s in scenarios {
+                buf.push_str(&format!(
+                    "│ ▶️ {} (`{}`) — {}\n│    {}（世界书 {} 条）\n",
+                    s.name, s.id, s.genre, s.tagline, s.worldbook_count
+                ));
+            }
+            buf.push_str("└──────────────────────────────────────────────────────────\n\n");
+            stdout.write_all(buf.as_bytes()).await?;
+        }
         EngineResponse::PrivateNotice {
             user_id,
             title,

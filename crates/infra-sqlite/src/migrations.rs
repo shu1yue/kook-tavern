@@ -126,6 +126,16 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
         Ok(())
     })?;
 
+    apply_if_needed(conn, 5, "0005_m1_ux_suggested_actions", |tx| {
+        add_column_if_missing(
+            tx,
+            "rooms",
+            "suggested_actions_json",
+            "TEXT NOT NULL DEFAULT '[]'",
+        )?;
+        Ok(())
+    })?;
+
     Ok(())
 }
 

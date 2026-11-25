@@ -139,6 +139,8 @@ pub struct Scenario {
     pub initial_location: String,
     pub initial_time: String,
     pub opening_scene: String,
+    #[serde(default)]
+    pub opening_actions: Vec<String>,
     pub player_defaults: StarterCharacterDefaults,
     #[serde(default)]
     pub worldbook: Vec<WorldbookEntry>,
@@ -168,6 +170,8 @@ pub struct RoomState {
     pub web_token: String,
     #[serde(default)]
     pub clues: Vec<String>,
+    #[serde(default)]
+    pub suggested_actions: Vec<String>,
     #[serde(default)]
     pub summary: String,
     #[serde(default)]

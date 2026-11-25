@@ -1,3 +1,4 @@
+pub mod buttons;
 pub mod export;
 pub mod gm;
 pub mod m1;
@@ -85,7 +86,9 @@ async fn match_known_command(
 ) -> Result<Option<EngineResponse>> {
     let resp = match cmd {
         "help" | "h" | "帮助" => room::cmd_help(),
-        "scenarios" | "list" | "剧本" => room::cmd_list_scenarios(engine),
+        "scenarios" | "list" | "menu" | "大厅" | "剧本" => {
+            room::cmd_list_scenarios(engine, &msg.channel_id)
+        }
         "start" | "open" | "开团" => room::cmd_start(engine, msg, arg)?,
         "join" | "card" | "车卡" | "入团" => party::cmd_join(engine, msg, arg)?,
         "act" | "a" | "行动" => party::cmd_act(engine, msg, arg).await?,
@@ -108,41 +111,7 @@ async fn match_known_command(
     Ok(Some(resp))
 }
 
-pub async fn dispatch_button(
-    engine: &GameEngine,
-    guild_id: Option<&str>,
-    channel_id: &str,
-    value: &str,
-) -> Result<EngineResponse> {
-    // KOOK `message_btn_click` omits `guild_id`; verify against the room's authoritative stored `guild_id`!
-    let effective_guild = resolve_authoritative_guild(engine, guild_id, channel_id)?;
-    if !engine
-        .cfg
-        .is_scope_allowed(effective_guild.as_deref(), channel_id)
-    {
-        return Ok(EngineResponse::Ignore);
-    }
-
-    let parts: Vec<&str> = value.splitn(3, ':').collect();
-    if parts.len() < 2 || parts[0] != "tavern" {
-        return Ok(EngineResponse::Ignore);
-    }
-    if let Some(payload_chan) = parts.get(2)
-        && !payload_chan.is_empty()
-        && *payload_chan != channel_id
-    {
-        return Ok(EngineResponse::Ignore);
-    }
-
-    match parts[1] {
-        "resolve" => turn::resolve_turn(engine, channel_id).await,
-        "status" => room::cmd_status(engine, channel_id),
-        "undo" => turn::cmd_undo(engine, channel_id),
-        _ => Ok(EngineResponse::Ignore),
-    }
-}
-
-fn resolve_authoritative_guild(
+pub(crate) fn resolve_authoritative_guild(
     engine: &GameEngine,
     provided_guild: Option<&str>,
     channel_id: &str,

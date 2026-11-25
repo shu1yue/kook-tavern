@@ -46,6 +46,14 @@ pub fn render_plain_fallback(resp: &EngineResponse, include_whispers: bool) -> S
         EngineResponse::Ignore => String::new(),
         EngineResponse::Notice { title, body, .. } => format!("**{title}**\n{body}"),
         EngineResponse::PrivateNotice { title, body, .. } => format!("**{title}**\n{body}"),
+        EngineResponse::ScenarioMenu { scenarios, .. } => {
+            let list = scenarios
+                .iter()
+                .map(|s| format!("- **{}** (`{}`) — {}", s.name, s.id, s.tagline))
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("**🍺 可选冒险剧本大厅**\n{list}")
+        }
         EngineResponse::StoryTurn {
             turn_number,
             scene_title,

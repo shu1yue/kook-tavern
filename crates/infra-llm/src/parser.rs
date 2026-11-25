@@ -98,6 +98,7 @@ mod tests {
             gm_user_id: "u1".into(),
             web_token: "tok".into(),
             clues: vec![],
+            suggested_actions: vec![],
             summary: String::new(),
             summary_upto_turn: 0,
             active: true,

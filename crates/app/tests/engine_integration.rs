@@ -260,6 +260,7 @@ fn external_prompts_hot_load_from_disk() {
         gm_user_id: "u1".into(),
         web_token: "t".into(),
         clues: vec![],
+        suggested_actions: vec![],
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,
