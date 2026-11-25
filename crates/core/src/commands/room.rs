@@ -122,6 +122,7 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         gm_user_id: msg.user_id.clone(),
         web_token: generate_web_token(),
         clues: Vec::new(),
+        npc_states: Vec::new(),
         suggested_actions: opening_actions.clone(),
         summary: String::new(),
         summary_upto_turn: 0,

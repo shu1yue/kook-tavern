@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{PendingAction, Player, RoomState};
+use crate::models::{PendingAction, Player, PresetRole, RoomState};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StatePatch {
@@ -24,6 +24,15 @@ pub struct PrivateWhisper {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NpcUpdate {
+    pub name: String,
+    #[serde(default)]
+    pub attitude: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmStructuredReply {
     #[serde(default)]
     pub scene_title: String,
@@ -34,6 +43,8 @@ pub struct DmStructuredReply {
     pub state_patches: Vec<StatePatch>,
     #[serde(default)]
     pub new_clues: Vec<String>,
+    #[serde(default)]
+    pub npc_updates: Vec<NpcUpdate>,
     #[serde(default)]
     pub world_time: Option<String>,
     #[serde(default)]
@@ -95,6 +106,13 @@ pub struct ScenarioSummary {
 }
 
 #[derive(Debug, Clone)]
+pub struct WallReport {
+    pub target_channel_id: String,
+    pub title: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum EngineResponse {
     Ignore,
     Notice {
@@ -107,6 +125,18 @@ pub enum EngineResponse {
     ScenarioMenu {
         channel_id: String,
         scenarios: Vec<ScenarioSummary>,
+    },
+    /// Interactive preset role picker card for one-click character creation.
+    RolePicker {
+        channel_id: String,
+        scenario_name: String,
+        roles: Vec<PresetRole>,
+    },
+    /// Export confirmation plus optional highlight card published to the report wall channel.
+    ExportReport {
+        saved_file: String,
+        turn_count: usize,
+        wall_report: Option<WallReport>,
     },
     /// Delivered privately to a single user (DM or KOOK `temp_target_id`), NEVER public!
     PrivateNotice {

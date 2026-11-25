@@ -1,4 +1,5 @@
 mod api;
+pub mod card_menus;
 pub mod card_widgets;
 pub mod cards;
 mod dispatcher;

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::models::{Player, RoomState};
+use crate::models::{NpcState, Player, RoomState};
 use crate::protocol::{DirectMessageOut, DmStructuredReply, StatePatch};
 
 #[derive(Debug, Clone, Default)]
@@ -128,6 +128,60 @@ pub fn apply_dm_reply(
         }
     }
 
+    for npc in reply.npc_updates.iter().take(8) {
+        let name: String = npc.name.trim().chars().take(24).collect();
+        let attitude: String = npc
+            .attitude
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .chars()
+            .take(16)
+            .collect();
+        let status: String = npc
+            .status
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .chars()
+            .take(60)
+            .collect();
+        if name.is_empty() || (attitude.is_empty() && status.is_empty()) {
+            continue;
+        }
+        if let Some(existing) = room
+            .npc_states
+            .iter_mut()
+            .find(|n| n.name == name || n.name.eq_ignore_ascii_case(&name))
+        {
+            if !attitude.is_empty() {
+                existing.attitude = attitude.clone();
+            }
+            if !status.is_empty() {
+                existing.status = status.clone();
+            }
+        } else if room.npc_states.len() < 24 {
+            room.npc_states.push(NpcState {
+                name: name.clone(),
+                attitude: if attitude.is_empty() {
+                    "中立".to_string()
+                } else {
+                    attitude.clone()
+                },
+                status: status.clone(),
+            });
+        }
+        let att_label = if attitude.is_empty() { "动态更新" } else { &attitude };
+        let st_suffix = if status.is_empty() {
+            String::new()
+        } else {
+            format!(" — {status}")
+        };
+        effects
+            .state_changes
+            .push(format!("🗣️ **{name}**（{att_label}）{st_suffix}"));
+    }
+
     for whisper in &reply.private_whispers {
         let target_name = whisper.player_name.trim();
         let secret = whisper.secret.trim();
@@ -177,6 +231,7 @@ mod tests {
             gm_user_id: "u1".into(),
             web_token: "secret_tok".into(),
             clues: vec![],
+            npc_states: vec![],
             suggested_actions: vec![],
             summary: String::new(),
             summary_upto_turn: 0,
@@ -223,6 +278,7 @@ mod tests {
                 },
             ],
             new_clues: vec!["线索A".into(), "线索A".into()],
+            npc_updates: vec![],
             world_time: None,
             location: None,
             suggested_actions: vec![],

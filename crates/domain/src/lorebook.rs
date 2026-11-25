@@ -69,6 +69,7 @@ mod tests {
                 max_san: 10,
                 starter_items: vec![],
             },
+            preset_roles: vec![],
             worldbook: vec![
                 WorldbookEntry {
                     id: "always".into(),

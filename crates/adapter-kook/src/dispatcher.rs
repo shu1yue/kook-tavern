@@ -5,6 +5,7 @@ use tokio::time::sleep;
 use tracing::{error, warn};
 
 use crate::api::KookClient;
+use crate::card_menus::render_wall_report_card;
 use crate::cards::{chunk_kmarkdown, render_kook_card_json};
 use crate::plain::render_plain_fallback;
 
@@ -63,7 +64,26 @@ impl KookClient {
             }
         }
 
-        // 2. Deliver private whispers asynchronously with pacing + 3-tier fallback callback
+        // 2. Publish highlight card to the configured report wall channel if present
+        if let EngineResponse::ExportReport {
+            wall_report: Some(ref wall),
+            ..
+        } = resp
+        {
+            let wall_card = render_wall_report_card(wall);
+            if let Err(err) = self
+                .send_channel_card(&wall.target_channel_id, &wall_card)
+                .await
+            {
+                warn!(
+                    wall_channel = %wall.target_channel_id,
+                    error = %err,
+                    "同步发送高光战报卡至战报墙失败（不影响本地导出）"
+                );
+            }
+        }
+
+        // 3. Deliver private whispers asynchronously with pacing + 3-tier fallback callback
         if let EngineResponse::StoryTurn {
             direct_messages, ..
         } = resp

@@ -1,8 +1,8 @@
 use anyhow::Result;
 use tavern_core::{BoxFuture, LlmProvider};
 use tavern_domain::{
-    DmStructuredReply, DmTurnOutput, LlmUsage, PendingAction, Player, PrivateWhisper, RoomState,
-    Scenario, StatePatch, SummaryOutput, TurnRecord, format_batched_actions,
+    DmStructuredReply, DmTurnOutput, LlmUsage, NpcUpdate, PendingAction, Player, PrivateWhisper,
+    RoomState, Scenario, StatePatch, SummaryOutput, TurnRecord, format_batched_actions,
     match_dynamic_worldbook,
 };
 
@@ -35,6 +35,7 @@ impl LlmProvider for MockLlmProvider {
             let mut state_patches = Vec::new();
             let mut new_clues = Vec::new();
             let mut private_whispers = Vec::new();
+            let mut npc_updates = Vec::new();
 
             if let Some(first_action) = actions.first() {
                 let lower = first_action.action_text.to_lowercase();
@@ -52,6 +53,11 @@ impl LlmProvider for MockLlmProvider {
                         status_note: Some("指尖沾染微弱星雾荧光".to_string()),
                     });
                     new_clues.push("断钥匙背面刻着模糊的编号 03-17".to_string());
+                    npc_updates.push(NpcUpdate {
+                        name: "老雷恩".to_string(),
+                        attitude: Some("警惕".to_string()),
+                        status: Some("注意到你们拿起了半截断钥匙".to_string()),
+                    });
                     if players
                         .iter()
                         .any(|p| p.character_name == first_action.character_name)
@@ -92,6 +98,7 @@ impl LlmProvider for MockLlmProvider {
                 private_whispers,
                 state_patches,
                 new_clues,
+                npc_updates,
                 world_time: Some(format!("{base_time} · 推进{}分钟", turn_next * 10)),
                 location: Some(room.location.clone()),
                 suggested_actions: vec![

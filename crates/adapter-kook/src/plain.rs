@@ -54,6 +54,23 @@ pub fn render_plain_fallback(resp: &EngineResponse, include_whispers: bool) -> S
                 .join("\n");
             format!("**🍺 可选冒险剧本大厅**\n{list}")
         }
+        EngineResponse::RolePicker {
+            scenario_name,
+            roles,
+            ..
+        } => {
+            let list = roles
+                .iter()
+                .map(|r| format!("- **{}**（{}）", r.name, r.traits.join("/")))
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("**🎭 《{scenario_name}》预设职业**\n{list}")
+        }
+        EngineResponse::ExportReport {
+            saved_file,
+            turn_count,
+            ..
+        } => format!("**📜 跑团战报已导出**\n共 {turn_count} 回合：`{saved_file}`"),
         EngineResponse::StoryTurn {
             turn_number,
             scene_title,

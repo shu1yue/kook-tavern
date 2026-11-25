@@ -208,6 +208,16 @@ fn format_dynamic_turn_prompt(
             .join("\n")
     };
 
+    let npc_block = if room.npc_states.is_empty() {
+        "（暂无已记录态度的关键 NPC）".to_string()
+    } else {
+        room.npc_states
+            .iter()
+            .map(|n| format!("- {}（{}）：{}", n.name, n.attitude, n.status))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
     let lore_block = if dynamic_lore.is_empty() {
         "（无新触发的隐藏世界书）".to_string()
     } else {
@@ -237,6 +247,8 @@ fn format_dynamic_turn_prompt(
 {party_block}
 - 已掌握线索：
 {clues_block}
+- 关键 NPC 当前态度与状态：
+{npc_block}
 - 前情提要：
 {summary_block}
 

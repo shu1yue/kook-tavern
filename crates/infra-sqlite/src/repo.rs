@@ -17,10 +17,11 @@ use crate::m1_ops::{
     set_player_afk_tx,
 };
 use crate::mappers::{
-    query_all_turns, query_pending_actions, query_player_by_id, query_players, query_recent_turns,
-    query_room, query_turns_range, update_player_profile_sql, write_player, write_room,
+    query_pending_actions, query_player_by_id, query_players, query_room,
+    update_player_profile_sql, write_player, write_room,
 };
 use crate::migrations::run_migrations;
+use crate::turn_queries::{query_all_turns, query_recent_turns, query_turns_range};
 use crate::turn_tx::{
     append_roll_tx, commit_turn_cas_tx, pop_and_restore_snapshot_tx, submit_action_tx,
     try_begin_resolving_tx,

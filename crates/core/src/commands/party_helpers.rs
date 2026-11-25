@@ -20,10 +20,12 @@ pub fn ensure_player(
         }
         return Ok(existing);
     }
+    let existing_players = engine.store.list_players(&msg.channel_id)?;
+    let character_name = unique_character_name(&existing_players, &msg.user_name);
     let p = Player {
         channel_id: msg.channel_id.clone(),
         user_id: msg.user_id.clone(),
-        character_name: msg.user_name.clone(),
+        character_name,
         role_desc: "酒馆旅客".to_string(),
         traits: Vec::new(),
         hp: scenario.player_defaults.max_hp,
@@ -36,6 +38,29 @@ pub fn ensure_player(
     };
     engine.store.upsert_player(&p)?;
     Ok(p)
+}
+
+pub fn unique_character_name(existing_players: &[Player], raw_name: &str) -> String {
+    let base_name: String = raw_name
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '|' && *c != '｜')
+        .take(16)
+        .collect();
+    let base = if base_name.is_empty() {
+        "冒险者".to_string()
+    } else {
+        base_name
+    };
+    let mut candidate = base.clone();
+    let mut suffix = 2usize;
+    while existing_players
+        .iter()
+        .any(|p| p.character_name.eq_ignore_ascii_case(&candidate))
+    {
+        candidate = format!("{base}#{suffix}");
+        suffix += 1;
+    }
+    candidate
 }
 
 pub fn parse_join_args(arg: &str, fallback_name: &str) -> (String, String, Vec<String>) {

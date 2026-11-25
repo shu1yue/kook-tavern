@@ -130,6 +130,24 @@ fn default_state_version() -> u64 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PresetRole {
+    pub name: String,
+    #[serde(default)]
+    pub traits: Vec<String>,
+    #[serde(default)]
+    pub bonus_items: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NpcState {
+    pub name: String,
+    #[serde(default)]
+    pub attitude: String,
+    #[serde(default)]
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Scenario {
     pub id: String,
     pub name: String,
@@ -142,6 +160,8 @@ pub struct Scenario {
     #[serde(default)]
     pub opening_actions: Vec<String>,
     pub player_defaults: StarterCharacterDefaults,
+    #[serde(default)]
+    pub preset_roles: Vec<PresetRole>,
     #[serde(default)]
     pub worldbook: Vec<WorldbookEntry>,
 }
@@ -170,6 +190,8 @@ pub struct RoomState {
     pub web_token: String,
     #[serde(default)]
     pub clues: Vec<String>,
+    #[serde(default)]
+    pub npc_states: Vec<NpcState>,
     #[serde(default)]
     pub suggested_actions: Vec<String>,
     #[serde(default)]

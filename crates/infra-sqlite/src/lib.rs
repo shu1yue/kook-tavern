@@ -4,6 +4,7 @@ pub mod mappers;
 pub mod migrations;
 pub mod repo;
 pub mod scenarios;
+pub mod turn_queries;
 pub mod turn_tx;
 
 pub use exporter::FsExportWriter;

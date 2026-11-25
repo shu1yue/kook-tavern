@@ -24,6 +24,7 @@ pub struct AppConfig {
     pub allowed_guild_ids: Vec<String>,
     pub allowed_channel_ids: Vec<String>,
     pub admin_user_ids: Vec<String>,
+    pub export_channel_id: Option<String>,
     pub daily_max_llm_calls: u64,
     pub daily_max_cny: f64,
     pub price_cache_hit_cny_per_m: f64,
@@ -91,6 +92,7 @@ impl AppConfig {
         let allowed_guild_ids = env_csv("ALLOWED_GUILD_IDS");
         let allowed_channel_ids = env_csv("ALLOWED_CHANNEL_IDS");
         let admin_user_ids = env_csv("ADMIN_USER_IDS");
+        let export_channel_id = env_non_empty("EXPORT_CHANNEL_ID");
         let daily_max_llm_calls = env_u64("DAILY_MAX_LLM_CALLS", 200);
         let daily_max_cny = env_f64("DAILY_MAX_CNY", 20.0).max(0.0);
 
@@ -117,6 +119,7 @@ impl AppConfig {
             allowed_guild_ids,
             allowed_channel_ids,
             admin_user_ids,
+            export_channel_id,
             daily_max_llm_calls,
             daily_max_cny,
             price_cache_hit_cny_per_m,
@@ -200,7 +203,8 @@ fn env_csv(key: &str) -> Vec<String> {
 fn env_f32(key: &str, default: f32) -> f32 {
     env::var(key)
         .ok()
-        .and_then(|v| v.parse().ok())
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|v| v.is_finite())
         .unwrap_or(default)
 }
 
@@ -256,6 +260,7 @@ mod tests {
             allowed_guild_ids: vec!["guild_ok".into()],
             allowed_channel_ids: vec![],
             admin_user_ids: vec!["admin_1".into()],
+            export_channel_id: None,
             daily_max_llm_calls: 200,
             daily_max_cny: 20.0,
             price_cache_hit_cny_per_m: 0.2,
