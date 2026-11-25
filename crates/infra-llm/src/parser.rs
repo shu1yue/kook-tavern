@@ -42,6 +42,10 @@ pub fn parse_dm_reply(raw: &str, room: &RoomState) -> DmStructuredReply {
         world_time: Some(room.world_time.clone()),
         location: Some(room.location.clone()),
         suggested_actions: Vec::new(),
+        suggested_check: None,
+        add_flags: Vec::new(),
+        advance_act: false,
+        trigger_ending_id: None,
     }
 }
 
@@ -101,6 +105,10 @@ mod tests {
             clues: vec![],
             npc_states: vec![],
             suggested_actions: vec![],
+            current_act: 1,
+            world_flags: vec![],
+            ended_id: None,
+            ended_title: None,
             summary: String::new(),
             summary_upto_turn: 0,
             active: true,

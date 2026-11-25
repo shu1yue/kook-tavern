@@ -1,7 +1,9 @@
+pub mod endings;
 pub mod exporter;
 pub mod m1_ops;
 pub mod mappers;
 pub mod migrations;
+pub mod player_tx;
 pub mod repo;
 pub mod scenarios;
 pub mod turn_queries;

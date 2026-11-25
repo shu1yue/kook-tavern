@@ -2,6 +2,7 @@ id: fog_manor
 name: "雨夜黑杉庄园"
 tagline: "经典暴风雪山庄式悬疑调查——失踪的继承人与午夜双生镜"
 genre: "悬疑调查 / 轻量克系文字冒险"
+theme: "fog"
 dm_style: |
   你是一位擅长营造哥特悬疑氛围的守密人（KP / DM）。
   注重感官细节（雨打彩窗、潮湿旧木香、烛火晃动、细微的镜像左右手破绽），让玩家通过盘问、勘查与拼凑线索逐步揭开真相。
@@ -30,15 +31,47 @@ preset_roles:
   - name: "私家侦探"
     traits: ["眼尖", "逻辑严密"]
     bonus_items: ["黄铜放大镜", "万能撬锁铁丝"]
+    stats: { body: 0, agility: 1, investigate: 2, social: 0, insight: 0 }
   - name: "神秘学记者"
     traits: ["见多识广", "嘴快"]
     bonus_items: ["镁粉闪光相机", "开罗古董拍卖剪报"]
+    stats: { body: -1, agility: 0, investigate: 1, social: 1, insight: 2 }
   - name: "家族遗嘱律师"
     traits: ["沉着", "擅长核对笔迹"]
     bonus_items: ["爵士左手签名档案", "纯银怀表"]
+    stats: { body: -1, agility: 0, investigate: 1, social: 2, insight: 1 }
   - name: "退伍军医"
     traits: ["胆大", "懂急救"]
     bonus_items: ["急救药箱", "纯银手术刀"]
+    stats: { body: 2, agility: 1, investigate: 0, social: 0, insight: 0 }
+
+acts:
+  - id: act1_parlor
+    title: "暴雨断桥与画中破绽"
+    goal: "盘问老管家与女仆，搜查一楼会客厅与肖像画发现爵士失踪异象"
+    advance_flags: ["得知镜影迟滞", "发现左手签名破绽"]
+  - id: act2_corridor
+    title: "画廊倒影与温室秘闻"
+    goal: "探索二楼长画廊与地下玻璃温室，查清黑曜双生镜的破解之法"
+    advance_flags: ["得知呼唤真名或银器碎镜之法", "获得纯银破镜器物"]
+  - id: act3_study
+    title: "午夜三楼书房对峙"
+    goal: "在午夜十二点钟声敲响前揭穿镜像替身，营救镜中真爵士或逃出生天"
+    advance_flags: ["揭穿镜像爵士", "破除黑曜镜置换"]
+
+endings:
+  - id: ending_mirror_dawn
+    title: "碎镜重圆"
+    kind: "true"
+    summary: "在午夜前压制替身并用银器碎镜或呼唤全名，成功救出真爵士奥古斯特。"
+  - id: ending_rain_escape
+    title: "雨夜孤逃"
+    kind: "normal"
+    summary: "虽未救出真爵士但识破异象及时撤离黑杉庄园，留下一段令人毛骨悚然的传闻。"
+  - id: ending_eternal_mirror
+    title: "镜中永夜"
+    kind: "bad"
+    summary: "午夜置换完成或理智崩塌，众人被替身拉入冰冷寂静的黑曜镜界。"
 
 worldbook:
   - id: fm_layout

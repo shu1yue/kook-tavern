@@ -1,5 +1,6 @@
 pub mod button_roles;
 pub mod buttons;
+pub mod check;
 pub mod export;
 pub mod gm;
 pub mod m1;
@@ -38,6 +39,12 @@ pub async fn dispatch_message(engine: &GameEngine, msg: IncomingMessage) -> Resu
         return Ok(EngineResponse::Ignore);
     }
 
+    if !msg.is_direct
+        && let Some(gid) = msg.guild_id.as_deref().filter(|s| !s.is_empty())
+    {
+        let _ = engine.store.backfill_room_guild_id(&msg.channel_id, gid);
+    }
+
     if let Some(rest) = trimmed
         .strip_prefix('>')
         .or_else(|| trimmed.strip_prefix('》'))
@@ -64,7 +71,7 @@ pub async fn dispatch_message(engine: &GameEngine, msg: IncomingMessage) -> Resu
     let Some(room_state) = engine.store.get_room(&msg.channel_id)? else {
         return Ok(EngineResponse::Ignore);
     };
-    if !room_state.active {
+    if !room_state.active || room_state.ended_id.is_some() {
         return Ok(EngineResponse::Ignore);
     }
 
@@ -95,6 +102,8 @@ async fn match_known_command(
         "join" | "card" | "车卡" | "入团" => party::cmd_join(engine, msg, arg)?,
         "act" | "a" | "行动" => party::cmd_act(engine, msg, arg).await?,
         "roll" | "r" | "掷骰" => party::cmd_roll(engine, msg, arg)?,
+        "check" | "ck" | "检定" | "属性" => check::cmd_check(engine, msg, arg)?,
+        "endings" | "图鉴" | "成就" | "结局" => check::cmd_endings(engine, msg)?,
         "go" | "resolve" | "next" | "结算" => turn::resolve_turn(engine, &msg.channel_id).await?,
         "status" | "st" | "状态" => room::cmd_status(engine, &msg.channel_id)?,
         "mode" | "模式" => room::cmd_mode(engine, &msg.channel_id, arg)?,
@@ -166,7 +175,7 @@ pub fn will_likely_resolve_turn(
     let Ok(Some(room)) = engine.store.get_room(channel_id) else {
         return false;
     };
-    if !room.active || room.turn_phase == TurnPhase::Resolving {
+    if !room.active || room.turn_phase == TurnPhase::Resolving || room.ended_id.is_some() {
         return false;
     }
 

@@ -1,35 +1,62 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="ember">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>🍺 AI 群酒馆 · 实况只读看板</title>
   <style>
-    :root {
-      --bg: #0b0e14;
-      --surface: #131924;
-      --surface-2: #1a2232;
-      --border: #283347;
-      --gold: #f0b429;
-      --gold-soft: rgba(240, 180, 41, 0.14);
-      --text: #e6edf3;
-      --muted: #8b9bb4;
+    :root, [data-theme="ember"] {
+      --bg: #0c0a09;
+      --bg-glow: #291a10;
+      --surface: #161210;
+      --surface-2: #201a16;
+      --border: #382c22;
+      --accent: #f0b429;
+      --accent-soft: rgba(240, 180, 41, 0.14);
+      --accent-border: rgba(240, 180, 41, 0.42);
+      --text: #f3ece4;
+      --muted: #a69582;
       --hp: #f85149;
       --san: #58a6ff;
       --ok: #3fb950;
       --warn: #d29922;
     }
+    [data-theme="fog"] {
+      --bg: #070b14;
+      --bg-glow: #13223b;
+      --surface: #0f1726;
+      --surface-2: #162135;
+      --border: #253654;
+      --accent: #79c0ff;
+      --accent-soft: rgba(121, 192, 255, 0.13);
+      --accent-border: rgba(121, 192, 255, 0.42);
+      --text: #e6edf8;
+      --muted: #8b9ec0;
+    }
+    [data-theme="metro"] {
+      --bg: #060d0b;
+      --bg-glow: #0b2b22;
+      --surface: #0d1715;
+      --surface-2: #12221f;
+      --border: #1e3b35;
+      --accent: #34d399;
+      --accent-soft: rgba(52, 211, 153, 0.13);
+      --accent-border: rgba(52, 211, 153, 0.45);
+      --text: #e4f7f0;
+      --muted: #7ea89b;
+    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: radial-gradient(circle at top right, #1b2236 0%, var(--bg) 55%);
+      background: radial-gradient(circle at top right, var(--bg-glow) 0%, var(--bg) 58%);
       color: var(--text);
       font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
       min-height: 100vh;
+      transition: background 0.4s ease;
     }
-    .wrap { max-width: 1240px; margin: 0 auto; padding: 18px 16px 40px; }
+    .wrap { max-width: 1260px; margin: 0 auto; padding: 18px 16px 40px; }
     .topbar {
-      background: linear-gradient(135deg, rgba(240,180,41,0.12), rgba(26,34,50,0.92));
+      background: linear-gradient(135deg, var(--accent-soft), var(--surface-2));
       border: 1px solid var(--border);
       border-radius: 16px;
       padding: 18px 20px;
@@ -38,10 +65,10 @@
       gap: 12px;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 18px;
+      margin-bottom: 14px;
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
     }
-    .title-area h1 { margin: 0 0 6px; font-size: 22px; color: var(--gold); letter-spacing: 0.5px; }
+    .title-area h1 { margin: 0 0 8px; font-size: 22px; color: var(--accent); letter-spacing: 0.5px; }
     .meta-row { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--muted); }
     .pill {
       display: inline-flex; align-items: center; gap: 5px;
@@ -50,6 +77,7 @@
     }
     .pill.live { border-color: rgba(63, 185, 80, 0.45); color: #7ee787; }
     .pill.warn { border-color: rgba(210, 153, 34, 0.5); color: #f2cc60; }
+    .pill.accent { border-color: var(--accent-border); color: var(--accent); background: var(--accent-soft); }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
     .dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
     .controls { display: flex; gap: 8px; align-items: center; }
@@ -57,18 +85,48 @@
       background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
       border-radius: 10px; padding: 7px 12px; font-size: 12px; cursor: pointer;
     }
-    button.btn:hover { border-color: var(--gold); color: var(--gold); }
-    .grid { display: grid; grid-template-columns: 360px 1fr; gap: 18px; align-items: start; }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    button.btn:hover { border-color: var(--accent); color: var(--accent); }
+    .act-strip {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+    }
+    .act-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+    .act-step {
+      padding: 9px 12px; border-radius: 10px; background: var(--surface-2);
+      border: 1px solid var(--border); opacity: 0.62;
+    }
+    .act-step.done { opacity: 0.92; border-color: rgba(63, 185, 80, 0.4); }
+    .act-step.active { opacity: 1; border-color: var(--accent); background: var(--accent-soft); }
+    .act-step-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+    .act-step.active .act-step-title { color: var(--accent); }
+    .act-step-goal { font-size: 11px; color: var(--muted); line-height: 1.45; }
+    .flags-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .ending-banner {
+      display: none;
+      background: linear-gradient(135deg, rgba(240, 180, 41, 0.22), rgba(210, 153, 34, 0.08));
+      border: 1px solid rgba(240, 180, 41, 0.6);
+      border-radius: 14px;
+      padding: 14px 18px;
+      margin-bottom: 16px;
+      color: #fde68a;
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .grid { display: grid; grid-template-columns: 370px 1fr; gap: 18px; align-items: start; }
+    @media (max-width: 920px) { .grid { grid-template-columns: 1fr; } }
     .panel {
-      background: rgba(19, 25, 36, 0.92);
+      background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 16px;
       margin-bottom: 16px;
     }
     .panel h2 {
-      margin: 0 0 12px; font-size: 15px; color: var(--gold);
+      margin: 0 0 12px; font-size: 15px; color: var(--accent);
       display: flex; align-items: center; justify-content: space-between;
       border-bottom: 1px solid var(--border); padding-bottom: 8px;
     }
@@ -83,25 +141,32 @@
     .player-name { font-weight: 700; font-size: 15px; }
     .player-role { font-size: 12px; color: var(--muted); }
     .bar-row { display: grid; grid-template-columns: 44px 1fr 48px; gap: 8px; align-items: center; font-size: 12px; margin: 5px 0; }
-    .bar-track { height: 8px; background: #0d1117; border-radius: 999px; overflow: hidden; border: 1px solid #263143; }
+    .bar-track { height: 8px; background: #0d1117; border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
     .bar-fill { height: 100%; border-radius: 999px; transition: width 0.35s ease; }
     .bar-fill.hp { background: linear-gradient(90deg, #da3633, #ff7b72); }
     .bar-fill.san { background: linear-gradient(90deg, #1f6feb, #79c0ff); }
+    .stats-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .stat-badge {
+      font-size: 11px; padding: 2px 7px; border-radius: 6px;
+      background: rgba(0, 0, 0, 0.28); border: 1px solid var(--border); color: var(--muted);
+    }
+    .stat-badge.high { border-color: var(--accent-border); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .chip { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #0f1622; border: 1px solid var(--border); color: #c9d1d9; }
-    .chip.gold { border-color: rgba(240,180,41,0.4); color: #f2cc60; }
+    .chip { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: rgba(0,0,0,0.24); border: 1px solid var(--border); color: var(--text); }
+    .chip.gold { border-color: var(--accent-border); color: var(--accent); }
     .list-item { padding: 8px 10px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); margin-bottom: 8px; font-size: 13px; line-height: 1.5; }
+    .list-item.unlocked { border-color: rgba(63, 185, 80, 0.45); }
     .npc-head { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 3px; }
     .turn-card {
       background: var(--surface-2);
       border: 1px solid var(--border);
-      border-left: 3px solid var(--gold);
+      border-left: 3px solid var(--accent);
       border-radius: 12px;
       padding: 14px 16px;
       margin-bottom: 14px;
     }
     .turn-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
-    .turn-title { font-weight: 700; color: var(--gold); font-size: 15px; }
+    .turn-title { font-weight: 700; color: var(--accent); font-size: 15px; }
     .turn-meta { font-size: 12px; color: var(--muted); }
     .turn-input {
       font-size: 12px; color: #a5d6ff; background: rgba(88,166,255,0.08);
@@ -109,7 +174,7 @@
       white-space: pre-wrap; margin-bottom: 10px;
     }
     .turn-story { font-size: 14px; line-height: 1.75; white-space: pre-wrap; color: var(--text); }
-    .turn-diff { margin-top: 10px; font-size: 12px; color: #f2cc60; background: var(--gold-soft); padding: 6px 10px; border-radius: 8px; }
+    .turn-diff { margin-top: 10px; font-size: 12px; color: var(--accent); background: var(--accent-soft); padding: 6px 10px; border-radius: 8px; }
     .empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
     .banner {
       display: none; background: rgba(248, 81, 73, 0.14); border: 1px solid rgba(248, 81, 73, 0.45);
@@ -120,6 +185,7 @@
 <body>
   <div class="wrap">
     <div id="banner" class="banner"></div>
+    <div id="ending-banner" class="ending-banner"></div>
     <header class="topbar">
       <div class="title-area">
         <h1 id="room-title">🍺 加载冒险战局中…</h1>
@@ -131,6 +197,11 @@
         <button id="refresh-btn" class="btn" type="button">↻ 刷新</button>
       </div>
     </header>
+
+    <section id="act-strip" class="act-strip">
+      <div id="act-steps" class="act-steps"></div>
+      <div id="flags-row" class="flags-row"></div>
+    </section>
 
     <div class="grid">
       <aside>
@@ -145,6 +216,10 @@
         <section class="panel">
           <h2><span>🔎 已掌握线索</span><span id="clue-count" class="pill">0</span></h2>
           <div id="clue-list"></div>
+        </section>
+        <section class="panel" id="gallery-panel" style="display:none">
+          <h2><span>🏆 本剧本结局图鉴</span><span id="gallery-count" class="pill">0/0</span></h2>
+          <div id="gallery-list"></div>
         </section>
       </aside>
 
@@ -182,9 +257,7 @@
         return node;
       }
 
-      function clear(node) {
-        while (node.firstChild) node.removeChild(node.firstChild);
-      }
+      function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
       function setBanner(msg) {
         const b = document.getElementById("banner");
@@ -202,6 +275,16 @@
         txt.textContent = label;
       }
 
+      function fmtMod(v) { return (v >= 0 ? "+" : "") + v; }
+
+      function kindLabel(kind) {
+        if (kind === "true") return "🌟 真结局";
+        if (kind === "secret") return "🔮 隐藏结局";
+        if (kind === "bad") return "💀 坏结局";
+        if (kind === "good") return "✨ 佳结局";
+        return "📜 普通结局";
+      }
+
       function renderBar(label, cur, max, cls) {
         const row = el("div", "bar-row");
         row.appendChild(el("span", "", label));
@@ -215,14 +298,24 @@
         return row;
       }
 
+      const ALLOWED_THEMES = new Set(["ember", "fog", "metro"]);
       function render(data) {
         lastData = data;
+        document.documentElement.dataset.theme = ALLOWED_THEMES.has(data.theme) ? data.theme : "ember";
         document.title = "🍺 " + data.title + " · 实况看板";
         document.getElementById("room-title").textContent = "🎭 《" + data.title + "》";
 
+        const endBanner = document.getElementById("ending-banner");
+        if (data.ended_title) {
+          endBanner.textContent = "🏆 本局已达成结局：《" + data.ended_title + "》 · 感谢各位冒险者共同谱写的史诗！";
+          endBanner.style.display = "block";
+        } else {
+          endBanner.style.display = "none";
+        }
+
         const meta = document.getElementById("room-meta");
         clear(meta);
-        const phaseTxt = data.turn_phase === "resolving" ? "⏳ DM 推演中…" : "🟢 等待行动";
+        const phaseTxt = data.ended_title ? "🏆 剧终收束" : (data.turn_phase === "resolving" ? "⏳ DM 推演中…" : "🟢 等待行动");
         const modeTxt = data.chat_mode === "roleplay" ? "💬 直接说话" : "⌨️ 指令前缀";
         const styleTxt = data.narrative_style === "voice" ? "🎙️ 语音极简" : "📖 文字沉浸";
         [
@@ -233,6 +326,31 @@
           modeTxt,
           styleTxt
         ].forEach(t => meta.appendChild(el("span", "pill", t)));
+
+        // Act stepper & world flags
+        const strip = document.getElementById("act-strip");
+        const stepsEl = document.getElementById("act-steps");
+        const flagsEl = document.getElementById("flags-row");
+        clear(stepsEl);
+        clear(flagsEl);
+        const acts = data.acts || [];
+        const flags = data.world_flags || [];
+        if (acts.length || flags.length) {
+          strip.style.display = "block";
+          acts.forEach(a => {
+            const cls = a.index < data.current_act || data.ended_title
+              ? "act-step done"
+              : (a.index === data.current_act ? "act-step active" : "act-step");
+            const box = el("div", cls);
+            const prefix = a.index < data.current_act || data.ended_title ? "✅ " : (a.index === data.current_act ? "🎬 " : "🔒 ");
+            box.appendChild(el("div", "act-step-title", prefix + "第 " + a.index + " 幕 · " + a.title));
+            box.appendChild(el("div", "act-step-goal", a.goal));
+            stepsEl.appendChild(box);
+          });
+          flags.forEach(f => flagsEl.appendChild(el("span", "pill accent", "🚩 " + f)));
+        } else {
+          strip.style.display = "none";
+        }
 
         // Party
         const partyEl = document.getElementById("party-list");
@@ -253,6 +371,16 @@
             card.appendChild(head);
             card.appendChild(renderBar("❤️ HP", p.hp, p.max_hp, "hp"));
             card.appendChild(renderBar("🧠 SAN", p.san, p.max_san, "san"));
+            if (p.stats) {
+              const sRow = el("div", "stats-row");
+              [
+                ["💪体", p.stats.body], ["🏃敏", p.stats.agility],
+                ["🔍侦", p.stats.investigate], ["🗣️交", p.stats.social], ["✨灵", p.stats.insight]
+              ].forEach(([lbl, val]) => {
+                sRow.appendChild(el("span", "stat-badge" + (val >= 2 ? " high" : ""), lbl + fmtMod(val || 0)));
+              });
+              card.appendChild(sRow);
+            }
             const chips = el("div", "chips");
             (p.traits || []).forEach(tr => chips.appendChild(el("span", "chip gold", "✦ " + tr)));
             (p.inventory || []).forEach(it => chips.appendChild(el("span", "chip", "🎒 " + it)));
@@ -288,6 +416,30 @@
           clueEl.appendChild(el("div", "empty", "尚未发现明确线索。"));
         } else {
           data.clues.forEach((c, i) => clueEl.appendChild(el("div", "list-item", (i + 1) + ". " + c)));
+        }
+
+        // Ending Gallery
+        const galPanel = document.getElementById("gallery-panel");
+        const galList = document.getElementById("gallery-list");
+        clear(galList);
+        const gallery = data.ending_gallery || [];
+        if (gallery.length) {
+          galPanel.style.display = "block";
+          const got = gallery.filter(g => g.unlocked).length;
+          document.getElementById("gallery-count").textContent = got + "/" + gallery.length;
+          gallery.forEach(g => {
+            const item = el("div", "list-item" + (g.unlocked ? " unlocked" : ""));
+            const head = el("div", "npc-head");
+            head.appendChild(el("span", "", (g.unlocked ? "✅ " : "🔒 ") + g.title));
+            head.appendChild(el("span", "pill" + (g.unlocked ? " live" : ""), kindLabel(g.kind)));
+            item.appendChild(head);
+            if (g.unlocked && g.turn_count !== null) {
+              item.appendChild(el("div", "player-role", "本服已解锁 · 历时 " + g.turn_count + " 回合"));
+            }
+            galList.appendChild(item);
+          });
+        } else {
+          galPanel.style.display = "none";
         }
 
         // Summary

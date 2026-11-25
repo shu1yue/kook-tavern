@@ -22,7 +22,7 @@ pub fn submit_action_tx(
     let Some(room) = query_room(&tx, channel_id)? else {
         return Ok(None);
     };
-    if !room.active {
+    if !room.active || room.ended_id.is_some() {
         return Ok(None);
     }
 
@@ -68,7 +68,7 @@ pub fn append_roll_tx(
     let Some(room) = query_room(&tx, channel_id)? else {
         return Ok(None);
     };
-    if !room.active {
+    if !room.active || room.ended_id.is_some() {
         return Ok(None);
     }
 
@@ -114,13 +114,13 @@ pub fn try_begin_resolving_tx(
     let Some(mut room) = query_room(&tx, channel_id)? else {
         return Ok(None);
     };
-    if !room.active || room.turn_phase != TurnPhase::Collecting {
+    if !room.active || room.turn_phase != TurnPhase::Collecting || room.ended_id.is_some() {
         return Ok(None);
     }
 
     let new_version = room.state_version + 1;
     let updated = tx.execute(
-        "UPDATE rooms SET turn_phase = 'resolving', state_version = ?2, updated_at = ?3 WHERE channel_id = ?1 AND state_version = ?4 AND turn_phase = 'collecting'",
+        "UPDATE rooms SET turn_phase = 'resolving', state_version = ?2, updated_at = ?3 WHERE channel_id = ?1 AND state_version = ?4 AND turn_phase = 'collecting' AND ended_id = ''",
         params![
             channel_id,
             new_version as i64,
@@ -164,18 +164,24 @@ pub fn commit_turn_cas_tx(
     let clues_json = serde_json::to_string(&updated_room.clues)?;
     let npc_json = serde_json::to_string(&updated_room.npc_states)?;
     let suggested_json = serde_json::to_string(&updated_room.suggested_actions)?;
+    let flags_json = serde_json::to_string(&updated_room.world_flags)?;
+    let ended_id = updated_room.ended_id.as_deref().unwrap_or("");
+    let ended_title = updated_room.ended_title.as_deref().unwrap_or("");
     let affected = tx.execute(
         r#"
         UPDATE rooms SET
             location = ?3, world_time = ?4, turn_number = ?5, state_version = ?6,
             turn_phase = 'collecting', clues_json = ?7, npc_states_json = ?8,
-            suggested_actions_json = ?9, summary = ?10, summary_upto_turn = ?11, updated_at = ?12
+            suggested_actions_json = ?9, current_act = ?10, world_flags_json = ?11,
+            ended_id = ?12, ended_title = ?13,
+            summary = ?14, summary_upto_turn = ?15, updated_at = ?16
         WHERE channel_id = ?1 AND state_version = ?2 AND turn_phase = 'resolving'
         "#,
         params![
             updated_room.channel_id, expected_version as i64, updated_room.location,
             updated_room.world_time, updated_room.turn_number, updated_room.state_version as i64,
-            clues_json, npc_json, suggested_json, updated_room.summary,
+            clues_json, npc_json, suggested_json, updated_room.current_act.max(1), flags_json,
+            ended_id, ended_title, updated_room.summary,
             updated_room.summary_upto_turn, updated_room.updated_at.to_rfc3339(),
         ],
     )?;
@@ -186,67 +192,44 @@ pub fn commit_turn_cas_tx(
     let snap_json = serde_json::to_string(snapshot)?;
     tx.execute(
         "INSERT INTO snapshots (channel_id, turn_number, snapshot_json, created_at) VALUES (?1, ?2, ?3, ?4)",
-        params![
-            snapshot.room.channel_id,
-            snapshot.room.turn_number,
-            snap_json,
-            Utc::now().to_rfc3339()
-        ],
+        params![snapshot.room.channel_id, snapshot.room.turn_number, snap_json, Utc::now().to_rfc3339()],
     )?;
     tx.execute(
-        r#"
-        DELETE FROM snapshots WHERE channel_id = ?1
-          AND id NOT IN (SELECT id FROM snapshots WHERE channel_id = ?1 ORDER BY id DESC LIMIT 15)
-        "#,
+        "DELETE FROM snapshots WHERE channel_id = ?1 AND id NOT IN (SELECT id FROM snapshots WHERE channel_id = ?1 ORDER BY id DESC LIMIT 15)",
         params![snapshot.room.channel_id],
     )?;
 
-    // Only update DM-authoritative stats/inventory/status so concurrent `/join` edits survive!
     for p in updated_players {
         update_player_dm_state(&tx, p)?;
     }
 
     tx.execute(
-        r#"
-        INSERT INTO turns (
-            channel_id, turn_number, batched_input, scene_title,
-            narrative, state_summary, location, world_time, created_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-        "#,
+        "INSERT INTO turns (channel_id, turn_number, batched_input, scene_title, narrative, state_summary, location, world_time, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
-            turn.channel_id,
-            turn.turn_number,
-            turn.batched_input,
-            turn.scene_title,
-            turn.narrative,
-            turn.state_summary,
-            turn.location,
-            turn.world_time,
+            turn.channel_id, turn.turn_number, turn.batched_input, turn.scene_title,
+            turn.narrative, turn.state_summary, turn.location, turn.world_time,
             turn.created_at.to_rfc3339(),
         ],
     )?;
 
     for w in whispers {
         tx.execute(
-            r#"
-            INSERT INTO whispers (channel_id, turn_number, user_id, player_name, content, created_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            "#,
-            params![
-                updated_room.channel_id,
-                turn.turn_number,
-                w.user_id,
-                w.player_name,
-                w.content,
-                Utc::now().to_rfc3339(),
-            ],
+            "INSERT INTO whispers (channel_id, turn_number, user_id, player_name, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![updated_room.channel_id, turn.turn_number, w.user_id, w.player_name, w.content, Utc::now().to_rfc3339()],
         )?;
     }
 
-    tx.execute(
-        "DELETE FROM pending_actions WHERE channel_id = ?1 AND target_turn <= ?2",
-        params![updated_room.channel_id, resolved_turn],
-    )?;
+    if updated_room.ended_id.is_some() {
+        tx.execute(
+            "DELETE FROM pending_actions WHERE channel_id = ?1",
+            params![updated_room.channel_id],
+        )?;
+    } else {
+        tx.execute(
+            "DELETE FROM pending_actions WHERE channel_id = ?1 AND target_turn <= ?2",
+            params![updated_room.channel_id, resolved_turn],
+        )?;
+    }
 
     tx.commit()?;
     Ok(true)
@@ -282,14 +265,18 @@ pub fn pop_and_restore_snapshot_tx(
     let clues_json = serde_json::to_string(&snapshot.room.clues)?;
     let npc_json = serde_json::to_string(&snapshot.room.npc_states)?;
     let suggested_json = serde_json::to_string(&snapshot.room.suggested_actions)?;
+    let flags_json = serde_json::to_string(&snapshot.room.world_flags)?;
+    let ended_id = snapshot.room.ended_id.as_deref().unwrap_or("");
+    let ended_title = snapshot.room.ended_title.as_deref().unwrap_or("");
     tx.execute(
         r#"
         UPDATE rooms SET
             scenario_id = ?2, title = ?3, location = ?4, world_time = ?5,
             turn_number = ?6, state_version = ?7, turn_phase = 'collecting',
             chat_mode = ?8, narrative_style = ?9, clues_json = ?10,
-            npc_states_json = ?11, suggested_actions_json = ?12, summary = ?13,
-            summary_upto_turn = ?14, active = ?15, updated_at = ?16
+            npc_states_json = ?11, suggested_actions_json = ?12,
+            current_act = ?13, world_flags_json = ?14, ended_id = ?15, ended_title = ?16,
+            summary = ?17, summary_upto_turn = ?18, active = ?19, updated_at = ?20
         WHERE channel_id = ?1
         "#,
         params![
@@ -297,6 +284,7 @@ pub fn pop_and_restore_snapshot_tx(
             snapshot.room.location, snapshot.room.world_time, snapshot.room.turn_number,
             current_version + 1, snapshot.room.chat_mode.as_str(),
             snapshot.room.narrative_style.as_str(), clues_json, npc_json, suggested_json,
+            snapshot.room.current_act.max(1), flags_json, ended_id, ended_title,
             snapshot.room.summary, snapshot.room.summary_upto_turn,
             if snapshot.room.active { 1 } else { 0 }, Utc::now().to_rfc3339(),
         ],

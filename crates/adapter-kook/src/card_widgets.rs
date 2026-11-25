@@ -1,5 +1,7 @@
 use serde_json::{Value, json};
-use tavern_domain::{ChatMode, NarrativeStyle, NpcState, PendingAction, Player, RoomState};
+use tavern_domain::{
+    ChatMode, NarrativeStyle, NpcState, PendingAction, Player, RoomState, SuggestedCheck,
+};
 
 pub fn btn(theme: &str, value: String, label: &str) -> Value {
     json!({
@@ -69,12 +71,80 @@ pub fn story_suggestion_buttons(
     }
 }
 
-pub fn story_toolbar(channel_id: &str) -> Value {
+pub fn story_toolbar(channel_id: &str, suggested_check: Option<&SuggestedCheck>) -> Value {
+    let dice_btn = if let Some(stat) = suggested_check.and_then(SuggestedCheck::parsed_stat) {
+        btn(
+            "warning",
+            format!("tavern:check:{channel_id}:{}", stat.key()),
+            &format!("{} {}检定", stat.icon(), stat.short_name()),
+        )
+    } else {
+        btn("secondary", format!("tavern:roll:{channel_id}:2d6"), "🎲 掷 2d6")
+    };
     action_group(vec![
-        btn("secondary", format!("tavern:roll:{channel_id}:2d6"), "🎲 掷 2d6"),
+        dice_btn,
         btn("primary", format!("tavern:resolve:{channel_id}"), "⚡ 立刻结算"),
         btn("info", format!("tavern:whisper:{channel_id}"), "🤫 查纸条"),
         btn("secondary", format!("tavern:status:{channel_id}"), "🎛️ 面板/设置"),
+    ])
+}
+
+pub fn push_story_action_footer(
+    modules: &mut Vec<Value>,
+    channel_id: &str,
+    turn_number: u32,
+    suggested_actions: &[String],
+    suggested_check: Option<&SuggestedCheck>,
+) {
+    if let Some(pick_row) = story_suggestion_buttons(channel_id, turn_number, suggested_actions) {
+        let badges = ["①", "②", "③"];
+        let hints = suggested_actions
+            .iter()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .take(3)
+            .enumerate()
+            .map(|(i, s)| format!("{} {}", badges[i], truncate_chars(s, 45)))
+            .collect::<Vec<_>>()
+            .join("　");
+        let ck_hint = suggested_check
+            .and_then(|c| c.parsed_stat().map(|st| (st, c.reason.trim())))
+            .map(|(st, r)| {
+                if r.is_empty() {
+                    format!(
+                        "\n🎲 **推荐检定**：{}（点下方检定按钮自动带五维加值）",
+                        st.display_label()
+                    )
+                } else {
+                    format!(
+                        "\n🎲 **推荐检定**：{} — {}（点下方检定按钮自动带五维加值）",
+                        st.display_label(),
+                        truncate_chars(r, 24)
+                    )
+                }
+            })
+            .unwrap_or_default();
+        modules.push(json!({ "type": "divider" }));
+        modules.push(json!({
+            "type": "context",
+            "elements": [{
+                "type": "kmarkdown",
+                "content": truncate_chars(&format!("✨ **点按钮直接行动**（或直接打人话）：{hints}{ck_hint}"), 500)
+            }]
+        }));
+        modules.push(pick_row);
+    } else {
+        modules.push(json!({ "type": "divider" }));
+    }
+    modules.push(story_toolbar(channel_id, suggested_check));
+}
+
+pub fn ending_toolbar(channel_id: &str) -> Value {
+    action_group(vec![
+        btn("success", format!("tavern:export:{channel_id}"), "📜 发战报墙"),
+        btn("primary", format!("tavern:endings:{channel_id}"), "🏆 结局图鉴"),
+        btn("warning", format!("tavern:undo:{channel_id}"), "↩️ 回档改命"),
+        btn("secondary", format!("tavern:menu:{channel_id}"), "📚 换剧本"),
     ])
 }
 
@@ -101,6 +171,7 @@ pub fn status_console_rows(channel_id: &str, room: &RoomState) -> [Value; 3] {
     ]);
     let row3 = action_group(vec![
         btn("primary", format!("tavern:web:{channel_id}"), "🌐 Web 看板"),
+        btn("warning", format!("tavern:endings:{channel_id}"), "🏆 结局图鉴"),
         btn("secondary", format!("tavern:cost:{channel_id}"), "💰 查账单"),
         btn("secondary", format!("tavern:help:{channel_id}"), "📖 玩法指南"),
     ]);
@@ -150,12 +221,13 @@ pub fn push_party_cards(
             p.inventory.join(" · ")
         };
         let content = format!(
-            "**{}**（{}） `{}`\n❤️ {}　｜　🧠 {}\n🏷️ {}　｜　🎒 {}",
+            "**{}**（{}） `{}`\n❤️ {}　｜　🧠 {}\n📊 {}\n🏷️ {}　｜　🎒 {}",
             truncate_chars(&p.character_name, 24),
             truncate_chars(&p.role_desc, 24),
             badge,
             hp_bar,
             san_bar,
+            p.stats.format_inline(),
             truncate_chars(status_txt, 40),
             truncate_chars(&inv, 140)
         );

@@ -3,32 +3,37 @@ use std::sync::Arc;
 use anyhow::Result;
 use chrono::Utc;
 use tavern_domain::{
-    CardTheme, EngineResponse, PendingAction, RoomEvent, RoomSnapshot, TurnPhase, TurnRecord,
-    apply_dm_reply, format_batched_actions,
+    CardTheme, EndingBanner, EndingUnlock, EngineResponse, PendingAction, RoomEvent, RoomSnapshot,
+    TurnPhase, TurnRecord, apply_dm_reply, apply_story_progression, ending_scope_key,
+    format_batched_actions,
 };
 use tracing::{info, warn};
 
+use crate::commands::check::{ended_room_notice, format_act_badge};
 use crate::commands::turn_support::{
     InFlightLlmGuard, check_daily_budget, check_daily_budget_for_slot, schedule_background_summary,
 };
 use crate::engine::GameEngine;
-use crate::ports::RoomStore;
+use crate::ports::{EventBus, RoomStore};
 
 struct ResolvingLeaseGuard {
     store: Arc<dyn RoomStore>,
+    events: Arc<dyn EventBus>,
     channel_id: String,
     expected_version: u64,
+    turn_number: u32,
     armed: bool,
 }
 
 impl ResolvingLeaseGuard {
-    fn new(store: Arc<dyn RoomStore>, channel_id: String, expected_version: u64) -> Self {
-        Self {
-            store,
-            channel_id,
-            expected_version,
-            armed: true,
-        }
+    fn new(
+        store: Arc<dyn RoomStore>,
+        events: Arc<dyn EventBus>,
+        channel_id: String,
+        expected_version: u64,
+        turn_number: u32,
+    ) -> Self {
+        Self { store, events, channel_id, expected_version, turn_number, armed: true }
     }
 
     fn disarm(&mut self) {
@@ -38,17 +43,22 @@ impl ResolvingLeaseGuard {
 
 impl Drop for ResolvingLeaseGuard {
     fn drop(&mut self) {
-        if self.armed
-            && let Err(err) = self
+        if self.armed {
+            match self
                 .store
                 .abort_resolving(&self.channel_id, self.expected_version)
-        {
-            warn!(
-                channel_id = %self.channel_id,
-                expected_version = self.expected_version,
-                error = %err,
-                "RAII 守卫回滚 Resolving 状态失败"
-            );
+            {
+                Ok(()) => self.events.publish(RoomEvent::RoomUpdated {
+                    channel_id: self.channel_id.clone(),
+                    turn_number: self.turn_number,
+                }),
+                Err(err) => warn!(
+                    channel_id = %self.channel_id,
+                    expected_version = self.expected_version,
+                    error = %err,
+                    "RAII 守卫回滚 Resolving 状态失败"
+                ),
+            }
         }
     }
 }
@@ -62,6 +72,10 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
             show_actions: false,
         });
     };
+
+    if let Some(notice) = ended_room_notice(&room_check) {
+        return Ok(notice);
+    }
 
     if room_check.turn_phase == TurnPhase::Resolving {
         return Ok(EngineResponse::Notice {
@@ -79,8 +93,8 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
 
     let Some(lease) = engine.store.try_begin_resolving(channel_id)? else {
         return Ok(EngineResponse::Notice {
-            title: "⏳ DM 正在结算本轮剧情".to_string(),
-            body: "上一条结算请求刚被触发，稍等几秒喵！".to_string(),
+            title: "⏳ 当前无法开始结算".to_string(),
+            body: "上一条结算刚被触发或本局已结束，稍后再试喵！".to_string(),
             theme: CardTheme::Warning,
             show_actions: false,
         });
@@ -88,8 +102,10 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
 
     let mut lease_guard = ResolvingLeaseGuard::new(
         engine.store.clone(),
+        engine.events.clone(),
         channel_id.to_string(),
         lease.expected_version,
+        lease.room.turn_number,
     );
     engine.emit_event(RoomEvent::RoomUpdated {
         channel_id: channel_id.to_string(),
@@ -181,7 +197,28 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         .take(3)
         .collect();
 
-    let effects = apply_dm_reply(&mut updated_room, &mut updated_players, &dm_reply);
+    let mut effects = apply_dm_reply(&mut updated_room, &mut updated_players, &dm_reply);
+    let triggered_ending = apply_story_progression(
+        &mut updated_room,
+        &updated_players,
+        &scenario,
+        &dm_reply,
+        lease.target_turn,
+        &mut effects,
+    );
+    let clean_suggestions = if triggered_ending.is_some() {
+        Vec::new()
+    } else {
+        clean_suggestions
+    };
+    let clean_check = if triggered_ending.is_some() {
+        None
+    } else {
+        dm_reply
+            .suggested_check
+            .clone()
+            .filter(|c| c.parsed_stat().is_some())
+    };
     updated_room.turn_number = lease.target_turn;
     updated_room.turn_phase = TurnPhase::Collecting;
     updated_room.state_version = lease.expected_version + 1;
@@ -228,6 +265,34 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         });
     }
 
+    let ending_reached = if let Some(ref end) = triggered_ending {
+        let party_names = updated_players
+            .iter()
+            .map(|p| p.character_name.as_str())
+            .collect::<Vec<_>>()
+            .join("、");
+        let unlock = EndingUnlock {
+            guild_id: ending_scope_key(Some(&updated_room.guild_id), &updated_room.channel_id),
+            scenario_id: updated_room.scenario_id.clone(),
+            ending_id: end.id.clone(),
+            ending_title: end.title.clone(),
+            ending_kind: end.kind.clone(),
+            turn_count: updated_room.turn_number,
+            party_names,
+            unlocked_at: Utc::now(),
+        };
+        let newly_unlocked = engine.store.record_ending_unlock(&unlock).unwrap_or(false);
+        Some(EndingBanner {
+            id: end.id.clone(),
+            title: end.title.clone(),
+            kind: end.kind.clone(),
+            newly_unlocked,
+        })
+    } else {
+        None
+    };
+
+    let act_badge = format_act_badge(Some(&scenario), updated_room.current_act);
     schedule_background_summary(engine, scenario, updated_room.clone());
 
     engine.emit_event(RoomEvent::RoomUpdated {
@@ -241,10 +306,13 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         scene_title: dm_reply.scene_title,
         location: updated_room.location,
         world_time: updated_room.world_time,
+        act_badge,
         narrative: dm_reply.narrative,
         state_changes: effects.state_changes,
         whisper_hints: effects.whisper_hints,
         suggested_actions: clean_suggestions,
+        suggested_check: clean_check,
+        ending_reached,
         direct_messages: effects.direct_messages,
     })
 }

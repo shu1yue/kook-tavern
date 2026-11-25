@@ -229,29 +229,26 @@ async fn print_response(stdout: &mut io::Stdout, resp: &EngineResponse) -> Resul
             stdout.write_all(out.as_bytes()).await?;
         }
         EngineResponse::StoryTurn {
-            turn_number,
-            scene_title,
-            location,
-            world_time,
-            narrative,
-            state_changes,
-            whisper_hints,
-            suggested_actions,
-            direct_messages,
-            ..
+            turn_number, scene_title, location, world_time, act_badge, narrative,
+            state_changes, whisper_hints, suggested_actions, suggested_check, ending_reached,
+            direct_messages, ..
         } => {
+            let act_str = act_badge.as_deref().map(|a| format!(" ｜ 🎬 {a}")).unwrap_or_default();
             let mut buf = format!(
-                "\n╔══════════════════════════════════════════════════════════\n║ 🎭 {scene_title}\n║ 📍 {location} ｜ 🕒 {world_time} ｜ 🎲 第 {turn_number} 回合\n╠══════════════════════════════════════════════════════════\n{}\n",
+                "\n╔══════════════════════════════════════════════════════════\n║ 🎭 {scene_title}\n║ 📍 {location} ｜ 🕒 {world_time} ｜ 🎲 第 {turn_number} 回合{act_str}\n╠══════════════════════════════════════════════════════════\n{}\n",
                 indent_lines(narrative)
             );
             if !state_changes.is_empty() || !whisper_hints.is_empty() {
                 buf.push_str("╟──────────────────────────────────────────────────────────\n");
-                for line in state_changes {
-                    buf.push_str(&format!("║ {line}\n"));
-                }
-                for line in whisper_hints {
-                    buf.push_str(&format!("║ {line}\n"));
-                }
+                for line in state_changes { buf.push_str(&format!("║ {line}\n")); }
+                for line in whisper_hints { buf.push_str(&format!("║ {line}\n")); }
+            }
+            if let Some(end) = ending_reached {
+                let tag = if end.newly_unlocked { " [🆕 首次解锁]" } else { "" };
+                buf.push_str(&format!("╟──────────────────────────────────────────────────────────\n║ 🏆 达成结局：《{}》{tag}\n", end.title));
+            }
+            if let Some(ck) = suggested_check {
+                buf.push_str(&format!("║ 🎲 推荐检定：{} ({})\n", ck.stat, ck.reason));
             }
             if !suggested_actions.is_empty() {
                 buf.push_str("╟──────────────────────────────────────────────────────────\n");
@@ -300,20 +297,11 @@ async fn print_response(stdout: &mut io::Stdout, resp: &EngineResponse) -> Resul
                         "⏳ 等待中"
                     };
                     buf.push_str(&format!(
-                        "│ {}（{}） [{}]\n│   ❤️ HP {}/{} ｜ 🧠 SAN {}/{} ｜ 🏷️ {}\n│   🎒 {}\n",
-                        p.character_name,
-                        p.role_desc,
-                        badge,
-                        p.hp,
-                        p.max_hp,
-                        p.san,
-                        p.max_san,
+                        "│ {}（{}） [{}] ｜ {}\n│   ❤️ HP {}/{} ｜ 🧠 SAN {}/{} ｜ 🏷️ {}\n│   🎒 {}\n",
+                        p.character_name, p.role_desc, badge, p.stats.format_inline(),
+                        p.hp, p.max_hp, p.san, p.max_san,
                         if p.status_note.is_empty() { "正常" } else { &p.status_note },
-                        if p.inventory.is_empty() {
-                            "空".to_string()
-                        } else {
-                            p.inventory.join("、")
-                        }
+                        if p.inventory.is_empty() { "空".to_string() } else { p.inventory.join("、") }
                     ));
                 }
             }

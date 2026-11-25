@@ -4,6 +4,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::stats::{CharacterStats, ScenarioAct, ScenarioEnding};
+
 #[derive(Debug, Error)]
 pub enum DomainError {
     #[error("无效的骰子表达式：{0}")]
@@ -22,12 +24,8 @@ pub enum ChatMode {
 
 impl ChatMode {
     pub fn as_str(self) -> &'static str {
-        match self {
-            ChatMode::Strict => "strict",
-            ChatMode::Roleplay => "roleplay",
-        }
+        match self { ChatMode::Strict => "strict", ChatMode::Roleplay => "roleplay" }
     }
-
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "strict" | "严格" | "指令" => Some(ChatMode::Strict),
@@ -35,7 +33,6 @@ impl ChatMode {
             _ => None,
         }
     }
-
     pub fn display_label(self) -> &'static str {
         match self {
             ChatMode::Strict => "严格模式（仅 /act 或 > 计入行动，日常吹水自动屏蔽）",
@@ -54,12 +51,8 @@ pub enum NarrativeStyle {
 
 impl NarrativeStyle {
     pub fn as_str(self) -> &'static str {
-        match self {
-            NarrativeStyle::Prose => "prose",
-            NarrativeStyle::Voice => "voice",
-        }
+        match self { NarrativeStyle::Prose => "prose", NarrativeStyle::Voice => "voice" }
     }
-
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "prose" | "text" | "文字" | "沉浸" => Some(NarrativeStyle::Prose),
@@ -67,7 +60,6 @@ impl NarrativeStyle {
             _ => None,
         }
     }
-
     pub fn display_label(self) -> &'static str {
         match self {
             NarrativeStyle::Prose => "纯文字沉浸档（200~420字画面描写）",
@@ -86,12 +78,8 @@ pub enum TurnPhase {
 
 impl TurnPhase {
     pub fn as_str(self) -> &'static str {
-        match self {
-            TurnPhase::Collecting => "collecting",
-            TurnPhase::Resolving => "resolving",
-        }
+        match self { TurnPhase::Collecting => "collecting", TurnPhase::Resolving => "resolving" }
     }
-
     pub fn parse(s: &str) -> Self {
         match s.trim().to_ascii_lowercase().as_str() {
             "resolving" => TurnPhase::Resolving,
@@ -121,13 +109,10 @@ pub struct WorldbookEntry {
     pub content: String,
 }
 
-fn default_priority() -> i32 {
-    50
-}
-
-fn default_state_version() -> u64 {
-    1
-}
+fn default_priority() -> i32 { 50 }
+fn default_state_version() -> u64 { 1 }
+fn default_current_act() -> u32 { 1 }
+fn default_theme() -> String { "ember".to_string() }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PresetRole {
@@ -136,6 +121,8 @@ pub struct PresetRole {
     pub traits: Vec<String>,
     #[serde(default)]
     pub bonus_items: Vec<String>,
+    #[serde(default)]
+    pub stats: CharacterStats,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -153,6 +140,8 @@ pub struct Scenario {
     pub name: String,
     pub tagline: String,
     pub genre: String,
+    #[serde(default = "default_theme")]
+    pub theme: String,
     pub dm_style: String,
     pub initial_location: String,
     pub initial_time: String,
@@ -162,6 +151,10 @@ pub struct Scenario {
     pub player_defaults: StarterCharacterDefaults,
     #[serde(default)]
     pub preset_roles: Vec<PresetRole>,
+    #[serde(default)]
+    pub acts: Vec<ScenarioAct>,
+    #[serde(default)]
+    pub endings: Vec<ScenarioEnding>,
     #[serde(default)]
     pub worldbook: Vec<WorldbookEntry>,
 }
@@ -194,6 +187,14 @@ pub struct RoomState {
     pub npc_states: Vec<NpcState>,
     #[serde(default)]
     pub suggested_actions: Vec<String>,
+    #[serde(default = "default_current_act")]
+    pub current_act: u32,
+    #[serde(default)]
+    pub world_flags: Vec<String>,
+    #[serde(default)]
+    pub ended_id: Option<String>,
+    #[serde(default)]
+    pub ended_title: Option<String>,
     #[serde(default)]
     pub summary: String,
     #[serde(default)]
@@ -242,6 +243,8 @@ pub struct Player {
     pub status_note: String,
     #[serde(default)]
     pub is_afk: bool,
+    #[serde(default)]
+    pub stats: CharacterStats,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

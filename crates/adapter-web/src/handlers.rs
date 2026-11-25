@@ -10,12 +10,13 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Response};
 use futures_util::stream::{self, Stream};
 use serde::{Deserialize, Serialize};
-use tavern_domain::{NpcState, RoomEvent, RoomState, TurnPhase};
+use tavern_domain::{RoomEvent, RoomState};
 use tokio::sync::broadcast::error::RecvError;
 use tracing::warn;
 
 use crate::WebState;
 use crate::security::{constant_time_eq, security_headers};
+use crate::views::build_room_public_view;
 
 const DASHBOARD_HTML: &str = include_str!("../assets/dashboard.html");
 
@@ -32,55 +33,6 @@ struct HealthResp {
     version: &'static str,
 }
 
-/// Strictly sanitized public read-only room view (NEVER exposes `web_token`, `gm_user_id`,
-/// `guild_id`, `user_id`, or private `whispers`!).
-#[derive(Debug, Serialize)]
-pub struct RoomPublicView {
-    pub title: String,
-    pub scenario_id: String,
-    pub location: String,
-    pub world_time: String,
-    pub turn_number: u32,
-    pub turn_phase: &'static str,
-    pub chat_mode: &'static str,
-    pub narrative_style: &'static str,
-    pub active: bool,
-    pub summary: String,
-    pub summary_upto_turn: u32,
-    pub opening_scene: String,
-    pub clues: Vec<String>,
-    pub npc_states: Vec<NpcState>,
-    pub players: Vec<PlayerPublicView>,
-    pub turns: Vec<TurnPublicView>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PlayerPublicView {
-    pub character_name: String,
-    pub role_desc: String,
-    pub traits: Vec<String>,
-    pub hp: i32,
-    pub max_hp: i32,
-    pub san: i32,
-    pub max_san: i32,
-    pub inventory: Vec<String>,
-    pub status_note: String,
-    pub is_afk: bool,
-    pub action_ready: bool,
-    pub roll_notes: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct TurnPublicView {
-    pub turn_number: u32,
-    pub scene_title: String,
-    pub location: String,
-    pub world_time: String,
-    pub batched_input: String,
-    pub narrative: String,
-    pub state_summary: String,
-}
-
 pub async fn healthz() -> impl IntoResponse {
     (
         StatusCode::OK,
@@ -88,7 +40,7 @@ pub async fn healthz() -> impl IntoResponse {
         Json(HealthResp {
             status: "ok",
             service: "kook-tavern-dm",
-            version: "0.5.0-m2",
+            version: "0.6.0-m3",
         }),
     )
 }
@@ -126,89 +78,18 @@ pub async fn room_api(
             .into_response();
     };
 
-    let players = match state.store.list_players(&channel_id) {
-        Ok(p) => p,
+    match build_room_public_view(&state, &channel_id, room) {
+        Ok(view) => (StatusCode::OK, security_headers(), Json(view)).into_response(),
         Err(err) => {
-            warn!(channel_id, error = %err, "Web 看板读取玩家列表失败");
-            return (StatusCode::INTERNAL_SERVER_ERROR, security_headers(), "internal error")
-                .into_response();
+            warn!(channel_id, error = %err, "Web 看板读取房间快照失败");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                security_headers(),
+                "internal error",
+            )
+                .into_response()
         }
-    };
-    let next_turn = if room.turn_phase == TurnPhase::Resolving {
-        room.turn_number + 2
-    } else {
-        room.turn_number + 1
-    };
-    let pending = state
-        .store
-        .list_pending_actions(&channel_id, next_turn)
-        .unwrap_or_default();
-    let turns = state
-        .store
-        .list_recent_turns(&channel_id, 30)
-        .unwrap_or_default();
-    let opening_scene = state
-        .scenarios
-        .get(&room.scenario_id)
-        .map(|s| s.opening_scene.trim().to_string())
-        .unwrap_or_default();
-
-    let player_views = players
-        .into_iter()
-        .map(|p| {
-            let p_act = pending.iter().find(|a| a.user_id == p.user_id);
-            let action_ready = p_act.is_some_and(|a| !a.action_text.trim().is_empty());
-            let roll_notes = p_act.map(|a| a.roll_notes.clone()).unwrap_or_default();
-            PlayerPublicView {
-                character_name: p.character_name,
-                role_desc: p.role_desc,
-                traits: p.traits,
-                hp: p.hp,
-                max_hp: p.max_hp,
-                san: p.san,
-                max_san: p.max_san,
-                inventory: p.inventory,
-                status_note: p.status_note,
-                is_afk: p.is_afk,
-                action_ready,
-                roll_notes,
-            }
-        })
-        .collect();
-
-    let turn_views = turns
-        .into_iter()
-        .map(|t| TurnPublicView {
-            turn_number: t.turn_number,
-            scene_title: t.scene_title,
-            location: t.location,
-            world_time: t.world_time,
-            batched_input: t.batched_input,
-            narrative: t.narrative,
-            state_summary: t.state_summary,
-        })
-        .collect();
-
-    let view = RoomPublicView {
-        title: room.title,
-        scenario_id: room.scenario_id,
-        location: room.location,
-        world_time: room.world_time,
-        turn_number: room.turn_number,
-        turn_phase: room.turn_phase.as_str(),
-        chat_mode: room.chat_mode.as_str(),
-        narrative_style: room.narrative_style.as_str(),
-        active: room.active,
-        summary: room.summary,
-        summary_upto_turn: room.summary_upto_turn,
-        opening_scene,
-        clues: room.clues,
-        npc_states: room.npc_states,
-        players: player_views,
-        turns: turn_views,
-    };
-
-    (StatusCode::OK, security_headers(), Json(view)).into_response()
+    }
 }
 
 pub async fn room_events_sse(
@@ -248,8 +129,6 @@ fn make_sse_stream(
     channel_id: String,
     permit: tokio::sync::OwnedSemaphorePermit,
 ) -> impl Stream<Item = Result<Event, Infallible>> + Send {
-    // Once `RoomReset` fires for this room, emit one final `reset` frame then return `None`
-    // so the server forcibly terminates the SSE stream and releases the semaphore slot immediately!
     stream::unfold(
         (rx, channel_id, permit, false),
         |(mut rx, chan, permit, closed)| async move {

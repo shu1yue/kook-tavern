@@ -3,8 +3,8 @@ use tavern_domain::{ChatMode, EngineResponse, NarrativeStyle};
 
 use crate::card_menus::{render_role_picker_card, render_scenario_menu_card};
 use crate::card_widgets::{
-    notice_action_bar, push_npc_section, push_party_cards, status_console_rows,
-    story_suggestion_buttons, story_toolbar, truncate_chars,
+    ending_toolbar, notice_action_bar, push_npc_section, push_party_cards,
+    push_story_action_footer, status_console_rows, truncate_chars,
 };
 
 pub fn thinking_placeholder_card_json() -> String {
@@ -65,23 +65,35 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
             scene_title,
             location,
             world_time,
+            act_badge,
             narrative,
             state_changes,
             whisper_hints,
             suggested_actions,
+            suggested_check,
+            ending_reached,
             ..
         } => {
+            let act_part = act_badge
+                .as_deref()
+                .map(|a| format!("　｜　🎬 {a}"))
+                .unwrap_or_default();
+            let header_title = if let Some(end) = ending_reached {
+                format!("🏆 终局 · {}（{}）", end.title, scene_title)
+            } else {
+                format!("🎭 {scene_title}")
+            };
             let mut modules = vec![
                 json!({
                     "type": "header",
-                    "text": { "type": "plain-text", "content": truncate_chars(&format!("🎭 {scene_title}"), 100) }
+                    "text": { "type": "plain-text", "content": truncate_chars(&header_title, 100) }
                 }),
                 json!({
                     "type": "context",
                     "elements": [{
                         "type": "kmarkdown",
                         "content": truncate_chars(
-                            &format!("📍 **{}**　｜　🕒 {}　｜　🎲 第 **{}** 回合", location, world_time, turn_number),
+                            &format!("📍 **{}**　｜　🕒 {}　｜　🎲 第 **{}** 回合{act_part}", location, world_time, turn_number),
                             500
                         )
                     }]
@@ -99,45 +111,35 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
                 push_chunked_sections(&mut modules, &lines.join("\n"), 3200);
             }
 
-            if let Some(pick_row) =
-                story_suggestion_buttons(turn_chan, *turn_number, suggested_actions)
-            {
-                let badges = ["①", "②", "③"];
-                let hints = suggested_actions
-                    .iter()
-                    .map(|s| s.trim())
-                    .filter(|s| !s.is_empty())
-                    .take(3)
-                    .enumerate()
-                    .map(|(i, s)| format!("{} {}", badges[i], truncate_chars(s, 45)))
-                    .collect::<Vec<_>>()
-                    .join("　");
+            if let Some(end) = ending_reached {
+                let unlock_tag = if end.newly_unlocked { " 🆕 **本服首次解锁成就！**" } else { "" };
                 modules.push(json!({ "type": "divider" }));
                 modules.push(json!({
-                    "type": "context",
-                    "elements": [{
+                    "type": "section",
+                    "text": {
                         "type": "kmarkdown",
-                        "content": truncate_chars(&format!("✨ **点按钮直接行动**（或直接打人话）：{hints}"), 500)
-                    }]
+                        "content": format!("🏆 **达成结局：《{}》**{unlock_tag}\n> 冒险已圆满收束！点下方按钮发战报墙留念、查看结局图鉴或回档重选命运。", end.title)
+                    }
                 }));
-                modules.push(pick_row);
+                modules.push(ending_toolbar(turn_chan));
             } else {
-                modules.push(json!({ "type": "divider" }));
+                push_story_action_footer(
+                    &mut modules,
+                    turn_chan,
+                    *turn_number,
+                    suggested_actions,
+                    suggested_check.as_ref(),
+                );
             }
 
-            modules.push(story_toolbar(turn_chan));
-
-            json!([{
-                "type": "card",
-                "theme": "primary",
-                "size": "lg",
-                "modules": modules
-            }])
-            .to_string()
+            let card_theme = if ending_reached.is_some() { "warning" } else { "primary" };
+            json!([{ "type": "card", "theme": card_theme, "size": "lg", "modules": modules }])
+                .to_string()
         }
         EngineResponse::StatusBoard {
             channel_id: board_chan,
             room,
+            act_label,
             players,
             pending_actions,
         } => {
@@ -149,6 +151,15 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
                 NarrativeStyle::Voice => "🎙️ 语音极简",
                 NarrativeStyle::Prose => "📖 文字沉浸",
             };
+            let act_line = act_label
+                .as_deref()
+                .map(|a| format!("\n🎬 **当前幕次**：{a}"))
+                .unwrap_or_default();
+            let end_line = room
+                .ended_title
+                .as_deref()
+                .map(|e| format!("　｜　🏆 **已达结局**：{e}"))
+                .unwrap_or_default();
             let mut modules = vec![
                 json!({
                     "type": "header",
@@ -160,7 +171,7 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
                         "type": "kmarkdown",
                         "content": truncate_chars(
                             &format!(
-                                "📍 {} ｜ 🕒 {} ｜ 🎲 第 {} 回合 ｜ {} ｜ {}",
+                                "📍 {} ｜ 🕒 {} ｜ 🎲 第 {} 回合 ｜ {} ｜ {}{act_line}{end_line}",
                                 room.location, room.world_time, room.turn_number, mode_badge, style_badge
                             ),
                             500
@@ -172,6 +183,17 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
 
             push_party_cards(&mut modules, players, pending_actions);
             push_npc_section(&mut modules, &room.npc_states);
+
+            if !room.world_flags.is_empty() && modules.len() < 36 {
+                modules.push(json!({ "type": "divider" }));
+                modules.push(json!({
+                    "type": "section",
+                    "text": {
+                        "type": "kmarkdown",
+                        "content": truncate_chars(&format!("🚩 **关键进展节点**：{}", room.world_flags.join(" · ")), 1000)
+                    }
+                }));
+            }
 
             if !room.clues.is_empty() {
                 modules.push(json!({ "type": "divider" }));
@@ -261,37 +283,34 @@ mod tests {
     #[test]
     fn builds_valid_kook_cards_with_interactive_buttons_and_zero_whisper_leak() {
         let resp = EngineResponse::StoryTurn {
-            channel_id: "ch_99".into(),
-            turn_number: 2,
-            scene_title: "酒馆暗流".into(),
-            location: "余烬酒馆".into(),
-            world_time: "21:20".into(),
+            channel_id: "ch_99".into(), turn_number: 2, scene_title: "酒馆暗流".into(),
+            location: "余烬酒馆".into(), world_time: "21:20".into(),
+            act_badge: Some("第 1/3 幕 · 暴雪夜".into()),
             narrative: "老雷恩推过来一杯麦酒。".into(),
             state_changes: vec!["**陆沉**：🎒 获得「钥匙」".into()],
             whisper_hints: vec!["🤫 DM 悄悄给 **陆沉** 递了一张秘密纸条".into()],
             suggested_actions: vec!["追问白鸦下落".into(), "潜入地下酒窖".into()],
+            suggested_check: Some(tavern_domain::SuggestedCheck {
+                stat: "侦查".into(), reason: "细查柜台暗格".into(),
+            }),
+            ending_reached: None,
             direct_messages: vec![tavern_domain::DirectMessageOut {
-                user_id: "u1".into(),
-                player_name: "陆沉".into(),
+                user_id: "u1".into(), player_name: "陆沉".into(),
                 content: "绝密暗格密码0317".into(),
             }],
         };
         let raw = render_kook_card_json("ch_99", &resp);
         assert_valid_kook_card(&raw);
         assert!(raw.contains("tavern:pick:ch_99:2:0"));
-        assert!(raw.contains("tavern:pick:ch_99:2:1"));
-        assert!(raw.contains("tavern:roll:ch_99:2d6"));
+        assert!(raw.contains("tavern:check:ch_99:investigate"));
         assert!(raw.contains("tavern:whisper:ch_99"));
         assert!(!raw.contains("绝密暗格密码0317"));
 
         let menu = EngineResponse::ScenarioMenu {
             channel_id: "ch_99".into(),
             scenarios: vec![ScenarioSummary {
-                id: "ember_tavern".into(),
-                name: "余烬酒馆".into(),
-                genre: "奇幻".into(),
-                tagline: "暴雪夜悬赏".into(),
-                worldbook_count: 5,
+                id: "ember_tavern".into(), name: "余烬酒馆".into(),
+                genre: "奇幻".into(), tagline: "暴雪夜悬赏".into(), worldbook_count: 5,
             }],
         };
         let menu_raw = render_kook_card_json("ch_99", &menu);
@@ -301,8 +320,6 @@ mod tests {
         let public_fallback = render_plain_fallback(&resp, false);
         assert!(public_fallback.contains("获得「钥匙」"));
         assert!(!public_fallback.contains("绝密暗格密码0317"));
-
-        let dm_fallback = render_plain_fallback(&resp, true);
-        assert!(dm_fallback.contains("绝密暗格密码0317"));
+        assert!(render_plain_fallback(&resp, true).contains("绝密暗格密码0317"));
     }
 }

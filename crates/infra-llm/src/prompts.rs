@@ -104,8 +104,14 @@ pub fn build_dm_messages(
         None
     };
 
-    let dynamic_block =
-        format_dynamic_turn_prompt(room, players, &dynamic_lore, &batched_input, opening_recap);
+    let dynamic_block = format_dynamic_turn_prompt(
+        scenario,
+        room,
+        players,
+        &dynamic_lore,
+        &batched_input,
+        opening_recap,
+    );
     messages.push(ChatMessage {
         role: "user".to_string(),
         content: dynamic_block,
@@ -152,6 +158,7 @@ pub fn build_summary_messages(
 }
 
 fn format_dynamic_turn_prompt(
+    scenario: &Scenario,
     room: &RoomState,
     players: &[Player],
     dynamic_lore: &[&tavern_domain::WorldbookEntry],
@@ -176,7 +183,7 @@ fn format_dynamic_turn_prompt(
                 };
                 let afk_tag = if p.is_afk { " [暂离]" } else { "" };
                 format!(
-                    "- {}（{}）{} | HP {}/{} | SAN {}/{} | 特质: {} | 背包: [{}] | 状态: {}",
+                    "- {}（{}）{} | HP {}/{} | SAN {}/{} | 五维: {} | 特质: {} | 背包: [{}] | 状态: {}",
                     p.character_name,
                     if p.role_desc.is_empty() { "冒险者" } else { &p.role_desc },
                     afk_tag,
@@ -184,6 +191,7 @@ fn format_dynamic_turn_prompt(
                     p.max_hp,
                     p.san,
                     p.max_san,
+                    p.stats.format_prompt(),
                     traits,
                     inv,
                     if p.status_note.trim().is_empty() {
@@ -193,6 +201,18 @@ fn format_dynamic_turn_prompt(
                     }
                 )
             })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    let act_block = format_act_progress(scenario, room);
+    let endings_block = if scenario.endings.is_empty() {
+        "（自由探索模组，无需触发预设结局）".to_string()
+    } else {
+        scenario
+            .endings
+            .iter()
+            .map(|e| format!("- `{}`（{} / {}）：{}", e.id, e.title, e.kind, e.summary))
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -243,7 +263,8 @@ fn format_dynamic_turn_prompt(
 - 即将结算：第 {next_turn} 回合
 - 当前地点：{location}
 - 当前时间：{world_time}
-- 队员状态：
+- 当前幕次进度：{act_block}
+- 队员状态（当前共 {party_count} 人）：
 {party_block}
 - 已掌握线索：
 {clues_block}
@@ -251,6 +272,9 @@ fn format_dynamic_turn_prompt(
 {npc_block}
 - 前情提要：
 {summary_block}
+
+【本剧本可用结局清单（仅在真正满足条件且进入收束时填入 trigger_ending_id，平时必须填 null）】
+{endings_block}
 
 【本轮触发的隐藏世界书（仅供 DM 裁决参考，切勿直接全盘剧透）】
 {lore_block}
@@ -260,5 +284,30 @@ fn format_dynamic_turn_prompt(
         next_turn = room.turn_number + 1,
         location = room.location,
         world_time = room.world_time,
+        party_count = players.len(),
+    )
+}
+
+fn format_act_progress(scenario: &Scenario, room: &RoomState) -> String {
+    let flags = if room.world_flags.is_empty() {
+        "无".to_string()
+    } else {
+        room.world_flags.join("、")
+    };
+    if scenario.acts.is_empty() {
+        return format!("自由推进 ｜ 已触发节点：[{flags}]");
+    }
+    let total = scenario.acts.len();
+    let idx = (room.current_act.max(1) as usize)
+        .saturating_sub(1)
+        .min(total - 1);
+    let act = &scenario.acts[idx];
+    format!(
+        "第 {}/{} 幕【{}】｜ 本幕目标：{} ｜ 已触发节点：[{}]",
+        idx + 1,
+        total,
+        act.title,
+        act.goal,
+        flags
     )
 }

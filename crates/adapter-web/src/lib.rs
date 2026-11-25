@@ -1,5 +1,6 @@
 mod handlers;
 mod security;
+mod views;
 
 use std::future::Future;
 use std::net::SocketAddr;

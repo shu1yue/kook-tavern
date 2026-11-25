@@ -141,6 +141,37 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
         Ok(())
     })?;
 
+    apply_if_needed(conn, 7, "0007_m3_stats_acts_endings", |tx| {
+        add_column_if_missing(tx, "players", "stats_json", "TEXT NOT NULL DEFAULT '{}'")?;
+        add_column_if_missing(tx, "rooms", "current_act", "INTEGER NOT NULL DEFAULT 1")?;
+        add_column_if_missing(
+            tx,
+            "rooms",
+            "world_flags_json",
+            "TEXT NOT NULL DEFAULT '[]'",
+        )?;
+        add_column_if_missing(tx, "rooms", "ended_id", "TEXT NOT NULL DEFAULT ''")?;
+        add_column_if_missing(tx, "rooms", "ended_title", "TEXT NOT NULL DEFAULT ''")?;
+        tx.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS ending_unlocks (
+                guild_id TEXT NOT NULL,
+                scenario_id TEXT NOT NULL,
+                ending_id TEXT NOT NULL,
+                ending_title TEXT NOT NULL,
+                ending_kind TEXT NOT NULL DEFAULT 'normal',
+                turn_count INTEGER NOT NULL DEFAULT 0,
+                party_names TEXT NOT NULL DEFAULT '',
+                unlocked_at TEXT NOT NULL,
+                PRIMARY KEY (guild_id, scenario_id, ending_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_ending_unlocks_guild
+                ON ending_unlocks (guild_id, unlocked_at DESC);
+            "#,
+        )?;
+        Ok(())
+    })?;
+
     Ok(())
 }
 

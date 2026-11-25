@@ -33,6 +33,9 @@ pub fn cmd_export(
 
     let mut md = String::new();
     md.push_str(&format!("# 🎭 跑团战报：《{}》\n\n", room.title));
+    if let Some(ref end_title) = room.ended_title {
+        md.push_str(&format!("> 🏆 **达成结局**：{}\n\n", end_title));
+    }
     md.push_str(&format!(
         "- **频道**：`{}`\n- **总回合数**：{}\n- **最新位置**：{}\n- **最新时间**：{}\n\n",
         room.channel_id, room.turn_number, room.location, room.world_time
@@ -128,13 +131,15 @@ fn build_wall_report(
             .join("\n- ")
     };
 
-    let mut sections = vec![
-        format!(
-            "📍 **定格场景**：{} ｜ 🕒 {} ｜ 🎲 共历 **{}** 回合",
-            room.location, room.world_time, turns.len()
-        ),
-        format!("**⚔️ 冒险阵容**\n- {roster}"),
-    ];
+    let mut sections = Vec::new();
+    if let Some(ref end_title) = room.ended_title {
+        sections.push(format!("🏆 **达成结局**：**{end_title}**"));
+    }
+    sections.push(format!(
+        "📍 **定格场景**：{} ｜ 🕒 {} ｜ 🎲 共历 **{}** 回合",
+        room.location, room.world_time, turns.len()
+    ));
+    sections.push(format!("**⚔️ 冒险阵容**\n- {roster}"));
 
     if !room.clues.is_empty() {
         let top_clues = room

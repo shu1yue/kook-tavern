@@ -59,6 +59,7 @@ mod tests {
             name: "Test".into(),
             tagline: "Tag".into(),
             genre: "Fantasy".into(),
+            theme: "ember".into(),
             dm_style: "Style".into(),
             initial_location: "Tavern".into(),
             initial_time: "Night".into(),
@@ -70,6 +71,8 @@ mod tests {
                 starter_items: vec![],
             },
             preset_roles: vec![],
+            acts: vec![],
+            endings: vec![],
             worldbook: vec![
                 WorldbookEntry {
                     id: "always".into(),

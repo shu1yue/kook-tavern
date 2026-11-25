@@ -2,8 +2,8 @@ use anyhow::Result;
 use tavern_core::{BoxFuture, LlmProvider};
 use tavern_domain::{
     DmStructuredReply, DmTurnOutput, LlmUsage, NpcUpdate, PendingAction, Player, PrivateWhisper,
-    RoomState, Scenario, StatePatch, SummaryOutput, TurnRecord, format_batched_actions,
-    match_dynamic_worldbook,
+    RoomState, Scenario, StatePatch, SuggestedCheck, SummaryOutput, TurnRecord,
+    format_batched_actions, match_dynamic_worldbook,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -83,6 +83,21 @@ impl LlmProvider for MockLlmProvider {
                 }
             }
 
+            let mut add_flags = Vec::new();
+            let mut advance_act = false;
+            let mut trigger_ending_id = None;
+            let joined_lower = corpus.to_lowercase();
+            if joined_lower.contains("推进") || joined_lower.contains("进入下一幕") {
+                add_flags.push("突破核心线索节点".to_string());
+                advance_act = true;
+            }
+            if (joined_lower.contains("真结局") || joined_lower.contains("触发结局"))
+                && let Some(first_end) = scenario.endings.first()
+            {
+                add_flags.push("达成终局条件".to_string());
+                trigger_ending_id = Some(first_end.id.clone());
+            }
+
             let turn_next = room.turn_number + 1;
             let base_time = room
                 .world_time
@@ -102,10 +117,17 @@ impl LlmProvider for MockLlmProvider {
                 world_time: Some(format!("{base_time} · 推进{}分钟", turn_next * 10)),
                 location: Some(room.location.clone()),
                 suggested_actions: vec![
-                    "盘问眼前最可疑的 NPC".to_string(),
-                    "仔细检查关键物品与痕迹".to_string(),
-                    "与队友低声交换情报再决定去向".to_string(),
+                    "盘问眼前最可疑的人".to_string(),
+                    "仔细检查关键痕迹".to_string(),
+                    "顺着线索深入调查".to_string(),
                 ],
+                suggested_check: Some(SuggestedCheck {
+                    stat: "侦查".to_string(),
+                    reason: "搜寻隐秘细节".to_string(),
+                }),
+                add_flags,
+                advance_act,
+                trigger_ending_id,
             };
 
             Ok(DmTurnOutput {

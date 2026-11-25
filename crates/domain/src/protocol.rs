@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::models::{PendingAction, Player, PresetRole, RoomState};
+use crate::stats::SuggestedCheck;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StatePatch {
@@ -51,6 +52,14 @@ pub struct DmStructuredReply {
     pub location: Option<String>,
     #[serde(default)]
     pub suggested_actions: Vec<String>,
+    #[serde(default)]
+    pub suggested_check: Option<SuggestedCheck>,
+    #[serde(default)]
+    pub add_flags: Vec<String>,
+    #[serde(default)]
+    pub advance_act: bool,
+    #[serde(default)]
+    pub trigger_ending_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -113,6 +122,14 @@ pub struct WallReport {
 }
 
 #[derive(Debug, Clone)]
+pub struct EndingBanner {
+    pub id: String,
+    pub title: String,
+    pub kind: String,
+    pub newly_unlocked: bool,
+}
+
+#[derive(Debug, Clone)]
 pub enum EngineResponse {
     Ignore,
     Notice {
@@ -150,15 +167,19 @@ pub enum EngineResponse {
         scene_title: String,
         location: String,
         world_time: String,
+        act_badge: Option<String>,
         narrative: String,
         state_changes: Vec<String>,
         whisper_hints: Vec<String>,
         suggested_actions: Vec<String>,
+        suggested_check: Option<SuggestedCheck>,
+        ending_reached: Option<EndingBanner>,
         direct_messages: Vec<DirectMessageOut>,
     },
     StatusBoard {
         channel_id: String,
         room: RoomState,
+        act_label: Option<String>,
         players: Vec<Player>,
         pending_actions: Vec<PendingAction>,
     },

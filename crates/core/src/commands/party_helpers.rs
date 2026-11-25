@@ -7,37 +7,13 @@ pub fn ensure_player(
     engine: &GameEngine,
     msg: &IncomingMessage,
     scenario: &Scenario,
-) -> Result<Player> {
-    if let Some(existing) = engine.store.get_player(&msg.channel_id, &msg.user_id)? {
-        if existing.is_afk {
-            // Targeted column update ONLY — never overwrites DM stats!
-            if let Some(updated) = engine
-                .store
-                .set_player_afk(&msg.channel_id, &msg.user_id, false)?
-            {
-                return Ok(updated);
-            }
-        }
-        return Ok(existing);
-    }
-    let existing_players = engine.store.list_players(&msg.channel_id)?;
-    let character_name = unique_character_name(&existing_players, &msg.user_name);
-    let p = Player {
-        channel_id: msg.channel_id.clone(),
-        user_id: msg.user_id.clone(),
-        character_name,
-        role_desc: "酒馆旅客".to_string(),
-        traits: Vec::new(),
-        hp: scenario.player_defaults.max_hp,
-        max_hp: scenario.player_defaults.max_hp,
-        san: scenario.player_defaults.max_san,
-        max_san: scenario.player_defaults.max_san,
-        inventory: scenario.player_defaults.starter_items.clone(),
-        status_note: "正常".to_string(),
-        is_afk: false,
-    };
-    engine.store.upsert_player(&p)?;
-    Ok(p)
+) -> Result<Option<Player>> {
+    engine.store.ensure_player_atomic(
+        &msg.channel_id,
+        &msg.user_id,
+        &msg.user_name,
+        &scenario.player_defaults,
+    )
 }
 
 pub fn unique_character_name(existing_players: &[Player], raw_name: &str) -> String {

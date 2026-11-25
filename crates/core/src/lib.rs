@@ -6,7 +6,7 @@ pub mod ports;
 pub use config::AppConfig;
 pub use engine::GameEngine;
 pub use ports::{
-    BackgroundTaskRunner, BoxFuture, EventBus, ExportWriter, GmUpdateOutcome, LlmProvider,
-    NoopBackgroundRunner, NoopEventBus, NoopExportWriter, ResolvingLease, RoomStore,
+    BackgroundTaskRunner, BoxFuture, EventBus, ExportWriter, GmUpdateOutcome, JoinPlayerOutcome,
+    LlmProvider, NoopBackgroundRunner, NoopEventBus, NoopExportWriter, ResolvingLease, RoomStore,
     ScenarioCatalog,
 };

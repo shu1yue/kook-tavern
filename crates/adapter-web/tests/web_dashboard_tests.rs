@@ -71,6 +71,10 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
             status: "递出酒窖钥匙".into(),
         }],
         suggested_actions: vec![],
+        current_act: 2,
+        world_flags: vec!["取得老雷恩信任".into()],
+        ended_id: None,
+        ended_title: None,
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,
@@ -92,6 +96,13 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
             inventory: vec!["精密黄铜扳手".into()],
             status_note: "精神饱满".into(),
             is_afk: false,
+            stats: tavern_domain::CharacterStats {
+                body: 0,
+                agility: 2,
+                investigate: 2,
+                social: -1,
+                insight: 0,
+            },
         })
         .unwrap();
 
@@ -136,6 +147,15 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
     assert!(body.contains("陆沉"));
     assert!(body.contains("老雷恩"));
     assert!(body.contains("03-17 断钥匙"));
+    assert!(body.contains("\"theme\":\"ember\""));
+    assert!(body.contains("\"current_act\":2"));
+    assert!(body.contains("取得老雷恩信任"));
+    assert!(body.contains("\"investigate\":2"));
+    // Un-unlocked endings & future acts MUST stay masked and never spoil!
+    assert!(body.contains("？？？"));
+    assert!(!body.contains("晨雾散尽"));
+    assert!(body.contains("未解锁幕次"));
+    assert!(!body.contains("午夜潮汐星仪终局"));
     assert!(!body.contains("tok_secret_abc123"));
     assert!(!body.contains("secret_gm_uid_777"));
     assert!(!body.contains("secret_guild_999"));

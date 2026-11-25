@@ -2,6 +2,7 @@ id: ember_tavern
 name: "余烬酒馆与迷雾委托"
 tagline: "剑与蒸汽的群酒馆轻冒险——从一场暴雪夜的蓝血悬赏开始"
 genre: "奇幻群酒馆 / 蒸汽悬疑冒险"
+theme: "ember"
 dm_style: |
   你是一位经验老到、风趣却不失悬念感的奇幻酒馆 DM（主持人）。
   文风生动克制、有画面感与酒馆烟火气，善于通过 NPC 语气神态和环境细节推进剧情，绝不替玩家做决定或越俎代庖描写玩家心理。
@@ -31,15 +32,47 @@ preset_roles:
   - name: "齿轮机械师"
     traits: ["手巧", "懂蒸汽机关"]
     bonus_items: ["精密黄铜扳手", "折叠铜望远镜"]
+    stats: { body: 0, agility: 2, investigate: 2, social: -1, insight: 0 }
   - name: "港口赏金猎人"
     traits: ["枪法准", "直觉敏锐"]
     bonus_items: ["蚀刻左轮（剩余2发银弹）", "粗麻攀岩绳"]
+    stats: { body: 2, agility: 2, investigate: 0, social: -1, insight: 0 }
   - name: "星象神秘学者"
     traits: ["博学", "嗅觉诡异"]
     bonus_items: ["星图黄铜罗盘", "炼金封印盐袋"]
+    stats: { body: -1, agility: 0, investigate: 2, social: 0, insight: 2 }
   - name: "酒馆情报贩子"
     traits: ["嘴甜", "人脉广"]
     bonus_items: ["老雷恩的旧人情筹码", "假银盾两枚"]
+    stats: { body: -1, agility: 1, investigate: 1, social: 2, insight: 0 }
+
+acts:
+  - id: act1_tavern
+    title: "暴雪夜的蓝血信使"
+    goal: "查清信使托比、断钥匙 03-17 与独眼酒保老雷恩背后的纠葛"
+    advance_flags: ["取得老雷恩信任", "找到地下酒窖另一半钥匙"]
+  - id: act2_harbor
+    title: "星雾码头与旧钟楼攀行"
+    goal: "顶着星雾潜入或强闯旧钟楼，避开教会暗哨与迷雾回响"
+    advance_flags: ["抵达旧钟楼三层", "识破星雾回响"]
+  - id: act3_star_orb
+    title: "午夜潮汐星仪终局"
+    goal: "在午夜钟声前面对白鸦与潮汐星仪，做出决定灰烬港命运的抉择"
+    advance_flags: ["停机或摧毁潮汐星仪"]
+
+endings:
+  - id: ending_dawn
+    title: "晨雾散尽"
+    kind: "true"
+    summary: "集齐双半钥匙并取得星铜怀表，完成潮汐星仪安全停机，星雾退散、灰烬港获救。"
+  - id: ending_gold_deal
+    title: "灰金交易"
+    kind: "normal"
+    summary: "收下白鸦三百银盾掩护其脱身，或将星仪交给教会修女艾琳，小队暴富但港口付出代价。"
+  - id: ending_ember_blast
+    title: "余烬轰鸣"
+    kind: "bad"
+    summary: "强行引爆潮汐星仪或未能阻止午夜过载，旧钟楼在蓝焰中崩塌，小队九死一生或饮恨收场。"
 
 worldbook:
   - id: wb_tavern_rules

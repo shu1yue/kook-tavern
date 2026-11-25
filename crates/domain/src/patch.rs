@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
-use crate::models::{NpcState, Player, RoomState};
+use crate::models::{NpcState, Player, RoomState, Scenario};
 use crate::protocol::{DirectMessageOut, DmStructuredReply, StatePatch};
+use crate::stats::ScenarioEnding;
 
 #[derive(Debug, Clone, Default)]
 pub struct AppliedTurnEffects {
@@ -206,6 +207,66 @@ pub fn apply_dm_reply(
     effects
 }
 
+/// Authoritative server-side applier for scenario progression:
+/// world flags, act transitions (bounded to `scenario.acts`), and validated multi-ending triggers.
+pub fn apply_story_progression(
+    room: &mut RoomState,
+    players: &[Player],
+    scenario: &Scenario,
+    reply: &DmStructuredReply,
+    resolving_turn: u32,
+    effects: &mut AppliedTurnEffects,
+) -> Option<ScenarioEnding> {
+    for raw in reply.add_flags.iter().take(5) {
+        let flag: String = raw.trim().chars().take(36).collect();
+        if !flag.is_empty()
+            && room.world_flags.len() < 30
+            && !room.world_flags.iter().any(|f| f == &flag)
+        {
+            room.world_flags.push(flag.clone());
+            effects.state_changes.push(format!("🚩 关键进展：{flag}"));
+        }
+    }
+
+    let total_acts = scenario.acts.len() as u32;
+    if reply.advance_act && total_acts > 1 && room.current_act < total_acts {
+        room.current_act += 1;
+        if let Some(act) = scenario.acts.get((room.current_act - 1) as usize) {
+            effects.state_changes.push(format!(
+                "🎬 剧情推进至第 {}/{} 幕 · **{}**（目标：{}）",
+                room.current_act, total_acts, act.title, act.goal
+            ));
+        }
+    }
+
+    let raw_end = reply.trigger_ending_id.as_deref().map(str::trim).unwrap_or("");
+    if raw_end.is_empty() || room.ended_id.is_some() {
+        return None;
+    }
+    let matched = scenario
+        .endings
+        .iter()
+        .find(|e| e.id == raw_end || e.id.eq_ignore_ascii_case(raw_end))?
+        .clone();
+
+    let active_players: Vec<&Player> = players.iter().filter(|p| !p.is_afk).collect();
+    let party_down =
+        !active_players.is_empty() && active_players.iter().all(|p| p.hp <= 0 || p.san <= 0);
+    // Hard guard on Turns 1..=2: block premature endings unless all active players wiped on a bad ending!
+    if resolving_turn <= 2 {
+        if !(party_down && matched.kind.eq_ignore_ascii_case("bad")) {
+            return None;
+        }
+    } else if party_down && !matched.kind.eq_ignore_ascii_case("bad") {
+        // Even on Turn 3+, a wiped party cannot unlock non-bad endings via LLM hallucination
+        return None;
+    }
+
+    room.ended_id = Some(matched.id.clone());
+    room.ended_title = Some(matched.title.clone());
+    Some(matched)
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
@@ -217,75 +278,44 @@ mod tests {
     fn aggregates_multiple_patches_and_clamps_bounds() {
         let now = Utc::now();
         let mut room = RoomState {
-            channel_id: "c1".into(),
-            guild_id: "g1".into(),
-            scenario_id: "s1".into(),
-            title: "T".into(),
-            location: "Loc".into(),
-            world_time: "Now".into(),
-            turn_number: 1,
-            state_version: 1,
-            turn_phase: TurnPhase::Collecting,
-            chat_mode: ChatMode::Strict,
-            narrative_style: NarrativeStyle::Prose,
-            gm_user_id: "u1".into(),
-            web_token: "secret_tok".into(),
-            clues: vec![],
-            npc_states: vec![],
-            suggested_actions: vec![],
-            summary: String::new(),
-            summary_upto_turn: 0,
-            active: true,
-            created_at: now,
-            updated_at: now,
+            channel_id: "c1".into(), guild_id: "g1".into(), scenario_id: "s1".into(),
+            title: "T".into(), location: "Loc".into(), world_time: "Now".into(),
+            turn_number: 1, state_version: 1, turn_phase: TurnPhase::Collecting,
+            chat_mode: ChatMode::Strict, narrative_style: NarrativeStyle::Prose,
+            gm_user_id: "u1".into(), web_token: "secret_tok".into(),
+            clues: vec![], npc_states: vec![], suggested_actions: vec![],
+            current_act: 1, world_flags: vec![], ended_id: None, ended_title: None,
+            summary: String::new(), summary_upto_turn: 0, active: true,
+            created_at: now, updated_at: now,
         };
         assert!(!format!("{room:?}").contains("secret_tok"));
 
         let mut players = vec![Player {
-            channel_id: "c1".into(),
-            user_id: "u1".into(),
-            character_name: "陆沉".into(),
-            role_desc: "机械师".into(),
-            traits: vec![],
-            hp: 50,
-            max_hp: 50,
-            san: 8,
-            max_san: 10,
-            inventory: vec!["扳手".into()],
-            status_note: String::new(),
-            is_afk: false,
+            channel_id: "c1".into(), user_id: "u1".into(), character_name: "陆沉".into(),
+            role_desc: "机械师".into(), traits: vec![], hp: 50, max_hp: 50, san: 8, max_san: 10,
+            inventory: vec!["扳手".into()], status_note: String::new(), is_afk: false,
+            stats: Default::default(),
         }];
         let reply = DmStructuredReply {
-            scene_title: "测试".into(),
-            narrative: "轰！".into(),
-            private_whispers: vec![],
+            scene_title: "测试".into(), narrative: "轰！".into(), private_whispers: vec![],
             state_patches: vec![
                 StatePatch {
-                    player_name: "陆沉".into(),
-                    hp_delta: -25,
-                    san_delta: 999,
-                    add_items: vec!["火把".into()],
-                    remove_items: vec!["不存在的物品".into()],
+                    player_name: "陆沉".into(), hp_delta: -25, san_delta: 999,
+                    add_items: vec!["火把".into()], remove_items: vec!["不存在的物品".into()],
                     status_note: None,
                 },
                 StatePatch {
-                    player_name: "陆沉".into(),
-                    hp_delta: -25,
-                    san_delta: 0,
-                    add_items: vec![],
-                    remove_items: vec!["扳手".into()],
+                    player_name: "陆沉".into(), hp_delta: -25, san_delta: 0,
+                    add_items: vec![], remove_items: vec!["扳手".into()],
                     status_note: Some("重伤".into()),
                 },
             ],
-            new_clues: vec!["线索A".into(), "线索A".into()],
-            npc_updates: vec![],
-            world_time: None,
-            location: None,
-            suggested_actions: vec![],
+            new_clues: vec!["线索A".into(), "线索A".into()], npc_updates: vec![],
+            world_time: None, location: None, suggested_actions: vec![],
+            suggested_check: None, add_flags: vec![], advance_act: false, trigger_ending_id: None,
         };
 
         let _ = apply_dm_reply(&mut room, &mut players, &reply);
-        // Aggregated delta (-50) clamped to -30 => 50 - 30 = 20!
         assert_eq!(players[0].hp, 20);
         assert_eq!(players[0].san, 10);
         assert_eq!(players[0].inventory, vec!["火把"]);

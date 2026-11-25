@@ -77,6 +77,10 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
         clues: vec![],
         npc_states: vec![],
         suggested_actions: vec![],
+        current_act: 1,
+        world_flags: vec![],
+        ended_id: None,
+        ended_title: None,
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,
@@ -98,6 +102,7 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
         inventory: vec![],
         status_note: String::new(),
         is_afk: false,
+        stats: Default::default(),
     };
     store.upsert_player(&player).unwrap();
 
@@ -129,7 +134,7 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
 
     // Concurrent `/join` profile edit during Resolving MUST survive `commit_turn_cas`!
     store
-        .update_player_profile("ch1", "u1", "陆沉", "机械师", &["勇猛".into()])
+        .update_player_profile("ch1", "u1", "陆沉", "机械师", &["勇猛".into()], None)
         .unwrap()
         .unwrap();
 

@@ -87,9 +87,10 @@ pub fn render_role_picker_card(
                 &format!("🎭 {}", truncate_chars(&r.name, 10)),
             ));
             format!(
-                "**{}. {}**\n> 🏷️ 特质：{} ｜ 🎒 专属装备：{}",
+                "**{}. {}**\n> 📊 {}\n> 🏷️ 特质：{} ｜ 🎒 专属装备：{}",
                 i + 1,
                 r.name,
+                r.stats.format_inline(),
                 r.traits.join(" / "),
                 if r.bonus_items.is_empty() {
                     "标准装备".to_string()

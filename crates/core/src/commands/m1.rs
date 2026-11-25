@@ -21,6 +21,9 @@ pub fn cmd_style(engine: &GameEngine, channel_id: &str, arg: &str) -> Result<Eng
             show_actions: false,
         });
     }
+    if let Some(notice) = crate::commands::check::ended_room_notice(&room) {
+        return Ok(notice);
+    }
 
     let Some(style) = NarrativeStyle::parse(arg) else {
         return Ok(EngineResponse::Notice {
@@ -64,6 +67,9 @@ pub async fn cmd_afk(engine: &GameEngine, msg: &IncomingMessage) -> Result<Engin
             theme: CardTheme::Warning,
             show_actions: false,
         });
+    }
+    if let Some(notice) = crate::commands::check::ended_room_notice(&room) {
+        return Ok(notice);
     }
     let Some(existing) = engine.store.get_player(&msg.channel_id, &msg.user_id)? else {
         return Ok(EngineResponse::Notice {

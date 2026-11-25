@@ -1,9 +1,11 @@
 use anyhow::Result;
 use tavern_domain::{CardTheme, EngineResponse, IncomingMessage, Player, RoomEvent, roll_dice};
 
+use crate::commands::check::ended_room_notice;
 use crate::commands::party_helpers::{ensure_player, format_party_progress, parse_join_args};
 use crate::commands::turn;
 use crate::engine::GameEngine;
+use crate::ports::JoinPlayerOutcome;
 
 pub fn cmd_join(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result<EngineResponse> {
     let Some(room) = engine.store.get_room(&msg.channel_id)? else {
@@ -22,6 +24,9 @@ pub fn cmd_join(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result
             show_actions: false,
         });
     }
+    if let Some(notice) = ended_room_notice(&room) {
+        return Ok(notice);
+    }
 
     let Some(scenario) = engine.scenarios.get(&room.scenario_id) else {
         return Ok(EngineResponse::Notice {
@@ -33,72 +38,33 @@ pub fn cmd_join(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result
     };
 
     let (character_name, role_desc, traits) = parse_join_args(arg, &msg.user_name);
-
-    // Reject duplicate character_name owned by a different user to avoid whisper/patch misrouting
-    let all_players = engine.store.list_players(&msg.channel_id)?;
-    if all_players.iter().any(|p| {
-        p.user_id != msg.user_id && p.character_name.eq_ignore_ascii_case(&character_name)
-    }) {
-        return Ok(EngineResponse::Notice {
-            title: "⚠️ 角色名已被队友占用".to_string(),
-            body: format!(
-                "房间里已经有队友叫 **{character_name}** 啦，换个独特点的名字防止 DM 递错纸条喵！"
-            ),
-            theme: CardTheme::Warning,
-            show_actions: false,
-        });
-    }
-
-    let existing = engine.store.get_player(&msg.channel_id, &msg.user_id)?;
-    let player = if let Some(prev) = existing {
-        let next_role = if role_desc.is_empty() {
-            prev.role_desc
-        } else {
-            role_desc
-        };
-        let next_traits = if traits.is_empty() {
-            prev.traits
-        } else {
-            traits
-        };
-        // Targeted profile update ONLY — never clobbers HP/SAN/inventory committed concurrently!
-        engine
-            .store
-            .update_player_profile(
-                &msg.channel_id,
-                &msg.user_id,
-                &character_name,
-                &next_role,
-                &next_traits,
-            )?
-            .unwrap_or(Player {
-                character_name,
-                role_desc: next_role,
-                traits: next_traits,
-                is_afk: false,
-                ..prev
-            })
-    } else {
-        let p = Player {
-            channel_id: msg.channel_id.clone(),
-            user_id: msg.user_id.clone(),
-            character_name,
-            role_desc: if role_desc.is_empty() {
-                "初来乍到的冒险者".to_string()
-            } else {
-                role_desc
-            },
-            traits,
-            hp: scenario.player_defaults.max_hp,
-            max_hp: scenario.player_defaults.max_hp,
-            san: scenario.player_defaults.max_san,
-            max_san: scenario.player_defaults.max_san,
-            inventory: scenario.player_defaults.starter_items,
-            status_note: "精神饱满".to_string(),
-            is_afk: false,
-        };
-        engine.store.upsert_player(&p)?;
-        p
+    let player = match engine.store.join_player_atomic(
+        &msg.channel_id,
+        &msg.user_id,
+        &character_name,
+        &role_desc,
+        &traits,
+        &scenario.player_defaults,
+    )? {
+        JoinPlayerOutcome::RoomUnavailable => {
+            return Ok(EngineResponse::Notice {
+                title: "ℹ️ 当前房间不可入团".to_string(),
+                body: "房间已结束或已归档，请开启新冒险。".to_string(),
+                theme: CardTheme::Warning,
+                show_actions: false,
+            });
+        }
+        JoinPlayerOutcome::DuplicateName => {
+            return Ok(EngineResponse::Notice {
+                title: "⚠️ 角色名已被队友占用".to_string(),
+                body: format!(
+                    "房间里已经有队友叫 **{character_name}** 啦，换个独特点的名字防止 DM 递错纸条喵！"
+                ),
+                theme: CardTheme::Warning,
+                show_actions: false,
+            });
+        }
+        JoinPlayerOutcome::Joined(p) => *p,
     };
     engine.emit_event(RoomEvent::RoomUpdated {
         channel_id: msg.channel_id.clone(),
@@ -165,6 +131,9 @@ pub async fn cmd_act(
             show_actions: false,
         });
     }
+    if let Some(notice) = ended_room_notice(&room) {
+        return Ok(notice);
+    }
 
     let Some(scenario) = engine.scenarios.get(&room.scenario_id) else {
         return Ok(EngineResponse::Notice {
@@ -175,7 +144,14 @@ pub async fn cmd_act(
         });
     };
 
-    let player = ensure_player(engine, msg, &scenario)?;
+    let Some(player) = ensure_player(engine, msg, &scenario)? else {
+        return Ok(EngineResponse::Notice {
+            title: "ℹ️ 当前房间不可提交行动".to_string(),
+            body: "房间已结束或被重置，请重新开团。".to_string(),
+            theme: CardTheme::Warning,
+            show_actions: false,
+        });
+    };
 
     // Single atomic DB transaction eliminates TOCTOU race with `try_begin_resolving`!
     let Some((target_turn, is_resolving)) = engine.store.submit_action_atomic(
@@ -273,8 +249,13 @@ pub fn cmd_roll(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result
     let formatted = result.format_short();
     let mut attached_note = String::new();
     let existing_player = engine.store.get_player(&msg.channel_id, &msg.user_id)?;
+    let room_accepts_rolls = engine
+        .store
+        .get_room(&msg.channel_id)?
+        .is_some_and(|r| r.active && r.ended_id.is_none());
 
-    if let Some(ref player) = existing_player
+    if room_accepts_rolls
+        && let Some(ref player) = existing_player
         && let Some(target_turn) = engine.store.append_roll_atomic(
             &msg.channel_id,
             &msg.user_id,

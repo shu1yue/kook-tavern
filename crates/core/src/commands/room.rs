@@ -6,21 +6,23 @@ use tavern_domain::{
     ScenarioSummary, TurnPhase,
 };
 
+use crate::commands::check::format_act_badge;
 use crate::engine::GameEngine;
 
 pub fn cmd_help() -> EngineResponse {
     let body = [
         "**✨ 零代码游玩方式（推荐！全程点按钮 + 说人话）**",
-        "1. 点卡片上的 **「▶️ 开启剧本」** 开桌，新人点 **「⚔️ 快速入团」** 立刻参战",
-        "2. 行动阶段：**直接点剧情卡上的 ①②③ 行动按钮**，或者**直接在频道打人话**即可提交行动（场外闲聊请加括号 `（我去倒水）` 或 `//` 跳过）",
-        "3. 掷骰、查私密纸条、暂离、结算、回档、切语音档——全部都在卡片底部一键点击喵！",
+        "1. 点卡片上的 **「▶️ 开启剧本」** 开桌，点 **「🎭 选职业入团」** 带五维属性与专属装备参战",
+        "2. 行动阶段：**直接点剧情卡上的 ①②③ 行动按钮**，或**直接打人话**提交行动（场外闲聊请加括号 `（）` 或 `//`）",
+        "3. 检定、掷骰、查私密纸条、看 Web 大屏、结局图鉴、暂离与回档——全在卡片底部一键点击！",
         "",
-        "**⌨️ 进阶文字快捷键（想精细定制时再用）**",
-        "- `/menu` 或 `/scenarios` — 弹出带开团按钮的剧本大厅",
-        "- `/join 角色名 职业 | 特质1,特质2` — 自定义角色人设（不清空血量和背包）",
-        "- `.r 2d6+1 侦查` 或 `.r d100` — 自定义加值掷骰",
-        "- `/gm help` — 房主手动微调血量/理智/背包/线索",
-        "- `/export` / `/reset` — 导出 Markdown 战报 / 房主结团清空",
+        "**⌨️ 进阶文字快捷键（想精细操作时再用）**",
+        "- `/menu` / `/roles` — 剧本大厅 / 职业选卡",
+        "- `/check 侦查 [原因]` — 带角色属性加值的 `2d6+属性` 三档检定（体魄/敏捷/侦查/交涉/灵感）",
+        "- `/endings` / `/web` — 查看本服结局图鉴 / 获取只读实况大屏链接",
+        "- `/join 角色名 职业 | 特质1,特质2` — 自定义人设（保留血量与背包）",
+        "- `.r 2d6+1` 或 `.r d100` — 自定义加值掷骰 ｜ `/gm help` — 房主控场",
+        "- `/export` / `/reset` — 发战报墙留念 / 房主结团清空",
     ]
     .join("\n");
 
@@ -77,7 +79,7 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
     };
 
     if let Some(existing) = engine.store.get_room(&msg.channel_id)? {
-        if existing.active {
+        if existing.active && existing.ended_id.is_none() {
             return Ok(EngineResponse::Notice {
                 title: "⚠️ 当前频道已有进行中的房间".to_string(),
                 body: format!(
@@ -88,7 +90,20 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
                 show_actions: true,
             });
         }
-        // Clean archived inactive room cascade and revoke any lingering SSE streams
+        if existing.ended_id.is_some()
+            && !engine.cfg.is_gm_or_admin(&msg.user_id, &existing.gm_user_id)
+        {
+            return Ok(EngineResponse::Notice {
+                title: "🔒 请由本局房主开启下一局".to_string(),
+                body: format!(
+                    "《{}》已达成结局，当前保留着战报与回档记录。请由本局房主或管理员点按钮开启新剧本（或 `/reset` 清空）！",
+                    existing.title
+                ),
+                theme: CardTheme::Warning,
+                show_actions: false,
+            });
+        }
+        // Clean archived or ended room cascade and revoke any lingering SSE streams
         engine.store.delete_room(&msg.channel_id)?;
         engine.emit_event(RoomEvent::RoomReset {
             channel_id: msg.channel_id.clone(),
@@ -127,6 +142,10 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         clues: Vec::new(),
         npc_states: Vec::new(),
         suggested_actions: opening_actions.clone(),
+        current_act: 1,
+        world_flags: Vec::new(),
+        ended_id: None,
+        ended_title: None,
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,
@@ -144,6 +163,7 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
     } else {
         "💬 已默认开启「直接说人话」模式：直接打字或点下方 ①②③ 按钮即行动！场外闲聊请加括号（）或 //，点「🎛️ 面板/设置」可随时切换。".to_string()
     };
+    let act_badge = format_act_badge(Some(&scenario), 1);
 
     Ok(EngineResponse::StoryTurn {
         channel_id: msg.channel_id.clone(),
@@ -151,13 +171,16 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         scene_title: format!("{} · 序幕", scenario.name),
         location: scenario.initial_location,
         world_time: scenario.initial_time,
+        act_badge,
         narrative: scenario.opening_scene.trim().to_string(),
         state_changes: vec![
             mode_hint,
-            "✨ 想快速开玩？直接点下面的 ①②③ 行动按钮（自动入团），或点「🎛️ 面板/设置」里的「⚔️ 快速入团」；想自定义人设再发 `/join 角色名 职业 | 特质` 喵！".to_string(),
+            "✨ 先点「🎛️ 面板/设置」→「🎭 选职业入团」拿五维属性与专属装备，或直接点下方 ①②③ 按钮开玩！".to_string(),
         ],
         whisper_hints: Vec::new(),
         suggested_actions: opening_actions,
+        suggested_check: None,
+        ending_reached: None,
         direct_messages: Vec::new(),
     })
 }
@@ -175,10 +198,13 @@ pub fn cmd_status(engine: &GameEngine, channel_id: &str) -> Result<EngineRespons
     let pending_actions = engine
         .store
         .list_pending_actions(channel_id, room.turn_number + 1)?;
+    let scenario = engine.scenarios.get(&room.scenario_id);
+    let act_label = format_act_badge(scenario.as_ref(), room.current_act);
 
     Ok(EngineResponse::StatusBoard {
         channel_id: channel_id.to_string(),
         room,
+        act_label,
         players,
         pending_actions,
     })

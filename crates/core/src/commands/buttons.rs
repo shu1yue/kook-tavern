@@ -1,8 +1,10 @@
 use anyhow::Result;
-use tavern_domain::{CardTheme, ChatMode, EngineResponse, IncomingMessage, NarrativeStyle, TurnPhase};
+use tavern_domain::{
+    CardTheme, ChatMode, EngineResponse, IncomingMessage, NarrativeStyle, StatKind, TurnPhase,
+};
 
 use crate::commands::{
-    button_roles, export, m1, party, resolve_authoritative_guild, room, turn,
+    button_roles, check, export, m1, party, resolve_authoritative_guild, room, turn,
     will_likely_resolve_turn,
 };
 use crate::engine::GameEngine;
@@ -21,6 +23,9 @@ pub async fn dispatch_button(
         .is_scope_allowed(effective_guild.as_deref(), channel_id)
     {
         return Ok(EngineResponse::Ignore);
+    }
+    if let Some(gid) = effective_guild.as_deref().filter(|s| !s.is_empty()) {
+        let _ = engine.store.backfill_room_guild_id(channel_id, gid);
     }
 
     let parts: Vec<&str> = value.splitn(5, ':').collect();
@@ -48,6 +53,7 @@ pub async fn dispatch_button(
         "undo" => turn::cmd_undo(engine, channel_id),
         "cost" => m1::cmd_cost(engine, channel_id),
         "web" => m1::cmd_web(engine, channel_id),
+        "endings" => check::cmd_endings(engine, &mk_msg("/endings".into())),
         "help" => Ok(room::cmd_help()),
         "menu" => Ok(room::cmd_list_scenarios(engine, channel_id)),
         "rolemenu" => button_roles::cmd_role_menu(engine, channel_id),
@@ -71,6 +77,13 @@ pub async fn dispatch_button(
                 return Ok(EngineResponse::Ignore);
             }
             party::cmd_roll(engine, &mk_msg(format!("/roll {expr}")), expr)
+        }
+        "check" => {
+            let stat_raw = parts.get(3).copied().unwrap_or("");
+            let Some(stat) = StatKind::parse(stat_raw) else {
+                return Ok(EngineResponse::Ignore);
+            };
+            check::cmd_check(engine, &mk_msg(format!("/check {}", stat.key())), stat.key())
         }
         "pick" => {
             let Some(expected_turn) = parts.get(3).and_then(|s| s.parse::<u32>().ok()) else {
@@ -113,6 +126,7 @@ pub fn will_button_likely_resolve_turn(
             };
             if !room.active
                 || room.turn_phase == TurnPhase::Resolving
+                || room.ended_id.is_some()
                 || room.turn_number != expected_turn
                 || idx >= room.suggested_actions.len()
             {
@@ -145,6 +159,9 @@ async fn handle_pick_action(
             theme: CardTheme::Warning,
             show_actions: false,
         });
+    }
+    if let Some(notice) = check::ended_room_notice(&room) {
+        return Ok(notice);
     }
     if room.turn_phase == TurnPhase::Resolving {
         return Ok(EngineResponse::Notice {

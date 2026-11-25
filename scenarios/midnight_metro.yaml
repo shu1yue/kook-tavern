@@ -2,6 +2,7 @@ id: midnight_metro
 name: "午夜四号线 · 末班车怪谈"
 tagline: "现代中式都市规则怪谈——23:58 驶入不存在站点的幽灵末班车"
 genre: "都市规则怪谈 / 微恐推理解谜"
+theme: "metro"
 dm_style: |
   你是一位精通现代中式都市怪谈与悬疑氛围的 DM（主持人）。
   文风写实带冷感、节奏紧凑：擅长用地铁报站电流声、冷白日光灯闪烁、车窗倒影、手机信号格变化来制造贴近日常的鸡皮疙瘩感，绝不搞廉价血腥堆砌，也绝不替玩家做决定。
@@ -31,15 +32,47 @@ preset_roles:
   - name: "加班程序员"
     traits: ["逻辑强", "记性好"]
     bonus_items: ["降噪蓝牙耳机", "公司反光工牌"]
+    stats: { body: -1, agility: 0, investigate: 2, social: 0, insight: 2 }
   - name: "民俗探店博主"
     traits: ["懂老规矩", "胆大嘴硬"]
     bonus_items: ["便携补光灯", "朱砂平安符"]
+    stats: { body: 0, agility: 0, investigate: 0, social: 2, insight: 1 }
   - name: "地铁夜班值班员"
     traits: ["熟车厢构造", "冷静"]
     bonus_items: ["地铁三角通用钥匙", "强光防爆手电"]
+    stats: { body: 2, agility: 1, investigate: 1, social: -1, insight: 0 }
   - name: "急诊科实习医生"
     traits: ["细心", "抗压能力强"]
     bonus_items: ["便携急救包", "薄荷嗅盐瓶"]
+    stats: { body: 1, agility: 1, investigate: 1, social: 0, insight: 0 }
+
+acts:
+  - id: act1_rules
+    title: "23:58 守则疑云"
+    goal: "识破乘客守则第 3 条篡改痕迹，平安应对红雨衣人与 4 号车厢阿婆"
+    advance_flags: ["发现第3条守则被篡改", "获得阿婆信赖与黄纸条"]
+  - id: act2_cars
+    title: "车厢穿梭与真假广播"
+    goal: "智斗 2 号车厢蓝衣查票员，进入 1 号驾驶室或 5 号空车厢查清停车时机"
+    advance_flags: ["击退蓝衣查票员", "查明绿色逃生灯与制动时机"]
+  - id: act3_brake
+    title: "00:30 现实交界急刹"
+    goal: "挺过旧槐树站假停靠诱惑，在隧道绿色应急逃生灯闪过瞬间拉下制动拉手"
+    advance_flags: ["越过旧槐树站并拉下紧急制动"]
+
+endings:
+  - id: ending_return_track
+    title: "破晓回轨"
+    kind: "true"
+    summary: "识破假规则并在绿色逃生灯闪过瞬间拉下紧急制动，列车重返现实下一站、手机恢复 5G 信号。"
+  - id: ending_warm_lantern
+    title: "长明灯火"
+    kind: "secret"
+    summary: "成功脱险前在 5 号车厢纪念铭牌留下暖意告别栗子阿婆，血红走字屏化作温柔的“一路平安”。"
+  - id: ending_endless_train
+    title: "永夜末班"
+    kind: "bad"
+    summary: "轻信查票员交出车票、误在旧槐树站下车或错过 00:30 制动时机，成为四号线永久乘客。"
 
 worldbook:
   - id: mm_rules

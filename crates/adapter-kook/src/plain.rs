@@ -23,10 +23,11 @@ pub fn format_party_block(players: &[Player], pending_actions: &[PendingAction])
                 p.inventory.join("、")
             };
             format!(
-                "**{}**（{}）`{}`\n> ❤️ HP {}/{} ｜ 🧠 SAN {}/{} ｜ 🏷️ {}\n> 🎒 {}",
+                "**{}**（{}）`{}`\n> 📊 {}\n> ❤️ HP {}/{} ｜ 🧠 SAN {}/{} ｜ 🏷️ {}\n> 🎒 {}",
                 p.character_name,
                 p.role_desc,
                 ready_badge,
+                p.stats.format_inline(),
                 p.hp,
                 p.max_hp,
                 p.san,
@@ -76,15 +77,22 @@ pub fn render_plain_fallback(resp: &EngineResponse, include_whispers: bool) -> S
             scene_title,
             location,
             world_time,
+            act_badge,
             narrative,
             state_changes,
             whisper_hints,
             suggested_actions,
+            suggested_check,
+            ending_reached,
             direct_messages,
             ..
         } => {
+            let act_str = act_badge
+                .as_deref()
+                .map(|a| format!(" ｜ 🎬 {a}"))
+                .unwrap_or_default();
             let mut out = format!(
-                "**🎭 {scene_title}**\n📍 {location} ｜ 🕒 {world_time} ｜ 🎲 第 {turn_number} 回合\n\n{narrative}"
+                "**🎭 {scene_title}**\n📍 {location} ｜ 🕒 {world_time} ｜ 🎲 第 {turn_number} 回合{act_str}\n\n{narrative}"
             );
             if !state_changes.is_empty() || !whisper_hints.is_empty() {
                 out.push_str("\n\n---\n");
@@ -99,6 +107,12 @@ pub fn render_plain_fallback(resp: &EngineResponse, include_whispers: bool) -> S
                 for dm in direct_messages {
                     out.push_str(&format!("\n{}\n", dm.content));
                 }
+            }
+            if let Some(end) = ending_reached {
+                out.push_str(&format!("\n\n🏆 **达成结局：《{}》**", end.title));
+            }
+            if let Some(ck) = suggested_check {
+                out.push_str(&format!("\n🎲 **推荐检定**：{}（{}）", ck.stat, ck.reason));
             }
             if !suggested_actions.is_empty() {
                 out.push_str(&format!("\n💡 **行动灵感**：{}", suggested_actions.join(" / ")));

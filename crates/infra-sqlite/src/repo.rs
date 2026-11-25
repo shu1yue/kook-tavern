@@ -5,12 +5,14 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
 use rusqlite::{Connection, params};
-use tavern_core::{GmUpdateOutcome, ResolvingLease, RoomStore};
+use tavern_core::{GmUpdateOutcome, JoinPlayerOutcome, ResolvingLease, RoomStore};
 use tavern_domain::{
-    ChatMode, DailyUsage, DirectMessageOut, LlmUsage, NarrativeStyle, PendingAction, Player,
-    RoomSnapshot, RoomState, TurnRecord, UsageSummary, WhisperRecord,
+    CharacterStats, ChatMode, DailyUsage, DirectMessageOut, EndingUnlock, LlmUsage, NarrativeStyle,
+    PendingAction, Player, PresetRole, RoomSnapshot, RoomState, StarterCharacterDefaults,
+    TurnRecord, UsageSummary, WhisperRecord,
 };
 
+use crate::endings::{list_ending_unlocks_query, record_ending_unlock_query};
 use crate::m1_ops::{
     get_room_usage_query, get_today_usage_query, gm_add_clue_tx, gm_mutate_player_tx,
     gm_remove_clue_tx, list_player_whispers_query, record_usage_query, remove_player_tx,
@@ -21,6 +23,7 @@ use crate::mappers::{
     update_player_profile_sql, write_player, write_room,
 };
 use crate::migrations::run_migrations;
+use crate::player_tx::{ensure_player_tx, join_player_tx, pick_role_tx};
 use crate::turn_queries::{query_all_turns, query_recent_turns, query_turns_range};
 use crate::turn_tx::{
     append_roll_tx, commit_turn_cas_tx, pop_and_restore_snapshot_tx, submit_action_tx,
@@ -80,6 +83,19 @@ impl RoomStore for SqliteRoomStore {
         self.with_conn(|conn| write_room(conn, room))
     }
 
+    fn backfill_room_guild_id(&self, channel_id: &str, guild_id: &str) -> Result<bool> {
+        let g = guild_id.trim();
+        if g.is_empty() {
+            return Ok(false);
+        }
+        self.with_conn(|conn| {
+            Ok(conn.execute(
+                "UPDATE rooms SET guild_id = ?2 WHERE channel_id = ?1 AND guild_id = ''",
+                params![channel_id, g],
+            )? > 0)
+        })
+    }
+
     fn update_chat_mode(&self, channel_id: &str, mode: ChatMode) -> Result<bool> {
         self.with_conn(|conn| {
             Ok(conn.execute(
@@ -112,17 +128,31 @@ impl RoomStore for SqliteRoomStore {
         self.with_conn(|conn| write_player(conn, player))
     }
 
-    fn update_player_profile(
-        &self,
-        channel_id: &str,
-        user_id: &str,
-        character_name: &str,
-        role_desc: &str,
-        traits: &[String],
+    fn ensure_player_atomic(
+        &self, channel_id: &str, user_id: &str, raw_name: &str, defaults: &StarterCharacterDefaults,
     ) -> Result<Option<Player>> {
-        self.with_conn(|conn| {
-            update_player_profile_sql(conn, channel_id, user_id, character_name, role_desc, traits)
-        })
+        self.with_conn(|c| ensure_player_tx(c, channel_id, user_id, raw_name, defaults))
+    }
+
+    fn pick_role_atomic(
+        &self, channel_id: &str, user_id: &str, raw_name: &str, preset: &PresetRole,
+        defaults: &StarterCharacterDefaults,
+    ) -> Result<Option<(Player, bool)>> {
+        self.with_conn(|c| pick_role_tx(c, channel_id, user_id, raw_name, preset, defaults))
+    }
+
+    fn join_player_atomic(
+        &self, channel_id: &str, user_id: &str, character_name: &str, role_desc: &str,
+        traits: &[String], defaults: &StarterCharacterDefaults,
+    ) -> Result<JoinPlayerOutcome> {
+        self.with_conn(|c| join_player_tx(c, channel_id, user_id, character_name, role_desc, traits, defaults))
+    }
+
+    fn update_player_profile(
+        &self, channel_id: &str, user_id: &str, character_name: &str, role_desc: &str,
+        traits: &[String], stats: Option<&CharacterStats>,
+    ) -> Result<Option<Player>> {
+        self.with_conn(|c| update_player_profile_sql(c, channel_id, user_id, character_name, role_desc, traits, stats))
     }
 
     fn get_player(&self, channel_id: &str, user_id: &str) -> Result<Option<Player>> {
@@ -147,66 +177,33 @@ impl RoomStore for SqliteRoomStore {
     }
 
     fn gm_mutate_player(
-        &self,
-        channel_id: &str,
-        player_name: &str,
-        hp_delta: i32,
-        san_delta: i32,
-        add_item: Option<&str>,
-        remove_item: Option<&str>,
+        &self, channel_id: &str, player_name: &str, hp_delta: i32, san_delta: i32,
+        add_item: Option<&str>, remove_item: Option<&str>,
     ) -> Result<GmUpdateOutcome<Player>> {
-        self.with_conn(|conn| {
-            gm_mutate_player_tx(
-                conn,
-                channel_id,
-                player_name,
-                hp_delta,
-                san_delta,
-                add_item,
-                remove_item,
-            )
-        })
+        self.with_conn(|c| gm_mutate_player_tx(c, channel_id, player_name, hp_delta, san_delta, add_item, remove_item))
     }
 
     fn gm_add_clue(&self, channel_id: &str, clue: &str) -> Result<GmUpdateOutcome<()>> {
         self.with_conn(|conn| gm_add_clue_tx(conn, channel_id, clue))
     }
 
-    fn gm_remove_clue(
-        &self,
-        channel_id: &str,
-        index_1based: usize,
-    ) -> Result<GmUpdateOutcome<String>> {
+    fn gm_remove_clue(&self, channel_id: &str, index_1based: usize) -> Result<GmUpdateOutcome<String>> {
         self.with_conn(|conn| gm_remove_clue_tx(conn, channel_id, index_1based))
     }
 
     fn submit_action_atomic(
-        &self,
-        channel_id: &str,
-        user_id: &str,
-        character_name: &str,
-        action_text: &str,
+        &self, channel_id: &str, user_id: &str, character_name: &str, action_text: &str,
     ) -> Result<Option<(u32, bool)>> {
-        self.with_conn(|conn| {
-            submit_action_tx(conn, channel_id, user_id, character_name, action_text)
-        })
+        self.with_conn(|c| submit_action_tx(c, channel_id, user_id, character_name, action_text))
     }
 
     fn append_roll_atomic(
-        &self,
-        channel_id: &str,
-        user_id: &str,
-        character_name: &str,
-        roll_note: &str,
+        &self, channel_id: &str, user_id: &str, character_name: &str, roll_note: &str,
     ) -> Result<Option<u32>> {
-        self.with_conn(|conn| append_roll_tx(conn, channel_id, user_id, character_name, roll_note))
+        self.with_conn(|c| append_roll_tx(c, channel_id, user_id, character_name, roll_note))
     }
 
-    fn list_pending_actions(
-        &self,
-        channel_id: &str,
-        target_turn: u32,
-    ) -> Result<Vec<PendingAction>> {
+    fn list_pending_actions(&self, channel_id: &str, target_turn: u32) -> Result<Vec<PendingAction>> {
         self.with_conn(|conn| query_pending_actions(conn, channel_id, target_turn))
     }
 
@@ -311,5 +308,13 @@ impl RoomStore for SqliteRoomStore {
 
     fn get_today_usage(&self) -> Result<DailyUsage> {
         self.with_conn(|conn| get_today_usage_query(conn))
+    }
+
+    fn record_ending_unlock(&self, unlock: &EndingUnlock) -> Result<bool> {
+        self.with_conn(|conn| record_ending_unlock_query(conn, unlock))
+    }
+
+    fn list_ending_unlocks(&self, guild_id: &str) -> Result<Vec<EndingUnlock>> {
+        self.with_conn(|conn| list_ending_unlocks_query(conn, guild_id))
     }
 }
