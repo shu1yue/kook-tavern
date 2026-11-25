@@ -119,7 +119,7 @@ pub fn cmd_join(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result
     Ok(EngineResponse::Notice {
         title: format!("🪪 角色卡已就绪：{}", player.character_name),
         body: format!(
-            "- **身份**：{}\n- **特质**：{}\n- **状态**：❤️ HP {}/{} ｜ 🧠 SAN {}/{}\n- **初始背包**：{}\n\n现在可以发送 `/act 你的行动` 或 `> 你的行动` 开始演出了！",
+            "- **身份**：{}\n- **特质**：{}\n- **状态**：❤️ HP {}/{} ｜ 🧠 SAN {}/{}\n- **初始背包**：{}\n\n现在直接打人话，或点剧情卡上的 ①②③ 按钮即可行动（也支持 `/act` 与 `> 行动`）！",
             player.role_desc,
             traits_text,
             player.hp,

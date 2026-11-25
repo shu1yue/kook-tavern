@@ -55,7 +55,7 @@ pub fn story_suggestion_buttons(
         .take(3)
         .enumerate()
     {
-        let label = format!("{} {}", badges[idx], truncate_chars(text, 13));
+        let label = format!("{} {}", badges[idx], truncate_chars(text, 16));
         elems.push(btn(
             "info",
             format!("tavern:pick:{channel_id}:{turn_number}:{idx}"),

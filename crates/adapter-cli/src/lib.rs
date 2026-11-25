@@ -63,9 +63,15 @@ pub async fn run_local_cli(engine: GameEngine, channel_id: String, mock_mode: bo
             .strip_prefix(":btn ")
             .or_else(|| trimmed.strip_prefix("：btn "))
         {
-            let action = btn_arg.trim();
+            let mut parts = btn_arg.split_whitespace();
+            let action = parts.next().unwrap_or("");
+            let extra: Vec<&str> = parts.collect();
             let uid = get_or_assign_uid(&mut user_ids, &current_speaker);
-            let value = format!("tavern:{action}:{channel_id}");
+            let value = if extra.is_empty() {
+                format!("tavern:{action}:{channel_id}")
+            } else {
+                format!("tavern:{action}:{channel_id}:{}", extra.join(":"))
+            };
             if !mock_mode && action == "resolve" {
                 stdout
                     .write_all("⏳ DM 正在结算本轮剧情，请稍候...\n".as_bytes())
@@ -315,6 +321,12 @@ async fn print_response(stdout: &mut io::Stdout, resp: &EngineResponse) -> Resul
                 buf.push_str("├──────────────────────────────────────────────────────────\n│ 🔎 已掌握线索：\n");
                 for (i, c) in room.clues.iter().enumerate() {
                     buf.push_str(&format!("│   {}. {c}\n", i + 1));
+                }
+            }
+            if !room.npc_states.is_empty() {
+                buf.push_str("├──────────────────────────────────────────────────────────\n│ 🗣️ 关键 NPC：\n");
+                for n in &room.npc_states {
+                    buf.push_str(&format!("│   - {} [{}]：{}\n", n.name, n.attitude, n.status));
                 }
             }
             buf.push_str("└──────────────────────────────────────────────────────────\n\n");
