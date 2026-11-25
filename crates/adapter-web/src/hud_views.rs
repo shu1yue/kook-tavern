@@ -26,6 +26,7 @@ pub struct PlayerHudView {
     pub current_act: u32,
     pub acts: Vec<ActPublicView>,
     pub world_flags: Vec<String>,
+    pub suggested_actions: Vec<String>,
     pub ended_id: Option<String>,
     pub ended_title: Option<String>,
     pub dashboard_path: String,
@@ -247,6 +248,7 @@ pub fn build_player_hud_view(
         location: room.location, world_time: room.world_time, turn_number: room.turn_number,
         turn_phase: room.turn_phase.as_str(), check_system: room.check_system.short_badge(),
         active: room.active, current_act: room.current_act, acts, world_flags: room.world_flags,
+        suggested_actions: room.suggested_actions,
         ended_id: room.ended_id, ended_title: room.ended_title, dashboard_path,
         me, party, npcs, clues: room.clues, glossary, bulletins: room.bulletins, map, recent_turns,
     }))

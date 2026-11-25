@@ -3,288 +3,289 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>🪟 冒险者实时悬浮 HUD · AI 群酒馆</title>
+  <title>🪟 冒险者悬浮 HUD · AI 群酒馆</title>
   <style id="hud-styles">
     :root, [data-theme="ember"] {
-      --bg: #0c0a09; --bg-glow: #2a1b10; --surface: #15110f; --surface-2: #1f1915;
-      --border: #3a2d22; --accent: #f0b429; --accent-soft: rgba(240, 180, 41, 0.14);
-      --accent-border: rgba(240, 180, 41, 0.45); --text: #f3ece4; --muted: #a69582;
+      --bg: #0c0a09; --bg-glow: #26180e; --surface: #15110f; --surface-2: #1f1915;
+      --border: #33271e; --accent: #f0b429; --accent-soft: rgba(240, 180, 41, 0.13);
+      --accent-border: rgba(240, 180, 41, 0.42); --text: #f3ece4; --muted: #9e8d7b;
       --hp: #f85149; --san: #58a6ff; --ally: #3fb950; --neutral: #d29922;
       --wary: #f0883e; --hostile: #f85149; --whisper: #c084fc;
-      --whisper-soft: rgba(192, 132, 252, 0.13); --teammate: #38bdf8;
+      --whisper-soft: rgba(192, 132, 252, 0.12);
     }
     [data-theme="fog"] {
-      --bg: #070b14; --bg-glow: #13223b; --surface: #0f1726; --surface-2: #162135;
-      --border: #253654; --accent: #79c0ff; --accent-soft: rgba(121, 192, 255, 0.14);
-      --accent-border: rgba(121, 192, 255, 0.45); --text: #e6edf8; --muted: #8b9ec0;
+      --bg: #070b14; --bg-glow: #122038; --surface: #0e1624; --surface-2: #152033;
+      --border: #23334f; --accent: #79c0ff; --accent-soft: rgba(121, 192, 255, 0.13);
+      --accent-border: rgba(121, 192, 255, 0.42); --text: #e6edf8; --muted: #8699ba;
     }
     [data-theme="metro"] {
-      --bg: #060d0b; --bg-glow: #0b2b22; --surface: #0d1715; --surface-2: #12221f;
-      --border: #1e3b35; --accent: #34d399; --accent-soft: rgba(52, 211, 153, 0.14);
-      --accent-border: rgba(52, 211, 153, 0.45); --text: #e4f7f0; --muted: #7ea89b;
+      --bg: #060d0b; --bg-glow: #0b2820; --surface: #0d1715; --surface-2: #12211e;
+      --border: #1c3630; --accent: #34d399; --accent-soft: rgba(52, 211, 153, 0.13);
+      --accent-border: rgba(52, 211, 153, 0.42); --text: #e4f7f0; --muted: #7aa396;
     }
     * { box-sizing: border-box; }
     html, body {
-      margin: 0; padding: 0; height: 100%;
-      background: radial-gradient(circle at top right, var(--bg-glow) 0%, var(--bg) 62%);
+      margin: 0; padding: 0; height: 100%; overflow: hidden;
+      background: radial-gradient(circle at top right, var(--bg-glow) 0%, var(--bg) 65%);
       color: var(--text);
       font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
-      font-size: 13px; line-height: 1.5;
+      font-size: 13px; line-height: 1.55;
     }
     #hud-root {
-      max-width: 440px; min-height: 100vh; margin: 0 auto;
+      max-width: 460px; height: 100vh; margin: 0 auto;
       display: flex; flex-direction: column;
-      background: rgba(12, 10, 9, 0.35);
+      background: rgba(12, 10, 9, 0.3);
     }
-    .sticky-top {
-      position: sticky; top: 0; z-index: 20;
-      background: linear-gradient(180deg, var(--surface) 88%, rgba(21,17,15,0.92));
-      backdrop-filter: blur(10px);
+    /* Ultra-slim 46px Topbar */
+    .topbar {
+      height: 46px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 0 12px;
+      background: rgba(21, 17, 15, 0.92); backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--border);
-      padding: 10px 12px 8px;
     }
-    .hdr-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
-    .hdr-title {
-      font-weight: 700; font-size: 14px; color: var(--accent);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+    .top-left { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--ally); box-shadow: 0 0 6px var(--ally); }
+    .dot.warn { background: var(--neutral); box-shadow: 0 0 6px var(--neutral); animation: blink 1s infinite; }
+    .dot.err { background: var(--hostile); box-shadow: 0 0 6px var(--hostile); }
+    @keyframes blink { 50% { opacity: 0.35; } }
+    .top-turn { font-weight: 700; font-size: 13px; color: var(--accent); white-space: nowrap; }
+    .top-vitals {
+      font-size: 11px; color: var(--muted); white-space: nowrap;
+      padding: 2px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border);
     }
-    .hdr-btns { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+    .top-vitals strong { color: var(--text); font-weight: 700; }
+    .top-right { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
     .mini-btn {
       background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
       border-radius: 8px; padding: 4px 8px; font-size: 11px; cursor: pointer; text-decoration: none;
       display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
-      transition: border-color 0.2s, background 0.2s, color 0.2s;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
     }
     .mini-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-    .mini-btn.pip-active { border-color: var(--ally); color: #7ee787; background: rgba(63,185,80,0.14); }
-    .live-pill {
-      display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
-      padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2);
-    }
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ally); box-shadow: 0 0 6px var(--ally); }
-    .dot.warn { background: var(--neutral); box-shadow: 0 0 6px var(--neutral); animation: blink 1s infinite; }
-    .dot.err { background: var(--hostile); box-shadow: 0 0 6px var(--hostile); }
-    @keyframes blink { 50% { opacity: 0.35; } }
-    .hero-card {
-      background: linear-gradient(135deg, var(--accent-soft), var(--surface-2));
-      border: 1px solid var(--accent-border); border-radius: 12px; padding: 9px 11px;
-    }
-    .hero-top { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
-    .avatar {
-      width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
-      background: linear-gradient(135deg, var(--accent), #b45309);
-      color: #120d08; font-weight: 800; font-size: 15px;
-      display: grid; place-items: center; box-shadow: 0 0 10px var(--accent-soft);
-    }
-    .hero-info { flex: 1; min-width: 0; }
-    .hero-name-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .hero-name { font-weight: 700; font-size: 14px; color: var(--text); }
-    .hero-role { font-size: 11px; color: var(--accent); background: rgba(0,0,0,0.28); padding: 1px 6px; border-radius: 6px; }
-    .hero-loc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .vitals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .bar-wrap { display: flex; flex-direction: column; gap: 3px; }
-    .bar-lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
-    .bar-lbl strong { color: var(--text); }
-    .bar-track { height: 7px; border-radius: 999px; background: rgba(0,0,0,0.45); overflow: hidden; border: 1px solid rgba(255,255,255,0.06); }
-    .bar-fill { height: 100%; border-radius: 999px; transition: width 0.35s ease; }
-    .bar-hp { background: linear-gradient(90deg, #dc2626, #f87171); }
-    .bar-san { background: linear-gradient(90deg, #2563eb, #60a5fa); }
-    .roll-banner {
-      display: none; margin-top: 7px; padding: 5px 9px; border-radius: 8px;
-      background: rgba(63, 185, 80, 0.13); border: 1px solid rgba(63, 185, 80, 0.42);
-      font-size: 11px; color: #a7f3d0; line-height: 1.45;
-    }
-    .search-box {
-      margin-top: 8px; position: relative;
-    }
-    .search-box input {
-      width: 100%; background: var(--surface-2); color: var(--text);
-      border: 1px solid var(--border); border-radius: 9px;
-      padding: 6px 28px 6px 10px; font-size: 12px; outline: none;
-    }
-    .search-box input:focus { border-color: var(--accent); }
-    .search-clear {
-      display: none; position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-      background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px;
-    }
-    .tabs {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 8px;
-    }
-    .tab-btn {
-      background: var(--surface-2); color: var(--muted); border: 1px solid var(--border);
-      border-radius: 9px; padding: 6px 4px; font-size: 12px; font-weight: 600;
-      cursor: pointer; position: relative; text-align: center;
-      transition: all 0.2s;
-    }
-    .tab-btn.active {
-      color: var(--accent); border-color: var(--accent); background: var(--accent-soft);
-    }
-    .badge {
-      display: inline-block; min-width: 15px; height: 15px; line-height: 15px;
-      font-size: 10px; border-radius: 999px; padding: 0 4px; margin-left: 3px;
-      background: rgba(255,255,255,0.12); color: var(--text); vertical-align: top;
-    }
-    .badge.new { background: var(--whisper); color: #140822; font-weight: 800; animation: pulseBadge 1.4s infinite; }
-    @keyframes pulseBadge { 50% { transform: scale(1.12); } }
-    .toast-bar {
-      display: none; margin: 8px 12px 0; padding: 7px 10px; border-radius: 9px;
+    .mini-btn.pip-on { border-color: var(--ally); color: #7ee787; background: rgba(63,185,80,0.14); }
+    /* Toast */
+    .toast {
+      display: none; flex-shrink: 0; margin: 8px 12px 0; padding: 7px 11px; border-radius: 10px;
       background: var(--accent-soft); border: 1px solid var(--accent-border);
-      font-size: 11px; color: var(--accent);
+      font-size: 12px; color: var(--accent);
     }
-    .content { padding: 10px 12px 24px; flex: 1; }
-    .sec {
+    /* Main Scroll Viewport (85%+ height!) */
+    .page-body {
+      flex: 1; overflow-y: auto; padding: 14px 14px 18px;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+    .page-hd {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+      margin-bottom: 12px;
+    }
+    .page-title { font-size: 15px; font-weight: 800; color: var(--text); margin: 0; }
+    .page-sub { font-size: 11px; color: var(--muted); }
+    /* Clean Cards */
+    .card {
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 11px 12px; margin-bottom: 10px;
+      border-radius: 13px; padding: 13px 14px; margin-bottom: 12px;
     }
-    .sec-title {
-      font-size: 12px; font-weight: 700; color: var(--accent); margin: 0 0 8px;
-      display: flex; align-items: center; justify-content: space-between;
+    .card.focus {
+      background: linear-gradient(135deg, var(--accent-soft), var(--surface));
+      border-color: var(--accent-border);
     }
-    .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
-    .stat-box {
+    .label {
+      font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.3px;
+      margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;
+    }
+    /* Hero Identity on Me Page */
+    .id-row { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
+    .avatar {
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--accent), #b45309);
+      color: #140e08; font-weight: 800; font-size: 17px;
+      display: grid; place-items: center;
+    }
+    .id-name { font-size: 16px; font-weight: 800; color: var(--text); }
+    .id-meta { font-size: 12px; color: var(--muted); margin-top: 1px; }
+    .vitals { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .bar-head { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; color: var(--muted); }
+    .bar-head strong { color: var(--text); }
+    .track { height: 8px; border-radius: 999px; background: rgba(0,0,0,0.45); overflow: hidden; }
+    .fill { height: 100%; border-radius: 999px; transition: width 0.35s ease; }
+    .fill.hp { background: linear-gradient(90deg, #dc2626, #f87171); }
+    .fill.san { background: linear-gradient(90deg, #2563eb, #60a5fa); }
+    .stats-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .stat-tile {
       background: var(--surface-2); border: 1px solid var(--border);
-      border-radius: 9px; padding: 6px 2px; text-align: center;
+      border-radius: 10px; padding: 8px 2px; text-align: center;
     }
-    .stat-k { font-size: 10px; color: var(--muted); }
-    .stat-v { font-size: 15px; font-weight: 800; margin-top: 2px; }
-    .stat-v.pos { color: var(--ally); }
-    .stat-v.neg { color: var(--hostile); }
-    .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .stat-tile .k { font-size: 10px; color: var(--muted); }
+    .stat-tile .v { font-size: 16px; font-weight: 800; margin-top: 2px; }
+    .stat-tile .v.pos { color: var(--ally); }
+    .stat-tile .v.neg { color: var(--hostile); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
     .chip {
-      font-size: 11px; padding: 3px 8px; border-radius: 999px;
+      font-size: 12px; padding: 4px 10px; border-radius: 999px;
       background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
     }
+    .chip.sm { font-size: 11px; padding: 2px 8px; }
     .chip.accent { border-color: var(--accent-border); color: var(--accent); background: var(--accent-soft); }
     .chip.ally { border-color: rgba(63,185,80,0.45); color: #7ee787; background: rgba(63,185,80,0.12); }
     .chip.neutral { border-color: rgba(210,153,34,0.45); color: #f2cc60; background: rgba(210,153,34,0.12); }
     .chip.wary { border-color: rgba(240,136,62,0.5); color: #fdba74; background: rgba(240,136,62,0.12); }
-    .chip.hostile { border-color: rgba(248,81,73,0.5); color: #fca5a5; background: rgba(248,81,73,0.13); }
-    .chip.whisper { border-color: rgba(192,132,252,0.5); color: #e9d5ff; background: var(--whisper-soft); }
+    .chip.hostile { border-color: rgba(248,81,73,0.5); color: #fca5a5; background: rgba(248,81,73,0.12); }
     .ability-row {
-      display: flex; justify-content: space-between; align-items: center; gap: 6px;
-      padding: 6px 8px; border-radius: 8px; background: var(--surface-2); margin-bottom: 5px;
-      border: 1px solid var(--border); font-size: 12px;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 10px; border-radius: 10px; background: var(--surface-2); margin-bottom: 6px;
     }
-    .whisper-box {
-      background: linear-gradient(135deg, var(--whisper-soft), rgba(20,12,32,0.55));
-      border: 1px solid rgba(192,132,252,0.42); border-left: 3px solid var(--whisper);
-      border-radius: 9px; padding: 8px 10px; margin-bottom: 7px; font-size: 12px;
+    /* Whispers Page */
+    .whisper-card {
+      background: linear-gradient(135deg, var(--whisper-soft), var(--surface));
+      border: 1px solid rgba(192,132,252,0.35); border-left: 3px solid var(--whisper);
+      border-radius: 12px; padding: 12px 13px; margin-bottom: 10px;
     }
-    .whisper-turn { font-size: 10px; color: #d8b4fe; font-weight: 700; margin-bottom: 2px; }
-    .graph-wrap {
+    .whisper-card.latest { box-shadow: 0 0 18px rgba(192,132,252,0.16); border-color: rgba(192,132,252,0.6); }
+    .whisper-hd { font-size: 11px; color: #d8b4fe; font-weight: 700; margin-bottom: 5px; display: flex; justify-content: space-between; }
+    .whisper-txt { font-size: 13px; color: var(--text); white-space: pre-line; }
+    /* Relationships Page */
+    .graph-box {
       background: radial-gradient(circle at center, rgba(255,255,255,0.03), rgba(0,0,0,0.38));
-      border: 1px solid var(--border); border-radius: 11px; overflow: hidden; margin-bottom: 8px;
+      border: 1px solid var(--border); border-radius: 13px; overflow: hidden; margin-bottom: 12px;
     }
     .graph-svg { width: 100%; height: auto; display: block; }
     .g-node { cursor: pointer; }
     .g-node:hover circle { filter: brightness(1.25); }
-    .dossier-card {
-      background: var(--surface-2); border: 1px solid var(--accent-border);
-      border-radius: 10px; padding: 9px 11px; margin-bottom: 8px;
-    }
-    .npc-card {
-      background: var(--surface-2); border: 1px solid var(--border);
-      border-radius: 10px; padding: 8px 10px; margin-bottom: 7px; cursor: pointer;
+    .acc-item {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; margin-bottom: 8px; overflow: hidden;
       transition: border-color 0.2s;
     }
-    .npc-card:hover, .npc-card.selected { border-color: var(--accent); }
-    .npc-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 4px; }
-    .npc-name { font-weight: 700; font-size: 13px; }
-    .npc-sub { font-size: 12px; color: var(--muted); }
-    .rel-list { margin: 6px 0 0; padding-left: 15px; font-size: 11px; color: var(--text); }
-    .rel-list li { margin-bottom: 3px; }
-    .clue-item {
-      padding: 7px 9px; border-radius: 8px; background: var(--surface-2);
-      border: 1px solid var(--border); margin-bottom: 6px; font-size: 12px;
+    .acc-item.open { border-color: var(--accent-border); }
+    .acc-head {
+      padding: 10px 12px; cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
     }
-    .glossary-card {
-      background: var(--surface-2); border: 1px solid var(--border);
-      border-radius: 10px; padding: 9px 10px; margin-bottom: 7px;
+    .acc-name { font-weight: 700; font-size: 13px; }
+    .acc-brief { font-size: 12px; color: var(--muted); padding: 0 12px 10px; margin-top: -4px; }
+    .acc-detail {
+      padding: 10px 12px 12px; border-top: 1px solid var(--border);
+      background: var(--surface-2); font-size: 12px;
     }
-    .glossary-title { font-weight: 700; color: var(--accent); font-size: 12px; margin-bottom: 4px; }
-    .glossary-body { font-size: 12px; color: var(--text); white-space: pre-line; }
-    .turn-card {
-      background: var(--surface-2); border: 1px solid var(--border);
-      border-radius: 10px; padding: 9px 10px; margin-bottom: 7px;
+    .acc-detail ul { margin: 4px 0 8px; padding-left: 16px; }
+    .acc-detail li { margin-bottom: 4px; }
+    /* Goal Page */
+    .goal-title { font-size: 15px; font-weight: 800; color: var(--accent); margin-bottom: 5px; }
+    .goal-desc { font-size: 13px; color: var(--text); }
+    .act-pill {
+      padding: 9px 11px; border-radius: 10px; background: var(--surface-2);
+      border: 1px solid var(--border); margin-bottom: 7px; font-size: 12.5px;
+      display: flex; gap: 8px; align-items: flex-start;
     }
-    .turn-head { font-weight: 700; color: var(--accent); font-size: 12px; margin-bottom: 3px; }
-    .turn-meta { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    .act-num { color: var(--accent); font-weight: 800; flex-shrink: 0; }
+    .roll-box {
+      padding: 9px 12px; border-radius: 10px; margin-bottom: 12px;
+      background: rgba(63, 185, 80, 0.12); border: 1px solid rgba(63, 185, 80, 0.42);
+      color: #a7f3d0; font-size: 12px;
+    }
+    .clue-row {
+      padding: 8px 10px; border-radius: 9px; background: var(--surface-2);
+      margin-bottom: 6px; font-size: 12.5px;
+    }
+    .link-btn {
+      width: 100%; background: var(--surface-2); color: var(--accent);
+      border: 1px dashed var(--accent-border); border-radius: 9px;
+      padding: 7px; font-size: 12px; cursor: pointer; margin-top: 4px;
+    }
+    /* Codex Page */
+    .search-wrap { position: relative; margin-bottom: 10px; }
+    .search-wrap input {
+      width: 100%; background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); border-radius: 11px;
+      padding: 9px 32px 9px 12px; font-size: 13px; outline: none;
+    }
+    .search-wrap input:focus { border-color: var(--accent); }
+    .search-x {
+      display: none; position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px;
+    }
+    .subpills { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
+    .subpill {
+      background: var(--surface); color: var(--muted); border: 1px solid var(--border);
+      border-radius: 9px; padding: 6px 4px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .subpill.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
     .muted { color: var(--muted); font-size: 12px; }
-    .empty { color: var(--muted); font-size: 12px; text-align: center; padding: 12px 6px; }
+    .empty { color: var(--muted); text-align: center; padding: 28px 12px; font-size: 13px; }
     .pulse-ring { transform-box: fill-box; transform-origin: center; animation: pulseRing 2.2s ease-out infinite; }
     @keyframes pulseRing {
       0% { opacity: 0.85; transform: scale(1); }
       75% { opacity: 0.08; transform: scale(1.65); }
       100% { opacity: 0; transform: scale(1.8); }
     }
-    .pip-placeholder {
+    /* Fixed 5-Tab Bottom App Navigation */
+    .bottom-nav {
+      height: 56px; flex-shrink: 0;
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      background: rgba(21, 17, 15, 0.96); backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      padding: 4px 4px 6px;
+    }
+    .nav-btn {
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 2px; border-radius: 10px; position: relative; padding: 2px 0;
+      transition: color 0.18s, background 0.18s;
+    }
+    .nav-btn .ico { font-size: 17px; line-height: 1; }
+    .nav-btn .txt { font-size: 10px; font-weight: 600; }
+    .nav-btn.active { color: var(--accent); background: var(--accent-soft); }
+    .nav-dot {
+      display: none; position: absolute; top: 3px; right: 14%;
+      min-width: 15px; height: 15px; line-height: 15px; padding: 0 4px;
+      border-radius: 999px; font-size: 9px; font-weight: 800;
+      background: var(--whisper); color: #160924;
+    }
+    .nav-dot.show { display: inline-block; }
+    .nav-dot.subtle { background: rgba(255,255,255,0.15); color: var(--text); font-weight: 600; }
+    .pip-hold {
       display: none; min-height: 100vh; place-items: center; padding: 24px; text-align: center;
     }
-    .pip-placeholder.show { display: grid; }
+    .pip-hold.show { display: grid; }
   </style>
 </head>
 <body>
-  <div id="pip-placeholder" class="pip-placeholder">
-    <div class="sec" style="max-width:340px">
-      <div class="sec-title" style="justify-content:center">📌 悬浮角色卡已置顶弹出</div>
-      <p class="muted">HUD 正在独立画中画置顶窗口中实时运行。关闭浮窗后会自动回到这里喵！</p>
-      <button class="mini-btn" id="btn-return-pip">↩️ 收回主页面</button>
+  <div id="pip-hold" class="pip-hold">
+    <div class="card" style="max-width:320px">
+      <div class="goal-title">📌 悬浮角色卡已置顶弹出</div>
+      <p class="muted">正在独立画中画置顶窗中实时同步。关闭浮窗后会自动回到这里喵！</p>
+      <button class="mini-btn" id="btn-pip-back">↩️ 收回主页面</button>
     </div>
   </div>
   <div id="hud-root">
-    <div class="sticky-top">
-      <div class="hdr-row">
-        <div class="hdr-title" id="hud-title">🍺 正在连接酒馆…</div>
-        <div class="hdr-btns">
-          <span class="live-pill" id="live-pill"><span class="dot" id="live-dot"></span><span id="live-txt">实时</span></span>
-          <button class="mini-btn" id="btn-pip" title="弹出悬浮窗">📌 浮窗</button>
-          <a class="mini-btn" id="btn-dash" href="#" target="_blank" rel="noopener">🗺️ 大屏</a>
-        </div>
+    <header class="topbar">
+      <div class="top-left">
+        <span class="dot" id="live-dot"></span>
+        <span class="top-turn" id="top-turn">连接中…</span>
+        <span class="top-vitals" id="top-vitals">❤️ - ｜ 🧠 -</span>
       </div>
-      <div class="hero-card">
-        <div class="hero-top">
-          <div class="avatar" id="hero-avatar">冒</div>
-          <div class="hero-info">
-            <div class="hero-name-row">
-              <span class="hero-name" id="hero-name">加载中…</span>
-              <span class="hero-role" id="hero-role"></span>
-              <span id="hero-inspire" style="display:none;font-size:12px" title="持有激励点">🌟</span>
-            </div>
-            <div class="hero-loc" id="hero-loc">📍 —</div>
-          </div>
-        </div>
-        <div class="vitals-grid">
-          <div class="bar-wrap">
-            <div class="bar-lbl"><span>❤️ 生命 HP</span><strong id="hp-txt">-/-</strong></div>
-            <div class="bar-track"><div class="bar-fill bar-hp" id="hp-bar" style="width:100%"></div></div>
-          </div>
-          <div class="bar-wrap">
-            <div class="bar-lbl"><span>🧠 理智 SAN</span><strong id="san-txt">-/-</strong></div>
-            <div class="bar-track"><div class="bar-fill bar-san" id="san-bar" style="width:100%"></div></div>
-          </div>
-        </div>
-        <div class="roll-banner" id="roll-banner"></div>
+      <div class="top-right">
+        <button class="mini-btn" id="btn-pip" title="弹出置顶悬浮窗">📌 浮窗</button>
+        <a class="mini-btn" id="btn-dash" href="#" target="_blank" rel="noopener" title="打开全队 Web 大屏">🌐</a>
       </div>
-      <div class="search-box">
-        <input id="hud-search" type="text" placeholder="🔍 晕人名了？搜人名 / 道具 / 线索 / 设定秒查…" autocomplete="off" />
-        <button class="search-clear" id="search-clear" title="清空">✕</button>
-      </div>
-      <div class="tabs" id="hud-tabs">
-        <button class="tab-btn active" data-tab="me">🪪 角色<span class="badge" id="bdg-whisper" style="display:none">0</span></button>
-        <button class="tab-btn" data-tab="rel">🤝 关系<span class="badge" id="bdg-npc">0</span></button>
-        <button class="tab-btn" data-tab="clue">🔎 线索<span class="badge" id="bdg-clue">0</span></button>
-        <button class="tab-btn" data-tab="map">🗺️ 地图</button>
-      </div>
-    </div>
-    <div class="toast-bar" id="toast-bar"></div>
-    <div class="content" id="hud-content">
-      <div class="empty">正在拉取你的专属冒险者档案…</div>
-    </div>
+    </header>
+    <div class="toast" id="toast"></div>
+    <main class="page-body" id="page-body">
+      <div class="empty">正在拉取你的专属冒险档案…</div>
+    </main>
+    <nav class="bottom-nav" id="bottom-nav">
+      <button class="nav-btn active" data-page="me"><span class="ico">🪪</span><span class="txt">角色</span></button>
+      <button class="nav-btn" data-page="whispers"><span class="ico">🤫</span><span class="txt">纸条</span><span class="nav-dot" id="dot-w"></span></button>
+      <button class="nav-btn" data-page="rel"><span class="ico">🤝</span><span class="txt">人物</span><span class="nav-dot subtle" id="dot-r"></span></button>
+      <button class="nav-btn" data-page="goal"><span class="ico">🎯</span><span class="txt">目标</span></button>
+      <button class="nav-btn" data-page="codex"><span class="ico">📖</span><span class="txt">百科</span></button>
+    </nav>
   </div>
 <script>
 (() => {
-  const pathParts = location.pathname.split('/').filter(Boolean);
-  const channelId = decodeURIComponent(pathParts[pathParts.length - 1] || '');
+  const parts = location.pathname.split('/').filter(Boolean);
+  const channelId = decodeURIComponent(parts[parts.length - 1] || '');
   const params = new URLSearchParams(location.search);
   const uid = params.get('u') || '';
   const ptoken = params.get('ptoken') || '';
@@ -293,20 +294,22 @@
   const sseUrl = `/api/hud/${encodeURIComponent(channelId)}/events?${qs}`;
 
   let state = null;
-  let activeTab = 'me';
-  let selectedEntity = null;
-  let searchQuery = '';
+  let page = 'me';
+  let codexSub = 'map';
+  let openNpcKey = null;
+  let showAllClues = false;
+  let searchQ = '';
   let seenWhispers = null;
   let unreadWhispers = 0;
-  let pipWindow = null;
+  let pipWin = null;
 
-  const $ = (id) => (pipWindow && !pipWindow.closed ? pipWindow.document.getElementById(id) : null) || document.getElementById(id);
+  const $ = (id) => (pipWin && !pipWin.closed ? pipWin.document.getElementById(id) : null) || document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   const fmtMod = (v) => (v >= 0 ? `+${v}` : `${v}`);
   const tierColor = (t) => ({ ally: '#3fb950', neutral: '#d29922', wary: '#f0883e', hostile: '#f85149' }[t] || '#d29922');
 
-  function showToast(msg, ms = 4200) {
-    const el = $('toast-bar');
+  function toast(msg, ms = 4500) {
+    const el = $('toast');
     if (!el) return;
     el.textContent = msg;
     el.style.display = 'block';
@@ -314,386 +317,435 @@
     el._t = setTimeout(() => { el.style.display = 'none'; }, ms);
   }
 
-  function setLive(status, label) {
-    const dot = $('live-dot'), txt = $('live-txt');
-    if (!dot || !txt) return;
-    dot.className = 'dot' + (status === 'warn' ? ' warn' : status === 'err' ? ' err' : '');
-    txt.textContent = label;
+  function setDot(mode) {
+    const d = $('live-dot');
+    if (d) d.className = 'dot' + (mode === 'warn' ? ' warn' : mode === 'err' ? ' err' : '');
   }
 
   async function fetchHud() {
     try {
       const res = await fetch(apiUrl, { cache: 'no-store' });
       if (!res.ok) {
-        setLive('err', '凭证失效');
-        $('hud-content').innerHTML = '<div class="sec"><div class="empty">🔒 本局已结束或你已离桌，请回 KOOK 点「🪪 我的角色卡」重新获取链接喵。</div></div>';
+        setDot('err');
+        $('page-body').innerHTML = '<div class="empty">🔒 本局已结团或你已离桌，回 KOOK 点「🪪 我的角色卡」获取新链接喵。</div>';
         return;
       }
       const next = await res.json();
-      const wCount = (next.me.whispers || []).length;
+      const wc = (next.me.whispers || []).length;
       if (seenWhispers === null) {
-        seenWhispers = wCount;
-      } else if (wCount > seenWhispers) {
-        const diff = wCount - seenWhispers;
-        if (activeTab !== 'me') unreadWhispers += diff;
-        seenWhispers = wCount;
-        showToast(`🤫 收到 ${diff} 条新的专属秘密纸条！切到「🪪 角色」查看`, 6000);
+        seenWhispers = wc;
+      } else if (wc > seenWhispers) {
+        const diff = wc - seenWhispers;
+        if (page !== 'whispers') unreadWhispers += diff;
+        seenWhispers = wc;
+        toast(`🤫 收到 ${diff} 条新秘密纸条！点底部「🤫 纸条」查看`, 6000);
       }
       state = next;
-      renderAll();
+      render();
     } catch (_) {
-      setLive('err', '重连中');
+      setDot('err');
     }
   }
 
-  function renderAll() {
+  function render() {
     if (!state) return;
     const theme = state.theme || 'ember';
     document.documentElement.setAttribute('data-theme', theme);
-    if (pipWindow && !pipWindow.closed) pipWindow.document.documentElement.setAttribute('data-theme', theme);
+    if (pipWin && !pipWin.closed) pipWin.document.documentElement.setAttribute('data-theme', theme);
 
-    $('hud-title').textContent = `🎭 ${state.title} · 第 ${state.turn_number} 轮`;
-    if (state.ended_title) setLive('ok', '已完结');
-    else if (state.turn_phase === 'resolving') setLive('warn', '推演中…');
-    else setLive('ok', '实时');
-
+    setDot(state.turn_phase === 'resolving' ? 'warn' : 'ok');
+    $('top-turn').textContent = state.turn_phase === 'resolving'
+      ? `第 ${state.turn_number} 轮 · 推演中`
+      : `第 ${state.turn_number} 轮`;
+    const m = state.me;
+    $('top-vitals').innerHTML = `❤️<strong>${m.hp}</strong>/${m.max_hp} ｜ 🧠<strong>${m.san}</strong>/${m.max_san}${m.inspiration ? ' 🌟' : ''}`;
     const dash = $('btn-dash');
     if (dash && state.dashboard_path) dash.href = state.dashboard_path;
 
-    const m = state.me;
-    $('hero-avatar').textContent = (m.character_name || '冒').slice(0, 1);
-    $('hero-name').textContent = m.character_name;
-    $('hero-role').textContent = `${m.role_desc || '冒险者'} · Lv.${m.level || 1}`;
-    $('hero-inspire').style.display = m.inspiration ? 'inline' : 'none';
-    $('hero-loc').textContent = `📍 ${m.location} ｜ 🕒 ${state.world_time}`;
-
-    const hpPct = Math.max(0, Math.min(100, Math.round((m.hp / Math.max(1, m.max_hp)) * 100)));
-    const sanPct = Math.max(0, Math.min(100, Math.round((m.san / Math.max(1, m.max_san)) * 100)));
-    $('hp-txt').textContent = `${m.hp}/${m.max_hp}`;
-    $('san-txt').textContent = `${m.san}/${m.max_san}`;
-    $('hp-bar').style.width = `${hpPct}%`;
-    $('san-bar').style.width = `${sanPct}%`;
-
-    const rb = $('roll-banner');
-    const banners = [];
-    if (m.roll_notes && m.roll_notes.length) banners.push(`🎲 本轮已绑定：${m.roll_notes[m.roll_notes.length - 1]}`);
-    if (m.action_ready && m.pending_action_text) banners.push(`✅ 已提交行动：${m.pending_action_text}`);
-    else if (m.is_afk) banners.push('💤 当前暂离中（自动结算会跳过你）');
-    if (banners.length) {
-      rb.textContent = banners.join(' ｜ ');
-      rb.style.display = 'block';
-    } else {
-      rb.style.display = 'none';
-    }
-
-    const wBdg = $('bdg-whisper');
-    const totalW = (m.whispers || []).length;
+    // Nav badges
+    const dw = $('dot-w');
+    const wTotal = (m.whispers || []).length;
     if (unreadWhispers > 0) {
-      wBdg.textContent = `+${unreadWhispers}`;
-      wBdg.className = 'badge new';
-      wBdg.style.display = 'inline-block';
-    } else if (totalW > 0) {
-      wBdg.textContent = String(totalW);
-      wBdg.className = 'badge';
-      wBdg.style.display = 'inline-block';
+      dw.textContent = `+${unreadWhispers}`;
+      dw.className = 'nav-dot show';
+    } else if (wTotal > 0) {
+      dw.textContent = String(wTotal);
+      dw.className = 'nav-dot show subtle';
     } else {
-      wBdg.style.display = 'none';
+      dw.className = 'nav-dot';
     }
-    $('bdg-npc').textContent = String((state.npcs || []).length);
-    $('bdg-clue').textContent = String((state.clues || []).length);
+    const dr = $('dot-r');
+    const nTotal = (state.npcs || []).length;
+    if (nTotal > 0) {
+      dr.textContent = String(nTotal);
+      dr.className = 'nav-dot show subtle';
+    } else {
+      dr.className = 'nav-dot';
+    }
 
-    if (searchQuery.trim()) {
-      renderSearch(searchQuery.trim());
-    } else if (activeTab === 'me') {
-      renderMeTab();
-    } else if (activeTab === 'rel') {
-      renderRelTab();
-    } else if (activeTab === 'clue') {
-      renderClueTab();
-    } else {
-      renderMapTab();
-    }
+    const nav = $('bottom-nav');
+    if (nav) nav.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-page') === page));
+
+    if (page === 'me') renderMe();
+    else if (page === 'whispers') renderWhispers();
+    else if (page === 'rel') renderRel();
+    else if (page === 'goal') renderGoal();
+    else renderCodex();
   }
 
-  function renderMeTab() {
+  function renderMe() {
     const m = state.me;
+    const hpPct = Math.max(0, Math.min(100, Math.round((m.hp / Math.max(1, m.max_hp)) * 100)));
+    const sanPct = Math.max(0, Math.min(100, Math.round((m.san / Math.max(1, m.max_san)) * 100)));
     const stats = [
       ['体魄', m.stats.body], ['敏捷', m.stats.agility],
       ['侦查', m.stats.investigate], ['交涉', m.stats.social], ['灵感', m.stats.insight]
     ];
+
     let html = `
-      <div class="sec">
-        <div class="sec-title"><span>📊 五维属性（${esc(state.check_system)}）</span><span class="muted">${esc(m.alignment || '')}</span></div>
-        <div class="stats-grid">
-          ${stats.map(([k, v]) => `<div class="stat-box"><div class="stat-k">${k}</div><div class="stat-v ${v>0?'pos':v<0?'neg':''}">${fmtMod(v)}</div></div>`).join('')}
+      <div class="card focus">
+        <div class="id-row">
+          <div class="avatar">${esc((m.character_name || '冒').slice(0, 1))}</div>
+          <div style="min-width:0;flex:1">
+            <div class="id-name">${esc(m.character_name)} <span class="chip sm accent">${esc(m.role_desc || '冒险者')} Lv.${m.level || 1}</span></div>
+            <div class="id-meta">📍 ${esc(m.location)}</div>
+          </div>
         </div>
-        ${m.traits.length ? `<div class="chips" style="margin-top:8px">${m.traits.map(t => `<span class="chip accent">✦ ${esc(t)}</span>`).join('')}${(m.proficient_skills||[]).map(s => `<span class="chip">🎯 熟练:${esc(s)}</span>`).join('')}</div>` : ''}
-        ${m.status_note ? `<div class="muted" style="margin-top:7px">🏷️ 当前状态：<span style="color:var(--text)">${esc(m.status_note)}</span></div>` : ''}
+        <div class="vitals">
+          <div>
+            <div class="bar-head"><span>❤️ 生命</span><strong>${m.hp} / ${m.max_hp}</strong></div>
+            <div class="track"><div class="fill hp" style="width:${hpPct}%"></div></div>
+          </div>
+          <div>
+            <div class="bar-head"><span>🧠 理智</span><strong>${m.san} / ${m.max_san}</strong></div>
+            <div class="track"><div class="fill san" style="width:${sanPct}%"></div></div>
+          </div>
+        </div>
+        ${m.status_note ? `<div class="muted" style="margin-top:10px">🏷️ ${esc(m.status_note)}</div>` : ''}
+      </div>
+
+      <div class="card">
+        <div class="label"><span>📊 五维属性</span><span>${esc(state.check_system)}</span></div>
+        <div class="stats-5">
+          ${stats.map(([k, v]) => `<div class="stat-tile"><div class="k">${k}</div><div class="v ${v>0?'pos':v<0?'neg':''}">${fmtMod(v)}</div></div>`).join('')}
+        </div>
+        ${(m.traits.length || (m.proficient_skills||[]).length) ? `<div class="chips" style="margin-top:10px">${m.traits.map(t => `<span class="chip sm accent">✦ ${esc(t)}</span>`).join('')}${(m.proficient_skills||[]).map(s => `<span class="chip sm">🎯 ${esc(s)}</span>`).join('')}</div>` : ''}
       </div>`;
 
     if (m.abilities && m.abilities.length) {
-      html += `<div class="sec"><div class="sec-title"><span>✨ 招牌绝活</span><span class="muted">剩余充能</span></div>` +
+      html += `<div class="card"><div class="label"><span>✨ 招牌绝活</span><span>剩余充能</span></div>` +
         m.abilities.map((a) => {
           const pips = '●'.repeat(a.uses_left) + '○'.repeat(Math.max(0, a.max_uses - a.uses_left));
-          return `<div class="ability-row"><strong>${esc(a.name)}</strong><span class="chip accent">${pips} (${a.uses_left}/${a.max_uses} · ${esc(a.recharge)})</span></div>`;
+          return `<div class="ability-row"><strong>${esc(a.name)}</strong><span class="chip sm accent">${pips} ${a.uses_left}/${a.max_uses} · ${esc(a.recharge)}</span></div>`;
         }).join('') + `</div>`;
     }
 
-    html += `<div class="sec"><div class="sec-title"><span>🎒 背包行囊</span><span class="muted">${m.inventory.length} 件</span></div>` +
-      (m.inventory.length
+    html += `<div class="card">
+      <div class="label"><span>🎒 背包行囊</span><span>${m.inventory.length} 件</span></div>
+      ${m.inventory.length
         ? `<div class="chips">${m.inventory.map(i => `<span class="chip">${esc(i)}</span>`).join('')}</div>`
-        : `<div class="muted">行囊空空如也</div>`) + `</div>`;
-
-    html += `<div class="sec"><div class="sec-title"><span>🤫 我的专属秘密纸条（仅你可见）</span><span class="muted">${m.whispers.length} 条</span></div>` +
-      (m.whispers.length
-        ? m.whispers.map(w => `<div class="whisper-box"><div class="whisper-turn">第 ${w.turn_number} 回合 · 暗线密语</div><div>${esc(w.content)}</div></div>`).join('')
-        : `<div class="empty">暂无私密纸条。当你单独察觉暗线或秘密行动时，DM 的密语会自动弹出在这里！</div>`) + `</div>`;
-
-    $('hud-content').innerHTML = html;
-  }
-
-  function renderRelTab() {
-    const npcs = state.npcs || [];
-    const mates = (state.party || []).filter(p => !p.is_me);
-    const allNodes = [
-      ...mates.map((p, i) => ({ kind: 'mate', id: `mate:${i}`, name: p.character_name, sub: p.role_desc, tier: 'mate', data: p })),
-      ...npcs.map((n, i) => ({ kind: 'npc', id: `npc:${i}`, name: n.name, sub: n.attitude, tier: n.attitude_tier, data: n }))
-    ];
-    if (!selectedEntity && npcs.length) selectedEntity = 'npc:0';
-    else if (!selectedEntity && mates.length) selectedEntity = 'mate:0';
-
-    const cx = 180, cy = 122, rx = 128, ry = 88;
-    let svgEdges = '', svgNodes = '';
-    allNodes.forEach((node, idx) => {
-      const angle = -Math.PI / 2 + (idx * 2 * Math.PI) / Math.max(1, allNodes.length);
-      const nx = cx + rx * Math.cos(angle);
-      const ny = cy + ry * Math.sin(angle);
-      const col = node.kind === 'mate' ? '#38bdf8' : tierColor(node.tier);
-      const isSel = selectedEntity === node.id;
-      svgEdges += `<line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="${col}" stroke-opacity="${isSel ? 0.95 : 0.45}" stroke-width="${isSel ? 2.6 : 1.5}" ${node.kind === 'mate' ? 'stroke-dasharray="4 3"' : ''} />`;
-      const mx = (cx + nx) / 2, my = (cy + ny) / 2;
-      svgEdges += `<text x="${mx.toFixed(1)}" y="${(my - 3).toFixed(1)}" text-anchor="middle" fill="${col}" font-size="9" opacity="0.9">${esc(node.kind === 'mate' ? '队友' : node.sub.slice(0, 4))}</text>`;
-      svgNodes += `<g class="g-node" data-ent="${esc(node.id)}">` +
-        (isSel ? `<circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="23" fill="none" stroke="${col}" stroke-width="2" class="pulse-ring"/>` : '') +
-        `<circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="19" fill="#181310" stroke="${col}" stroke-width="${isSel ? 2.6 : 1.8}"/>` +
-        `<text x="${nx.toFixed(1)}" y="${(ny + 4).toFixed(1)}" text-anchor="middle" fill="#f3ece4" font-size="11" font-weight="700">${esc(node.name.slice(0, 3))}</text>` +
-        `<text x="${nx.toFixed(1)}" y="${(ny + 31).toFixed(1)}" text-anchor="middle" fill="#cbd5e1" font-size="10">${esc(node.name.slice(0, 6))}</text>` +
-        `</g>`;
-    });
-
-    const svg = `<div class="graph-wrap"><svg class="graph-svg" viewBox="0 0 360 250">
-      ${svgEdges}
-      <circle cx="${cx}" cy="${cy}" r="24" fill="#2a1c0e" stroke="var(--accent)" stroke-width="2.5"/>
-      <text x="${cx}" y="${cy + 4}" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="800">${esc(state.me.character_name.slice(0, 4))}</text>
-      <text x="${cx}" y="${cy + 36}" text-anchor="middle" fill="var(--accent)" font-size="9">我 · 主视角</text>
-      ${svgNodes}
-    </svg></div>`;
-
-    let dossier = '';
-    const sel = allNodes.find(n => n.id === selectedEntity);
-    if (sel && sel.kind === 'npc') {
-      const n = sel.data;
-      dossier = `<div class="dossier-card">
-        <div class="npc-head"><span class="npc-name">🗣️ ${esc(n.name)}</span><span class="chip ${esc(n.attitude_tier)}">${esc(n.attitude)}</span></div>
-        <div class="npc-sub">${esc(n.status || '暂无近期动向')}</div>
-        ${n.related_clues.length ? `<div style="margin-top:7px;font-size:11px;color:var(--accent)">🔎 关联线索</div><ul class="rel-list">${n.related_clues.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
-        ${n.related_whispers.length ? `<div style="margin-top:7px;font-size:11px;color:var(--whisper)">🤫 你的私密情报</div><ul class="rel-list">${n.related_whispers.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
-        ${n.related_bulletins.length ? `<div style="margin-top:7px;font-size:11px;color:var(--neutral)">📰 势力号外</div><ul class="rel-list">${n.related_bulletins.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}
-      </div>`;
-    } else if (sel && sel.kind === 'mate') {
-      const p = sel.data;
-      dossier = `<div class="dossier-card">
-        <div class="npc-head"><span class="npc-name">🤝 队友 · ${esc(p.character_name)}</span><span class="chip accent">${esc(p.role_desc)}</span></div>
-        <div class="npc-sub">❤️ ${p.hp}/${p.max_hp} ｜ 🧠 ${p.san}/${p.max_san} ｜ 📍 ${esc(p.location)}</div>
-        ${p.traits.length ? `<div class="chips" style="margin-top:6px">${p.traits.map(t => `<span class="chip">✦ ${esc(t)}</span>`).join('')}</div>` : ''}
-        ${p.status_note ? `<div class="npc-sub" style="margin-top:5px">🏷️ ${esc(p.status_note)}</div>` : ''}
-      </div>`;
-    }
-
-    let html = `<div class="sec">
-      <div class="sec-title"><span>🕸️ 人物关系星图（点头像查档案）</span><span class="muted">🟢信任 🟡中立 🟠警惕 🔴敌对</span></div>
-      ${allNodes.length ? svg + dossier : '<div class="empty">还没有遇上关键人物，推进剧情后 TA 们的头像和好感度会自动连上线喵！</div>'}
+        : `<div class="muted">行囊暂时空着</div>`}
     </div>`;
 
+    $('page-body').innerHTML = html;
+  }
+
+  function renderWhispers() {
+    const list = state.me.whispers || [];
+    let html = `<div class="page-hd"><h2 class="page-title">🤫 我的秘密纸条</h2><span class="page-sub">仅你可见 · 共 ${list.length} 条</span></div>`;
+    if (!list.length) {
+      html += `<div class="empty">还没有收到专属暗线纸条。<br/>当你单独调查、眼尖察觉异样或暗中行动时，DM 递来的秘密情报会自动出现在这里！</div>`;
+    } else {
+      html += list.map((w, idx) => `
+        <div class="whisper-card ${idx === 0 ? 'latest' : ''}">
+          <div class="whisper-hd"><span>第 ${w.turn_number} 回合</span><span>${idx === 0 ? '✨ 最新' : '暗线档案'}</span></div>
+          <div class="whisper-txt">${esc(w.content)}</div>
+        </div>`).join('');
+    }
+    $('page-body').innerHTML = html;
+  }
+
+  function renderRel() {
+    const npcs = state.npcs || [];
+    const mates = (state.party || []).filter(p => !p.is_me);
+    const nodes = [
+      ...mates.map((p, i) => ({ kind: 'mate', key: `mate:${i}`, name: p.character_name, sub: '队友', tier: 'mate', data: p })),
+      ...npcs.map((n, i) => ({ kind: 'npc', key: `npc:${i}`, name: n.name, sub: n.attitude, tier: n.attitude_tier, data: n }))
+    ];
+
+    let html = `<div class="page-hd"><h2 class="page-title">🤝 人物与关系</h2><span class="page-sub">点任意人名展开关联情报</span></div>`;
+
+    if (nodes.length) {
+      const cx = 180, cy = 104, rx = 122, ry = 74;
+      let edges = '', circles = '';
+      nodes.forEach((n, idx) => {
+        const ang = -Math.PI / 2 + (idx * 2 * Math.PI) / nodes.length;
+        const x = cx + rx * Math.cos(ang), y = cy + ry * Math.sin(ang);
+        const col = n.kind === 'mate' ? '#38bdf8' : tierColor(n.tier);
+        const sel = openNpcKey === n.key;
+        edges += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${col}" stroke-opacity="${sel ? 0.95 : 0.45}" stroke-width="${sel ? 2.5 : 1.5}" ${n.kind === 'mate' ? 'stroke-dasharray="4 3"' : ''}/>`;
+        edges += `<text x="${((cx+x)/2).toFixed(1)}" y="${((cy+y)/2 - 3).toFixed(1)}" text-anchor="middle" fill="${col}" font-size="9">${esc(n.sub.slice(0, 4))}</text>`;
+        circles += `<g class="g-node" data-toggle="${esc(n.key)}">` +
+          (sel ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="21" fill="none" stroke="${col}" stroke-width="2" class="pulse-ring"/>` : '') +
+          `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="17" fill="#181310" stroke="${col}" stroke-width="${sel ? 2.4 : 1.6}"/>` +
+          `<text x="${x.toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="middle" fill="#f3ece4" font-size="10.5" font-weight="700">${esc(n.name.slice(0, 3))}</text>` +
+          `<text x="${x.toFixed(1)}" y="${(y+28).toFixed(1)}" text-anchor="middle" fill="#cbd5e1" font-size="9.5">${esc(n.name.slice(0, 6))}</text>` +
+          `</g>`;
+      });
+      html += `<div class="graph-box"><svg class="graph-svg" viewBox="0 0 360 212">
+        ${edges}
+        <circle cx="${cx}" cy="${cy}" r="22" fill="#2a1c0e" stroke="var(--accent)" stroke-width="2.4"/>
+        <text x="${cx}" y="${cy+4}" text-anchor="middle" fill="var(--accent)" font-size="11" font-weight="800">${esc(state.me.character_name.slice(0, 4))}</text>
+        ${circles}
+      </svg></div>`;
+    }
+
+    if (!nodes.length) {
+      html += `<div class="empty">目前还没有遇上关键 NPC 或其他队友。<br/>和人搭话推进剧情后，TA 们的头像、态度与关联线索会自动出现在这里喵！</div>`;
+    }
+
     if (npcs.length) {
-      html += `<div class="sec"><div class="sec-title"><span>👥 已登场 NPC 速查</span><span class="muted">${npcs.length} 位</span></div>` +
-        npcs.map((n, i) => `<div class="npc-card ${selectedEntity === `npc:${i}` ? 'selected' : ''}" data-ent="npc:${i}">
-          <div class="npc-head"><span class="npc-name">${esc(n.name)}</span><span class="chip ${esc(n.attitude_tier)}">${esc(n.attitude)}</span></div>
-          <div class="npc-sub">${esc(n.status || '正在观察局势')}</div>
-        </div>`).join('') + `</div>`;
+      html += `<div class="label" style="margin:6px 2px 8px"><span>已登场人物（${npcs.length}）</span><span>🟢信任 🟡中立 🟠警惕 🔴敌对</span></div>`;
+      html += npcs.map((n, i) => {
+        const key = `npc:${i}`;
+        const isOpen = openNpcKey === key;
+        const relCount = n.related_clues.length + n.related_whispers.length + n.related_bulletins.length;
+        return `<div class="acc-item ${isOpen ? 'open' : ''}">
+          <div class="acc-head" data-toggle="${key}">
+            <span class="acc-name">${isOpen ? '▾' : '▸'} ${esc(n.name)}</span>
+            <span class="chip sm ${esc(n.attitude_tier)}">${esc(n.attitude)}${relCount ? ` · ${relCount}条关联` : ''}</span>
+          </div>
+          <div class="acc-brief">${esc(n.status || '观察局势中')}</div>
+          ${isOpen ? `<div class="acc-detail">
+            ${n.related_clues.length ? `<div style="color:var(--accent);font-weight:700">🔎 相关线索</div><ul>${n.related_clues.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
+            ${n.related_whispers.length ? `<div style="color:var(--whisper);font-weight:700">🤫 相关密语</div><ul>${n.related_whispers.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+            ${n.related_bulletins.length ? `<div style="color:var(--neutral);font-weight:700">📰 相关号外</div><ul>${n.related_bulletins.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}
+            ${!relCount ? `<div class="muted">暂无与 ${esc(n.name)} 直接关联的额外线索。</div>` : ''}
+          </div>` : ''}
+        </div>`;
+      }).join('');
     }
 
-    if (state.bulletins && state.bulletins.length) {
-      html += `<div class="sec"><div class="sec-title"><span>📰 已浮现势力暗流</span><span class="muted">${state.bulletins.length} 条</span></div>` +
-        state.bulletins.slice().reverse().map(b => `<div class="clue-item"><div style="font-weight:700;color:var(--accent)">【${esc(b.faction || '暗流')}】${esc(b.headline)}</div><div class="muted" style="margin-top:3px">${esc(b.body)}</div></div>`).join('') + `</div>`;
+    if (mates.length) {
+      html += `<div class="label" style="margin:12px 2px 8px"><span>同行队友（${mates.length}）</span><span>实时状态</span></div>`;
+      html += mates.map((p, i) => {
+        const key = `mate:${i}`;
+        const isOpen = openNpcKey === key;
+        return `<div class="acc-item ${isOpen ? 'open' : ''}">
+          <div class="acc-head" data-toggle="${key}">
+            <span class="acc-name">${isOpen ? '▾' : '▸'} ${esc(p.character_name)}</span>
+            <span class="chip sm accent">${esc(p.role_desc)}</span>
+          </div>
+          <div class="acc-brief">❤️ ${p.hp}/${p.max_hp} ｜ 🧠 ${p.san}/${p.max_san} ｜ 📍 ${esc(p.location)}</div>
+          ${isOpen ? `<div class="acc-detail">
+            ${p.traits.length ? `<div class="chips" style="margin-bottom:6px">${p.traits.map(t => `<span class="chip sm">✦ ${esc(t)}</span>`).join('')}</div>` : ''}
+            <div class="muted">${esc(p.status_note || (p.action_ready ? '✅ 本轮已提交行动' : '⏳ 等待行动中'))}</div>
+          </div>` : ''}
+        </div>`;
+      }).join('');
     }
 
-    $('hud-content').innerHTML = html;
-    $('hud-content').querySelectorAll('[data-ent]').forEach((el) => {
+    $('page-body').innerHTML = html;
+    $('page-body').querySelectorAll('[data-toggle]').forEach((el) => {
       el.addEventListener('click', () => {
-        selectedEntity = el.getAttribute('data-ent');
-        renderRelTab();
+        const k = el.getAttribute('data-toggle');
+        openNpcKey = (openNpcKey === k) ? null : k;
+        renderRel();
       });
     });
   }
 
-  function renderClueTab() {
+  function renderGoal() {
     const acts = state.acts || [];
     const curAct = acts.find(a => a.index === state.current_act) || acts[0];
-    let html = '';
+    const m = state.me;
+    let html = `<div class="page-hd"><h2 class="page-title">🎯 下一步目标</h2><span class="page-sub">🕒 ${esc(state.world_time)}</span></div>`;
+
+    if (m.roll_notes.length || m.action_ready || m.is_afk) {
+      const parts = [];
+      if (m.roll_notes.length) parts.push(`🎲 本轮检定：${m.roll_notes[m.roll_notes.length - 1]}`);
+      if (m.action_ready && m.pending_action_text) parts.push(`✅ 已提交行动：${m.pending_action_text}`);
+      else if (m.is_afk) parts.push('💤 暂离中');
+      html += `<div class="roll-box">${esc(parts.join(' ｜ '))}</div>`;
+    }
+
     if (curAct) {
-      html += `<div class="sec"><div class="sec-title"><span>🎯 当前幕次（第 ${curAct.index}/${acts.length} 幕）</span><span class="muted">${esc(state.genre)}</span></div>
-        <div style="font-weight:700;font-size:13px;margin-bottom:4px">${esc(curAct.title)}</div>
-        <div class="muted">${esc(curAct.goal)}</div>
-        ${(state.world_flags||[]).length ? `<div class="chips" style="margin-top:8px">${state.world_flags.map(f => `<span class="chip ally">🚩 ${esc(f)}</span>`).join('')}</div>` : ''}
+      html += `<div class="card focus">
+        <div class="label"><span>🎬 第 ${curAct.index} / ${acts.length} 幕主线</span><span>📍 ${esc(state.location)}</span></div>
+        <div class="goal-title">${esc(curAct.title)}</div>
+        <div class="goal-desc">${esc(curAct.goal)}</div>
+        ${(state.world_flags||[]).length ? `<div class="chips" style="margin-top:10px">${state.world_flags.map(f => `<span class="chip sm ally">🚩 ${esc(f)}</span>`).join('')}</div>` : ''}
+      </div>`;
+    }
+
+    const actsList = state.suggested_actions || [];
+    if (actsList.length && !state.ended_title) {
+      html += `<div class="card">
+        <div class="label"><span>✨ 当前参考行动方向</span><span>回 KOOK 点按钮或直接打字</span></div>
+        ${actsList.map((a, i) => `<div class="act-pill"><span class="act-num">${['①','②','③','④'][i] || (i+1)}</span><span>${esc(a)}</span></div>`).join('')}
       </div>`;
     }
 
     const clues = state.clues || [];
-    html += `<div class="sec"><div class="sec-title"><span>🔎 已掌握线索墙</span><span class="muted">${clues.length} 条</span></div>` +
-      (clues.length
-        ? clues.map((c, i) => `<div class="clue-item"><strong style="color:var(--accent)">#${i + 1}</strong> ${esc(c)}</div>`).join('')
-        : `<div class="empty">还没有收集到线索，去和 NPC 搭话或调查周围吧喵！</div>`) + `</div>`;
+    const visible = showAllClues ? clues : clues.slice(-5).reverse();
+    const displayList = showAllClues ? clues.slice().reverse() : visible;
+    html += `<div class="card">
+      <div class="label"><span>🔎 关键线索（最新优先）</span><span>共 ${clues.length} 条</span></div>
+      ${displayList.length
+        ? displayList.map((c, idx) => `<div class="clue-row"><strong style="color:var(--accent)">#${clues.length - idx}</strong> ${esc(c)}</div>`).join('')
+        : `<div class="muted">尚未收集到线索，去探索或和 NPC 交谈吧！</div>`}
+      ${clues.length > 5 ? `<button class="link-btn" id="btn-more-clues">${showAllClues ? '▴ 收起较早线索' : `▾ 展开全部 ${clues.length} 条线索`}</button>` : ''}
+    </div>`;
 
-    const gl = state.glossary || [];
-    html += `<div class="sec"><div class="sec-title"><span>📚 世界常识词典（零剧透）</span><span class="muted">${gl.length} 条</span></div>` +
-      (gl.length
-        ? gl.map(g => `<div class="glossary-card">
-            <div class="glossary-title">${esc(g.title)}</div>
-            <div class="glossary-body">${esc(g.content)}</div>
-            ${g.keywords.length ? `<div class="chips" style="margin-top:6px">${g.keywords.map(k => `<span class="chip">${esc(k)}</span>`).join('')}</div>` : ''}
-          </div>`).join('')
-        : `<div class="empty">当前剧本暂无公开常识条目。</div>`) + `</div>`;
-
-    $('hud-content').innerHTML = html;
+    $('page-body').innerHTML = html;
+    const more = $('btn-more-clues');
+    if (more) more.addEventListener('click', () => { showAllClues = !showAllClues; renderGoal(); });
   }
 
-  function renderMapTab() {
-    const mp = state.map;
-    let mapHtml = '';
-    if (mp && mp.nodes && mp.nodes.length) {
-      const nodeById = Object.fromEntries(mp.nodes.map(n => [n.id, n]));
-      const edges = (mp.edges || []).map((e) => {
-        const a = nodeById[e.from], b = nodeById[e.to];
-        if (!a || !b) return '';
-        const x1 = a.x * 3.4 + 10, y1 = a.y * 2.1 + 12, x2 = b.x * 3.4 + 10, y2 = b.y * 2.1 + 12;
-        return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${e.locked ? '#f85149' : '#64748b'}" stroke-width="1.8" ${e.locked ? 'stroke-dasharray="4 3"' : ''}/>` +
-          (e.label ? `<text x="${(x1+x2)/2}" y="${(y1+y2)/2 - 3}" text-anchor="middle" fill="#94a3b8" font-size="8.5">${esc(e.label)}</text>` : '');
-      }).join('');
-      const nodes = mp.nodes.map((n) => {
-        const x = n.x * 3.4 + 10, y = n.y * 2.1 + 12;
-        const active = n.is_room_current;
-        const fill = active ? 'var(--accent)' : n.visited ? '#3fb950' : '#475569';
-        return `<g>
-          ${active ? `<circle cx="${x}" cy="${y}" r="14" fill="none" stroke="var(--accent)" stroke-width="2" class="pulse-ring"/>` : ''}
-          <circle cx="${x}" cy="${y}" r="${active ? 9 : 7}" fill="${fill}" stroke="#0c0a09" stroke-width="2"/>
-          <text x="${x}" y="${y + 19}" text-anchor="middle" fill="${active ? 'var(--accent)' : '#cbd5e1'}" font-size="9.5" font-weight="${active ? 700 : 500}">${esc(n.name.slice(0, 7))}</text>
-        </g>`;
-      }).join('');
-      mapHtml = `<div class="sec"><div class="sec-title"><span>🗺️ 迷你行动地图</span><span class="muted">🟡当前 🟢去过 ⬜未探</span></div>
-        <div class="graph-wrap"><svg class="graph-svg" viewBox="0 0 360 235">${edges}${nodes}</svg></div></div>`;
+  function renderCodex() {
+    const body = $('page-body');
+    if (!$('codex-q')) {
+      body.innerHTML = `
+        <div class="search-wrap">
+          <input id="codex-q" type="text" value="${esc(searchQ)}" placeholder="🔍 搜人名 / 道具 / 线索 / 世界设定…" autocomplete="off" />
+          <button class="search-x" id="codex-x">✕</button>
+        </div>
+        <div id="codex-inner"></div>`;
+      const inp = $('codex-q'), xbtn = $('codex-x');
+      inp.addEventListener('input', () => {
+        searchQ = inp.value;
+        xbtn.style.display = searchQ ? 'block' : 'none';
+        renderCodexInner();
+      });
+      xbtn.addEventListener('click', () => {
+        searchQ = ''; inp.value = ''; xbtn.style.display = 'none';
+        renderCodexInner();
+      });
+    }
+    const xbtn = $('codex-x');
+    if (xbtn) xbtn.style.display = searchQ ? 'block' : 'none';
+    renderCodexInner();
+  }
+
+  function renderCodexInner() {
+    let html = '';
+    if (searchQ.trim()) {
+      const q = searchQ.trim().toLowerCase();
+      const hit = (s) => String(s || '').toLowerCase().includes(q);
+      const res = [];
+      (state.npcs || []).forEach(n => { if (hit(n.name) || hit(n.status) || hit(n.attitude)) res.push(`<div class="clue-row"><span class="chip sm ${esc(n.attitude_tier)}">NPC · ${esc(n.attitude)}</span> <strong>${esc(n.name)}</strong><div class="muted" style="margin-top:3px">${esc(n.status)}</div></div>`); });
+      (state.party || []).forEach(p => { if (hit(p.character_name) || hit(p.role_desc)) res.push(`<div class="clue-row"><span class="chip sm accent">小队</span> <strong>${esc(p.character_name)}</strong>（${esc(p.role_desc)}）</div>`); });
+      (state.me.inventory || []).forEach(i => { if (hit(i)) res.push(`<div class="clue-row"><span class="chip sm">🎒 道具</span> ${esc(i)}</div>`); });
+      (state.clues || []).forEach(c => { if (hit(c)) res.push(`<div class="clue-row"><span class="chip sm ally">🔎 线索</span> ${esc(c)}</div>`); });
+      (state.me.whispers || []).forEach(w => { if (hit(w.content)) res.push(`<div class="whisper-card"><div class="whisper-hd"><span>🤫 第 ${w.turn_number} 轮密语</span></div><div class="whisper-txt">${esc(w.content)}</div></div>`); });
+      (state.glossary || []).forEach(g => { if (hit(g.title) || hit(g.content) || g.keywords.some(hit)) res.push(`<div class="card"><div class="goal-title" style="font-size:13px">📚 ${esc(g.title)}</div><div class="muted" style="color:var(--text);white-space:pre-line">${esc(g.content)}</div></div>`); });
+      html = `<div class="label" style="margin-bottom:8px"><span>搜索「${esc(searchQ.trim())}」</span><span>${res.length} 条结果</span></div>` +
+        (res.length ? res.join('') : `<div class="empty">已解锁资料中暂时没出现「${esc(searchQ.trim())}」喵～</div>`);
+    } else {
+      html = `<div class="subpills">
+        <button class="subpill ${codexSub==='map'?'active':''}" data-sub="map">🗺️ 地图</button>
+        <button class="subpill ${codexSub==='lore'?'active':''}" data-sub="lore">📚 常识</button>
+        <button class="subpill ${codexSub==='recap'?'active':''}" data-sub="recap">📖 前情</button>
+      </div>`;
+
+      if (codexSub === 'map') {
+        const mp = state.map;
+        if (mp && mp.nodes && mp.nodes.length) {
+          const byId = Object.fromEntries(mp.nodes.map(n => [n.id, n]));
+          const edges = (mp.edges || []).map((e) => {
+            const a = byId[e.from], b = byId[e.to];
+            if (!a || !b) return '';
+            const x1 = a.x * 3.4 + 10, y1 = a.y * 2.1 + 12, x2 = b.x * 3.4 + 10, y2 = b.y * 2.1 + 12;
+            return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${e.locked ? '#f85149' : '#64748b'}" stroke-width="1.8" ${e.locked ? 'stroke-dasharray="4 3"' : ''}/>` +
+              (e.label ? `<text x="${(x1+x2)/2}" y="${(y1+y2)/2 - 3}" text-anchor="middle" fill="#94a3b8" font-size="8.5">${esc(e.label)}</text>` : '');
+          }).join('');
+          const nodes = mp.nodes.map((n) => {
+            const x = n.x * 3.4 + 10, y = n.y * 2.1 + 12;
+            const cur = n.is_room_current;
+            const fill = cur ? 'var(--accent)' : n.visited ? '#3fb950' : '#475569';
+            return `<g>
+              ${cur ? `<circle cx="${x}" cy="${y}" r="14" fill="none" stroke="var(--accent)" stroke-width="2" class="pulse-ring"/>` : ''}
+              <circle cx="${x}" cy="${y}" r="${cur ? 9 : 7}" fill="${fill}" stroke="#0c0a09" stroke-width="2"/>
+              <text x="${x}" y="${y + 19}" text-anchor="middle" fill="${cur ? 'var(--accent)' : '#cbd5e1'}" font-size="9.5" font-weight="${cur ? 700 : 500}">${esc(n.name.slice(0, 7))}</text>
+            </g>`;
+          }).join('');
+          html += `<div class="graph-box"><svg class="graph-svg" viewBox="0 0 360 238">${edges}${nodes}</svg></div>
+            <div class="muted" style="text-align:center">🟡 当前位置　🟢 已探索　⬜ 未前往　🔴虚线=未解锁通道</div>`;
+        } else {
+          html += `<div class="empty">当前剧本暂未绘制节点地图。</div>`;
+        }
+      } else if (codexSub === 'lore') {
+        const gl = state.glossary || [];
+        html += gl.length
+          ? gl.map(g => `<div class="card">
+              <div class="goal-title" style="font-size:13.5px">${esc(g.title)}</div>
+              <div style="font-size:12.5px;white-space:pre-line">${esc(g.content)}</div>
+              ${g.keywords.length ? `<div class="chips" style="margin-top:8px">${g.keywords.map(k => `<span class="chip sm">${esc(k)}</span>`).join('')}</div>` : ''}
+            </div>`).join('')
+          : `<div class="empty">当前剧本暂无公开常识词条。</div>`;
+        if (state.bulletins && state.bulletins.length) {
+          html += `<div class="label" style="margin:12px 2px 8px"><span>📰 已浮现势力号外</span><span>${state.bulletins.length} 条</span></div>` +
+            state.bulletins.slice().reverse().map(b => `<div class="card"><div class="goal-title" style="font-size:13px">【${esc(b.faction || '暗流')}】${esc(b.headline)}</div><div class="muted" style="color:var(--text)">${esc(b.body)}</div></div>`).join('');
+        }
+      } else {
+        const turns = state.recent_turns || [];
+        html += turns.length
+          ? turns.map(t => `<div class="card">
+              <div class="goal-title" style="font-size:13px">第 ${t.turn_number} 轮 · ${esc(t.scene_title)}</div>
+              <div class="muted" style="margin-bottom:5px">📍 ${esc(t.location)} ｜ 🕒 ${esc(t.world_time)}</div>
+              <div style="font-size:12.5px">${esc(t.narrative_excerpt)}</div>
+            </div>`).join('')
+          : `<div class="empty">推进第 1 回合后会在这里自动留存防忘词提要喵！</div>`;
+      }
     }
 
-    const turns = state.recent_turns || [];
-    const turnsHtml = `<div class="sec"><div class="sec-title"><span>📖 最近剧情速览</span><span class="muted">防忘词回看</span></div>` +
-      (turns.length
-        ? turns.map(t => `<div class="turn-card">
-            <div class="turn-head">第 ${t.turn_number} 轮 · ${esc(t.scene_title)}</div>
-            <div class="turn-meta">📍 ${esc(t.location)} ｜ 🕒 ${esc(t.world_time)}</div>
-            <div style="font-size:12px">${esc(t.narrative_excerpt)}</div>
-          </div>`).join('')
-        : `<div class="empty">冒险刚刚拉开序幕，推进第 1 轮后会在这里留存速览喵！</div>`) + `</div>`;
-
-    $('hud-content').innerHTML = mapHtml + turnsHtml;
+    const inner = $('codex-inner');
+    if (!inner) return;
+    inner.innerHTML = html;
+    inner.querySelectorAll('[data-sub]').forEach(b => b.addEventListener('click', () => {
+      codexSub = b.getAttribute('data-sub');
+      renderCodexInner();
+    }));
   }
 
-  function renderSearch(q) {
-    const low = q.toLowerCase();
-    const hit = (s) => String(s || '').toLowerCase().includes(low);
-    const hits = [];
-    (state.npcs || []).forEach(n => {
-      if (hit(n.name) || hit(n.attitude) || hit(n.status)) {
-        hits.push(`<div class="clue-item"><span class="chip ${esc(n.attitude_tier)}">NPC · ${esc(n.attitude)}</span> <strong>${esc(n.name)}</strong><div class="muted" style="margin-top:3px">${esc(n.status)}</div></div>`);
-      }
-    });
-    (state.party || []).forEach(p => {
-      if (hit(p.character_name) || hit(p.role_desc) || hit(p.status_note)) {
-        hits.push(`<div class="clue-item"><span class="chip accent">小队</span> <strong>${esc(p.character_name)}</strong>（${esc(p.role_desc)} · 📍${esc(p.location)}）</div>`);
-      }
-    });
-    (state.me.inventory || []).forEach(item => {
-      if (hit(item)) hits.push(`<div class="clue-item"><span class="chip">🎒 道具</span> ${esc(item)}</div>`);
-    });
-    (state.clues || []).forEach(c => {
-      if (hit(c)) hits.push(`<div class="clue-item"><span class="chip ally">🔎 线索</span> ${esc(c)}</div>`);
-    });
-    (state.me.whispers || []).forEach(w => {
-      if (hit(w.content)) hits.push(`<div class="whisper-box"><div class="whisper-turn">🤫 第 ${w.turn_number} 轮密语</div>${esc(w.content)}</div>`);
-    });
-    (state.glossary || []).forEach(g => {
-      if (hit(g.title) || hit(g.content) || g.keywords.some(hit)) {
-        hits.push(`<div class="glossary-card"><div class="glossary-title">📚 常识 · ${esc(g.title)}</div><div class="glossary-body">${esc(g.content)}</div></div>`);
-      }
-    });
-    $('hud-content').innerHTML = `<div class="sec"><div class="sec-title"><span>🔍 搜索「${esc(q)}」结果</span><span class="muted">共 ${hits.length} 条</span></div>` +
-      (hits.length ? hits.join('') : `<div class="empty">当前已解锁档案里还没出现「${esc(q)}」哦～</div>`) + `</div>`;
-  }
-
-  function wireControls() {
-    document.querySelectorAll('#hud-tabs .tab-btn').forEach((btn) => {
+  function wire() {
+    document.querySelectorAll('#bottom-nav .nav-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        activeTab = btn.getAttribute('data-tab');
-        if (activeTab === 'me') unreadWhispers = 0;
-        const container = $('hud-tabs');
-        if (container) container.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === activeTab));
-        searchQuery = '';
-        const inp = $('hud-search'); if (inp) inp.value = '';
-        const clr = $('search-clear'); if (clr) clr.style.display = 'none';
-        renderAll();
+        page = btn.getAttribute('data-page');
+        if (page === 'whispers') unreadWhispers = 0;
+        const body = $('page-body');
+        if (body) body.scrollTop = 0;
+        render();
       });
-    });
-    const inp = $('hud-search'), clr = $('search-clear');
-    inp.addEventListener('input', () => {
-      searchQuery = inp.value;
-      clr.style.display = searchQuery ? 'block' : 'none';
-      renderAll();
-    });
-    clr.addEventListener('click', () => {
-      searchQuery = ''; inp.value = ''; clr.style.display = 'none';
-      renderAll();
     });
 
     const btnPip = $('btn-pip');
     btnPip.addEventListener('click', async () => {
-      if (pipWindow && !pipWindow.closed) {
-        pipWindow.close();
-        return;
-      }
+      if (pipWin && !pipWin.closed) { pipWin.close(); return; }
       if ('documentPictureInPicture' in window) {
         try {
-          pipWindow = await window.documentPictureInPicture.requestWindow({ width: 395, height: 690 });
-          pipWindow.document.documentElement.setAttribute('data-theme', (state && state.theme) || 'ember');
-          pipWindow.document.head.appendChild(document.getElementById('hud-styles').cloneNode(true));
-          pipWindow.document.body.appendChild(document.getElementById('hud-root'));
-          document.getElementById('pip-placeholder').classList.add('show');
-          btnPip.classList.add('pip-active');
-          btnPip.textContent = '📌 已置顶';
-          pipWindow.addEventListener('pagehide', () => {
-            document.body.appendChild(pipWindow.document.getElementById('hud-root'));
-            document.getElementById('pip-placeholder').classList.remove('show');
-            btnPip.classList.remove('pip-active');
+          pipWin = await window.documentPictureInPicture.requestWindow({ width: 390, height: 660 });
+          pipWin.document.documentElement.setAttribute('data-theme', (state && state.theme) || 'ember');
+          pipWin.document.head.appendChild(document.getElementById('hud-styles').cloneNode(true));
+          pipWin.document.body.appendChild(document.getElementById('hud-root'));
+          document.getElementById('pip-hold').classList.add('show');
+          btnPip.classList.add('pip-on');
+          btnPip.textContent = '📌 置顶中';
+          pipWin.addEventListener('pagehide', () => {
+            document.body.appendChild(pipWin.document.getElementById('hud-root'));
+            document.getElementById('pip-hold').classList.remove('show');
+            btnPip.classList.remove('pip-on');
             btnPip.textContent = '📌 浮窗';
-            pipWindow = null;
+            pipWin = null;
           });
           return;
         } catch (_) {}
       }
-      const pop = window.open(location.href, 'kook_tavern_hud', 'width=400,height=700,resizable=yes,scrollbars=yes');
-      if (pop) showToast('🪟 已弹出独立窄窗！配好 HTTPS 域名后点此可直接开启 Chrome 真·置顶画中画浮窗喵～', 6000);
-      else showToast('⚠️ 浏览器拦截了弹窗，请允许本页弹窗或手动拖出标签页贴在 KOOK 旁喵！', 5000);
+      const pop = window.open(location.href, 'kook_tavern_hud', 'width=395,height=680,resizable=yes,scrollbars=yes');
+      if (!pop) toast('⚠️ 浏览器拦截了弹窗，请允许本页弹窗或直接把标签页拖窄放 KOOK 旁边喵！', 5000);
     });
-    document.getElementById('btn-return-pip').addEventListener('click', () => {
-      if (pipWindow && !pipWindow.closed) pipWindow.close();
+    document.getElementById('btn-pip-back').addEventListener('click', () => {
+      if (pipWin && !pipWin.closed) pipWin.close();
     });
   }
 
@@ -701,14 +753,14 @@
     const es = new EventSource(sseUrl);
     es.addEventListener('update', () => fetchHud());
     es.addEventListener('reset', () => {
-      setLive('err', '已结团');
-      showToast('🏁 本局已结团清桌，旧浮窗已失效，开新局后点角色卡获取新链接喵！', 10000);
+      setDot('err');
+      toast('🏁 本局已结团清桌，旧浮窗已失效喵！', 10000);
       es.close();
     });
-    es.onerror = () => setLive('warn', '重连中');
+    es.onerror = () => setDot('warn');
   }
 
-  wireControls();
+  wire();
   fetchHud();
   startSse();
 })();
