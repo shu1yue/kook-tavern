@@ -8,11 +8,12 @@ use serde::{Deserialize, Serialize};
 use tavern_core::{AppConfig, BoxFuture, LlmProvider};
 use tavern_domain::{
     DmTurnOutput, LlmUsage, PendingAction, Player, RoomState, Scenario, SummaryOutput, TurnRecord,
+    WorldEcho, detect_consistency_nudge, merge_patch_delta, should_trigger_bulletin,
 };
 use tokio::time::sleep;
-use tracing::warn;
+use tracing::{info, warn};
 
-use crate::parser::parse_dm_reply;
+use crate::parser::{parse_dm_reply_checked, parse_patch_delta};
 use crate::prompts::{ChatMessage, build_dm_messages, build_summary_messages};
 
 const MAX_TRANSIENT_RETRIES: usize = 2;
@@ -119,7 +120,7 @@ impl OpenAiLlmProvider {
     }
 
     pub async fn complete_json(&self, messages: Vec<ChatMessage>) -> Result<String> {
-        let (text, _) = self.chat_completion(&self.model, messages, true).await?;
+        let (text, _) = self.chat_completion(&self.model, messages, true, None).await?;
         Ok(text)
     }
 
@@ -128,17 +129,16 @@ impl OpenAiLlmProvider {
         model: &str,
         messages: Vec<ChatMessage>,
         prefer_json: bool,
+        max_tokens_override: Option<u32>,
     ) -> Result<(String, LlmUsage)> {
         let url = format!("{}/chat/completions", self.base_url);
         let mut req_body = ChatCompletionRequest {
             model: model.to_string(),
             messages,
             temperature: self.temperature,
-            max_tokens: self.max_tokens,
+            max_tokens: max_tokens_override.unwrap_or(self.max_tokens),
             response_format: if prefer_json {
-                Some(ResponseFormat {
-                    kind: "json_object".to_string(),
-                })
+                Some(ResponseFormat { kind: "json_object".to_string() })
             } else {
                 None
             },
@@ -235,27 +235,11 @@ fn extract_choice(resp: ChatCompletionResponse) -> Result<(String, LlmUsage)> {
         .map(|u| {
             let prompt_tokens = u.prompt_tokens.unwrap_or(0);
             let completion_tokens = u.completion_tokens.unwrap_or(0);
-            let hit_direct = u.prompt_cache_hit_tokens.unwrap_or(0);
-            let hit = if hit_direct > 0 {
-                hit_direct
-            } else {
-                u.prompt_tokens_details
-                    .as_ref()
-                    .and_then(|d| d.cached_tokens)
-                    .unwrap_or(0)
-            };
-            let miss_direct = u.prompt_cache_miss_tokens.unwrap_or(0);
-            let miss = if miss_direct > 0 {
-                miss_direct
-            } else {
-                prompt_tokens.saturating_sub(hit)
-            };
-            LlmUsage {
-                prompt_tokens,
-                completion_tokens,
-                cache_hit_tokens: hit,
-                cache_miss_tokens: miss,
-            }
+            let hit = u.prompt_cache_hit_tokens.unwrap_or(0).max(
+                u.prompt_tokens_details.as_ref().and_then(|d| d.cached_tokens).unwrap_or(0),
+            );
+            let miss = u.prompt_cache_miss_tokens.unwrap_or_else(|| prompt_tokens.saturating_sub(hit));
+            LlmUsage { prompt_tokens, completion_tokens, cache_hit_tokens: hit, cache_miss_tokens: miss }
         })
         .unwrap_or_default();
 
@@ -275,11 +259,37 @@ impl LlmProvider for OpenAiLlmProvider {
     fn generate_turn<'a>(
         &'a self, scenario: &'a Scenario, room: &'a RoomState, players: &'a [Player],
         recent_turns: &'a [TurnRecord], actions: &'a [PendingAction],
+        world_echoes: &'a [WorldEcho], allow_nudge: bool,
     ) -> BoxFuture<'a, Result<DmTurnOutput>> {
         Box::pin(async move {
-            let messages = build_dm_messages(&self.prompts_dir, scenario, room, players, recent_turns, actions);
-            let (raw, usage) = self.chat_completion(&self.model, messages, true).await?;
-            Ok(DmTurnOutput { reply: parse_dm_reply(&raw, room), usage })
+            let mut messages = build_dm_messages(
+                &self.prompts_dir, scenario, room, players, recent_turns, actions, world_echoes,
+            );
+            let (raw, usage) = self.chat_completion(&self.model, messages.clone(), true, None).await?;
+            let (mut reply, was_json) = parse_dm_reply_checked(&raw, room);
+            let mut extra_usages = Vec::new();
+
+            // One-shot `civ-atlas`-style consistency nudge: strictly budgeted (`allow_nudge`),
+            // scoped to omitted fields only, and recorded as its own HTTP call for daily limits.
+            let bulletin_due = should_trigger_bulletin(scenario, room, room.turn_number + 1);
+            if allow_nudge
+                && was_json
+                && let Some(plan) = detect_consistency_nudge(scenario, room, players, &reply, bulletin_due)
+            {
+                messages.push(ChatMessage { role: "assistant".into(), content: raw });
+                messages.push(ChatMessage { role: "user".into(), content: plan.prompt.clone() });
+                match self.chat_completion(&self.model, messages, true, Some(400)).await {
+                    Ok((fix_raw, fix_usage)) => {
+                        extra_usages.push(fix_usage);
+                        if let Some(delta) = parse_patch_delta(&fix_raw) {
+                            info!(channel_id = %room.channel_id, "一次性状态一致性补齐生效");
+                            merge_patch_delta(&mut reply, &plan, delta);
+                        }
+                    }
+                    Err(err) => warn!(channel_id = %room.channel_id, error = %err, "状态补齐校验失败，沿用原裁决"),
+                }
+            }
+            Ok(DmTurnOutput { reply, usage, extra_usages })
         })
     }
 
@@ -291,7 +301,7 @@ impl LlmProvider for OpenAiLlmProvider {
                 return Ok(SummaryOutput { summary: existing_summary.to_string(), usage: LlmUsage::default() });
             }
             let messages = build_summary_messages(&self.prompts_dir, scenario, existing_summary, turns);
-            let (summary, usage) = self.chat_completion(&self.summary_model, messages, false).await?;
+            let (summary, usage) = self.chat_completion(&self.summary_model, messages, false, None).await?;
             Ok(SummaryOutput { summary: summary.trim().to_string(), usage })
         })
     }

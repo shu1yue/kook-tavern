@@ -9,10 +9,13 @@ use tavern_core::{GmUpdateOutcome, JoinPlayerOutcome, ResolvingLease, RoomStore}
 use tavern_domain::{
     CharacterStats, ChatMode, DailyUsage, DirectMessageOut, EndingUnlock, LlmUsage, NarrativeStyle,
     PendingAction, Player, PresetRole, RoomSnapshot, RoomState, StarterCharacterDefaults,
-    TurnRecord, UsageSummary, WhisperRecord,
+    TurnRecord, UsageSummary, WhisperRecord, WorldEcho,
 };
 
-use crate::endings::{list_ending_unlocks_query, record_ending_unlock_query};
+use crate::endings::{
+    list_ending_unlocks_query, list_world_echoes_query, record_ending_unlock_query,
+    record_world_echo_query,
+};
 use crate::m1_ops::{
     get_room_usage_query, get_today_usage_query, gm_add_clue_tx, gm_mutate_player_tx,
     gm_remove_clue_tx, list_player_whispers_query, record_usage_query, remove_player_tx,
@@ -316,5 +319,21 @@ impl RoomStore for SqliteRoomStore {
 
     fn list_ending_unlocks(&self, guild_id: &str) -> Result<Vec<EndingUnlock>> {
         self.with_conn(|conn| list_ending_unlocks_query(conn, guild_id))
+    }
+
+    fn record_world_echo(&self, echo: &WorldEcho) -> Result<()> {
+        self.with_conn(|conn| record_world_echo_query(conn, echo))
+    }
+
+    fn list_world_echoes(
+        &self,
+        scope_key: &str,
+        scenario_id: &str,
+        before_rfc3339: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<WorldEcho>> {
+        self.with_conn(|conn| {
+            list_world_echoes_query(conn, scope_key, scenario_id, before_rfc3339, limit)
+        })
     }
 }

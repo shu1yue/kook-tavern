@@ -1,8 +1,12 @@
 use anyhow::Result;
 use serde::Serialize;
-use tavern_domain::{CharacterStats, NpcState, RoomState, TurnPhase, ending_scope_key};
+use tavern_domain::{
+    CharacterStats, ChronicleEntry, NpcState, RoomState, TurnPhase, WorldBulletin,
+    build_chronicle, ending_scope_key,
+};
 
 use crate::WebState;
+use crate::map_view::{ScenarioMapView, build_scenario_map_view};
 
 /// Strictly sanitized public read-only room view (NEVER exposes `web_token`, `gm_user_id`,
 /// `guild_id`, `user_id`, or private `whispers`!).
@@ -24,6 +28,10 @@ pub struct RoomPublicView {
     pub ended_id: Option<String>,
     pub ended_title: Option<String>,
     pub ending_gallery: Vec<EndingGalleryItem>,
+    pub world_echoes: Vec<EchoPublicView>,
+    pub bulletins: Vec<WorldBulletin>,
+    pub chronicle: Vec<ChronicleEntry>,
+    pub map: ScenarioMapView,
     pub summary: String,
     pub summary_upto_turn: u32,
     pub opening_scene: String,
@@ -31,6 +39,14 @@ pub struct RoomPublicView {
     pub npc_states: Vec<NpcState>,
     pub players: Vec<PlayerPublicView>,
     pub turns: Vec<TurnPublicView>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EchoPublicView {
+    pub ending_title: String,
+    pub ending_kind: String,
+    pub echo_text: String,
+    pub turn_count: u32,
 }
 
 #[derive(Debug, Serialize)]
@@ -60,6 +76,7 @@ pub struct PlayerPublicView {
     pub max_san: i32,
     pub inventory: Vec<String>,
     pub status_note: String,
+    pub location: String,
     pub is_afk: bool,
     pub action_ready: bool,
     pub roll_notes: Vec<String>,
@@ -170,12 +187,40 @@ pub fn build_room_public_view(state: &WebState, channel_id: &str, room: RoomStat
         })
         .unwrap_or_default();
 
+    let map = build_scenario_map_view(
+        scenario.as_ref(),
+        &room,
+        &players,
+        &pending,
+        &turns,
+        &room.npc_states,
+    );
+    let chronicle = build_chronicle(&turns, &room.bulletins, room.ended_title.as_deref());
+    let before_ts = room.created_at.to_rfc3339();
+    let world_echoes: Vec<EchoPublicView> = state
+        .store
+        .list_world_echoes(&scope_key, &room.scenario_id, Some(&before_ts), 3)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|e| EchoPublicView {
+            ending_title: e.ending_title,
+            ending_kind: e.ending_kind,
+            echo_text: e.echo_text,
+            turn_count: e.turn_count,
+        })
+        .collect();
+
     let player_views = players
         .into_iter()
         .map(|p| {
             let p_act = pending.iter().find(|a| a.user_id == p.user_id);
             let action_ready = p_act.is_some_and(|a| !a.action_text.trim().is_empty());
             let roll_notes = p_act.map(|a| a.roll_notes.clone()).unwrap_or_default();
+            let loc = if p.location.trim().is_empty() {
+                room.location.clone()
+            } else {
+                p.location
+            };
             PlayerPublicView {
                 character_name: p.character_name,
                 role_desc: p.role_desc,
@@ -187,6 +232,7 @@ pub fn build_room_public_view(state: &WebState, channel_id: &str, room: RoomStat
                 max_san: p.max_san,
                 inventory: p.inventory,
                 status_note: p.status_note,
+                location: loc,
                 is_afk: p.is_afk,
                 action_ready,
                 roll_notes,
@@ -224,6 +270,10 @@ pub fn build_room_public_view(state: &WebState, channel_id: &str, room: RoomStat
         ended_id: room.ended_id,
         ended_title: room.ended_title,
         ending_gallery,
+        world_echoes,
+        bulletins: room.bulletins,
+        chronicle,
+        map,
         summary: room.summary,
         summary_upto_turn: room.summary_upto_turn,
         opening_scene,

@@ -71,6 +71,7 @@ pub fn ensure_player_tx(
         status_note: "正常".to_string(),
         is_afk: false,
         stats: Default::default(),
+        location: room.location.clone(),
     };
     write_player(&tx, &p)?;
     tx.commit()?;
@@ -131,6 +132,7 @@ pub fn pick_role_tx(
         status_note: "精神饱满".to_string(),
         is_afk: false,
         stats: preset.stats,
+        location: room.location.clone(),
     };
     write_player(&tx, &p)?;
     tx.commit()?;
@@ -203,6 +205,7 @@ pub fn join_player_tx(
         status_note: "精神饱满".to_string(),
         is_afk: false,
         stats: Default::default(),
+        location: room.location.clone(),
     };
     write_player(&tx, &p)?;
     tx.commit()?;

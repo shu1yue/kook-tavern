@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{PendingAction, Player, PresetRole, RoomState};
 use crate::stats::SuggestedCheck;
+use crate::world::WorldBulletin;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StatePatch {
@@ -16,6 +17,8 @@ pub struct StatePatch {
     pub remove_items: Vec<String>,
     #[serde(default)]
     pub status_note: Option<String>,
+    #[serde(default)]
+    pub location: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +34,18 @@ pub struct NpcUpdate {
     pub attitude: Option<String>,
     #[serde(default)]
     pub status: Option<String>,
+    #[serde(default)]
+    pub location: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorldBulletinDraft {
+    #[serde(default)]
+    pub headline: String,
+    #[serde(default)]
+    pub body: String,
+    #[serde(default)]
+    pub faction: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +75,10 @@ pub struct DmStructuredReply {
     pub advance_act: bool,
     #[serde(default)]
     pub trigger_ending_id: Option<String>,
+    #[serde(default)]
+    pub world_bulletin: Option<WorldBulletinDraft>,
+    #[serde(default)]
+    pub reincarnation_echo: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -74,6 +93,7 @@ pub struct LlmUsage {
 pub struct DmTurnOutput {
     pub reply: DmStructuredReply,
     pub usage: LlmUsage,
+    pub extra_usages: Vec<LlmUsage>,
 }
 
 #[derive(Debug, Clone)]
@@ -173,6 +193,7 @@ pub enum EngineResponse {
         whisper_hints: Vec<String>,
         suggested_actions: Vec<String>,
         suggested_check: Option<SuggestedCheck>,
+        world_bulletin: Option<WorldBulletin>,
         ending_reached: Option<EndingBanner>,
         direct_messages: Vec<DirectMessageOut>,
     },

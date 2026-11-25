@@ -165,6 +165,7 @@ pub fn commit_turn_cas_tx(
     let npc_json = serde_json::to_string(&updated_room.npc_states)?;
     let suggested_json = serde_json::to_string(&updated_room.suggested_actions)?;
     let flags_json = serde_json::to_string(&updated_room.world_flags)?;
+    let bulletins_json = serde_json::to_string(&updated_room.bulletins)?;
     let ended_id = updated_room.ended_id.as_deref().unwrap_or("");
     let ended_title = updated_room.ended_title.as_deref().unwrap_or("");
     let affected = tx.execute(
@@ -173,15 +174,15 @@ pub fn commit_turn_cas_tx(
             location = ?3, world_time = ?4, turn_number = ?5, state_version = ?6,
             turn_phase = 'collecting', clues_json = ?7, npc_states_json = ?8,
             suggested_actions_json = ?9, current_act = ?10, world_flags_json = ?11,
-            ended_id = ?12, ended_title = ?13,
-            summary = ?14, summary_upto_turn = ?15, updated_at = ?16
+            ended_id = ?12, ended_title = ?13, bulletins_json = ?14,
+            summary = ?15, summary_upto_turn = ?16, updated_at = ?17
         WHERE channel_id = ?1 AND state_version = ?2 AND turn_phase = 'resolving'
         "#,
         params![
             updated_room.channel_id, expected_version as i64, updated_room.location,
             updated_room.world_time, updated_room.turn_number, updated_room.state_version as i64,
             clues_json, npc_json, suggested_json, updated_room.current_act.max(1), flags_json,
-            ended_id, ended_title, updated_room.summary,
+            ended_id, ended_title, bulletins_json, updated_room.summary,
             updated_room.summary_upto_turn, updated_room.updated_at.to_rfc3339(),
         ],
     )?;
@@ -198,6 +199,17 @@ pub fn commit_turn_cas_tx(
         "DELETE FROM snapshots WHERE channel_id = ?1 AND id NOT IN (SELECT id FROM snapshots WHERE channel_id = ?1 ORDER BY id DESC LIMIT 15)",
         params![snapshot.room.channel_id],
     )?;
+
+    // Ensure players who joined mid-resolving follow the party if the room moved this turn
+    if updated_room.location != snapshot.room.location {
+        tx.execute(
+            r#"
+            UPDATE players SET location = ?3
+            WHERE channel_id = ?1 AND is_afk = 0 AND (location = '' OR location = ?2)
+            "#,
+            params![updated_room.channel_id, snapshot.room.location, updated_room.location],
+        )?;
+    }
 
     for p in updated_players {
         update_player_dm_state(&tx, p)?;
@@ -266,6 +278,7 @@ pub fn pop_and_restore_snapshot_tx(
     let npc_json = serde_json::to_string(&snapshot.room.npc_states)?;
     let suggested_json = serde_json::to_string(&snapshot.room.suggested_actions)?;
     let flags_json = serde_json::to_string(&snapshot.room.world_flags)?;
+    let bulletins_json = serde_json::to_string(&snapshot.room.bulletins)?;
     let ended_id = snapshot.room.ended_id.as_deref().unwrap_or("");
     let ended_title = snapshot.room.ended_title.as_deref().unwrap_or("");
     tx.execute(
@@ -276,7 +289,8 @@ pub fn pop_and_restore_snapshot_tx(
             chat_mode = ?8, narrative_style = ?9, clues_json = ?10,
             npc_states_json = ?11, suggested_actions_json = ?12,
             current_act = ?13, world_flags_json = ?14, ended_id = ?15, ended_title = ?16,
-            summary = ?17, summary_upto_turn = ?18, active = ?19, updated_at = ?20
+            bulletins_json = ?17, summary = ?18, summary_upto_turn = ?19,
+            active = ?20, updated_at = ?21
         WHERE channel_id = ?1
         "#,
         params![
@@ -285,7 +299,7 @@ pub fn pop_and_restore_snapshot_tx(
             current_version + 1, snapshot.room.chat_mode.as_str(),
             snapshot.room.narrative_style.as_str(), clues_json, npc_json, suggested_json,
             snapshot.room.current_act.max(1), flags_json, ended_id, ended_title,
-            snapshot.room.summary, snapshot.room.summary_upto_turn,
+            bulletins_json, snapshot.room.summary, snapshot.room.summary_upto_turn,
             if snapshot.room.active { 1 } else { 0 }, Utc::now().to_rfc3339(),
         ],
     )?;
@@ -314,6 +328,10 @@ pub fn pop_and_restore_snapshot_tx(
     tx.execute(
         "DELETE FROM whispers WHERE channel_id = ?1 AND turn_number > ?2",
         params![channel_id, snapshot.room.turn_number],
+    )?;
+    tx.execute(
+        "DELETE FROM world_echoes WHERE source_channel_id = ?1 AND source_turn > ?2 AND created_at >= ?3",
+        params![channel_id, snapshot.room.turn_number, snapshot.room.created_at.to_rfc3339()],
     )?;
     tx.execute("DELETE FROM snapshots WHERE id = ?1", params![snap_id])?;
 

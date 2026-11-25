@@ -69,12 +69,20 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
             name: "老雷恩".into(),
             attitude: "信任".into(),
             status: "递出酒窖钥匙".into(),
+            location: "余烬酒馆大厅".into(),
         }],
         suggested_actions: vec![],
         current_act: 2,
         world_flags: vec!["取得老雷恩信任".into()],
         ended_id: None,
         ended_title: None,
+        bulletins: vec![tavern_domain::WorldBulletin {
+            turn_number: 1,
+            masthead: "《余烬流言板》".into(),
+            headline: "灰帽修女封锁东栈桥".into(),
+            body: "码头守夜人目击教会暗哨在浓雾中集结。".into(),
+            faction: "圣光教会".into(),
+        }],
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,
@@ -103,6 +111,7 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
                 social: -1,
                 insight: 0,
             },
+            location: "地下酿酒窖".into(),
         })
         .unwrap();
 
@@ -134,7 +143,10 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
         .await
         .unwrap();
     assert_eq!(page.status(), StatusCode::OK);
-    assert!(page.text().await.unwrap().contains("实况只读看板"));
+    let page_html = page.text().await.unwrap();
+    assert!(page_html.contains("实况沙盘看板"));
+    assert!(page_html.contains("导出故事长图"));
+    assert!(page_html.contains("map-svg"));
 
     let api = http
         .get(format!("{base}/api/room/chan_web_1?token=tok_secret_abc123"))
@@ -151,6 +163,12 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
     assert!(body.contains("\"current_act\":2"));
     assert!(body.contains("取得老雷恩信任"));
     assert!(body.contains("\"investigate\":2"));
+    assert!(body.contains("\"node_id\":\"wine_cellar\""));
+    assert!(body.contains("灰帽修女封锁东栈桥"));
+    assert!(body.contains("\"tag\":\"号外\""));
+    // Unvisited secret map node (`clocktower_core`) MUST be masked to prevent spoilers!
+    assert!(!body.contains("钟楼三层星仪机房"));
+    assert!(!body.contains("03-17总钥"));
     // Un-unlocked endings & future acts MUST stay masked and never spoil!
     assert!(body.contains("？？？"));
     assert!(!body.contains("晨雾散尽"));

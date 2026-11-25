@@ -167,3 +167,80 @@ worldbook:
       1.【碎镜重圆（真结局）】：在午夜前压制替身并用银器碎镜/呼唤全名，真爵士跌出镜界获救，暴雨渐歇，重金酬谢众人。
       2.【雨夜孤逃（惊险结局）】：未能救出真爵士但及时识破危险撤离庄园，次日听闻“范恩爵士”性情大变、将全庄园镜子全部摘除。
       3.【镜中永夜（克系坏结局）】：理智归零或在十二点后被替身诱入镜前，众人被困入冰冷寂静的镜像庄园。
+
+map_nodes:
+  - id: parlor
+    name: "一楼会客厅"
+    x: 20
+    y: 54
+    aliases: ["会客厅", "一楼", "客厅", "壁炉", "长桌"]
+    kind: "hub"
+  - id: kitchen
+    name: "餐厅与厨房"
+    x: 18
+    y: 22
+    aliases: ["厨房", "餐厅", "佣人房"]
+    kind: "mystery"
+  - id: greenhouse
+    name: "地下玻璃温室"
+    x: 44
+    y: 82
+    aliases: ["温室", "地下", "花园", "夜光兰"]
+    kind: "secret"
+  - id: gallery
+    name: "二楼长画廊"
+    x: 52
+    y: 46
+    aliases: ["二楼", "画廊", "走廊", "客房", "落地窗"]
+    kind: "danger"
+  - id: attic
+    name: "三楼阁楼"
+    x: 78
+    y: 76
+    aliases: ["阁楼", "杂物间", "梯子"]
+    kind: "mystery"
+  - id: study
+    name: "三楼反锁书房"
+    x: 82
+    y: 24
+    aliases: ["书房", "三楼", "禁区", "镜前"]
+    kind: "danger"
+
+map_edges:
+  - { from: parlor, to: kitchen, label: "侧廊", locked: false }
+  - { from: parlor, to: greenhouse, label: "温室钥牌", locked: true }
+  - { from: parlor, to: gallery, label: "橡木主梯", locked: false }
+  - { from: gallery, to: attic, label: "暗梯", locked: false }
+  - { from: gallery, to: study, label: "备用铜钥", locked: true }
+  - { from: attic, to: study, label: "通风夹墙", locked: false }
+
+rules:
+  tension_pace: "steady"
+  lethality: "balanced"
+  clue_generosity: "balanced"
+  dm_weight_note: "注重哥特感官细节与左右手镜像破绽，SAN 压迫保持克制但步步紧逼。"
+  bulletin_name: "《黑杉庄园 · 值班残页与门缝密信》"
+  bulletin_interval: 3
+  factions:
+    - name: "三楼镜像替身（假爵士）"
+      goal: "拖延至午夜十二点完成身份置换，同时诱导宾客在镜前喊出真名"
+      escalation: "从门缝塞出伪造遗嘱便条、熄灭走廊银烛、模仿爵士口吻支开管家"
+    - name: "黑曜镜界倒影"
+      goal: "借雨夜雷电将所有直视玻璃与镜面者拖入镜界"
+      escalation: "令二楼画廊落地窗倒影出现一秒延迟并主动微笑挥手"
+    - name: "老管家与女仆阵营"
+      goal: "保护真爵士并守住庄园秘密，但因恐惧举棋不定"
+      escalation: "偷偷收集银器、在关键时刻暗中传递真爵士惯用左手的证据"
+  must_hit_beats:
+    - act: 1
+      by_turn: 4
+      flag: "发现左手签名破绽"
+      prompt_hint: "引导玩家通过遗嘱副本、肖像画或管家证词注意到真假爵士左右手习惯的致命破绽。"
+    - act: 2
+      by_turn: 7
+      flag: "画廊倒影异象"
+      prompt_hint: "一道苍白闪电劈亮窗外，玻璃或镜面中的倒影比真人慢了一拍并做出诡异举动。"
+    - act: 3
+      by_turn: 10
+      flag: "午夜钟声临近"
+      prompt_hint: "庄园老座钟指向 23:45，书房门缝渗出刺骨寒气，镜中真爵士的拍打声越发急促。"

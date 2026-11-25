@@ -3,15 +3,15 @@ use std::sync::Arc;
 use anyhow::Result;
 use chrono::Utc;
 use tavern_domain::{
-    CardTheme, EndingBanner, EndingUnlock, EngineResponse, PendingAction, RoomEvent, RoomSnapshot,
-    TurnPhase, TurnRecord, apply_dm_reply, apply_story_progression, ending_scope_key,
-    format_batched_actions,
+    CardTheme, EngineResponse, PendingAction, RoomEvent, RoomSnapshot, TurnPhase, TurnRecord,
+    apply_dm_reply, apply_story_progression, ending_scope_key, format_batched_actions,
 };
 use tracing::{info, warn};
 
 use crate::commands::check::{ended_room_notice, format_act_badge};
 use crate::commands::turn_support::{
-    InFlightLlmGuard, check_daily_budget, check_daily_budget_for_slot, schedule_background_summary,
+    InFlightLlmGuard, check_daily_budget, check_daily_budget_for_slot, record_ending_and_echo,
+    schedule_background_summary,
 };
 use crate::engine::GameEngine;
 use crate::ports::{EventBus, RoomStore};
@@ -162,17 +162,25 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         return Ok(limit_notice);
     }
 
+    let scope_key = ending_scope_key(Some(&lease.room.guild_id), &lease.room.channel_id);
+    let before_ts = lease.room.created_at.to_rfc3339();
+    let world_echoes = engine.store.list_world_echoes(&scope_key, &scenario.id, Some(&before_ts), 3).unwrap_or_default();
+    let allow_nudge = check_daily_budget_for_slot(engine, slot.prior_in_flight() + 1).ok().flatten().is_none();
+
     let turn_output = engine
         .llm
-        .generate_turn(&scenario, &lease.room, &lease.players, &recent_turns, &actions)
+        .generate_turn(&scenario, &lease.room, &lease.players, &recent_turns, &actions, &world_echoes, allow_nudge)
         .await?;
 
     let est_cny = engine.cfg.estimate_usage_cny(&turn_output.usage);
-    if let Err(err) = engine
-        .store
-        .record_usage(channel_id, &turn_output.usage, est_cny)
-    {
+    if let Err(err) = engine.store.record_usage(channel_id, &turn_output.usage, est_cny) {
         warn!(channel_id, error = %err, "记录 LLM 消费日志失败");
+    }
+    for extra in &turn_output.extra_usages {
+        let extra_cny = engine.cfg.estimate_usage_cny(extra);
+        if let Err(err) = engine.store.record_usage(channel_id, extra, extra_cny) {
+            warn!(channel_id, error = %err, "记录补齐校验 LLM 消费日志失败");
+        }
     }
 
     info!(
@@ -265,32 +273,15 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         });
     }
 
-    let ending_reached = if let Some(ref end) = triggered_ending {
-        let party_names = updated_players
-            .iter()
-            .map(|p| p.character_name.as_str())
-            .collect::<Vec<_>>()
-            .join("、");
-        let unlock = EndingUnlock {
-            guild_id: ending_scope_key(Some(&updated_room.guild_id), &updated_room.channel_id),
-            scenario_id: updated_room.scenario_id.clone(),
-            ending_id: end.id.clone(),
-            ending_title: end.title.clone(),
-            ending_kind: end.kind.clone(),
-            turn_count: updated_room.turn_number,
-            party_names,
-            unlocked_at: Utc::now(),
-        };
-        let newly_unlocked = engine.store.record_ending_unlock(&unlock).unwrap_or(false);
-        Some(EndingBanner {
-            id: end.id.clone(),
-            title: end.title.clone(),
-            kind: end.kind.clone(),
-            newly_unlocked,
-        })
-    } else {
-        None
-    };
+    let ending_reached = triggered_ending.as_ref().map(|end| {
+        record_ending_and_echo(
+            engine,
+            &updated_room,
+            &updated_players,
+            end,
+            dm_reply.reincarnation_echo.as_deref(),
+        )
+    });
 
     let act_badge = format_act_badge(Some(&scenario), updated_room.current_act);
     schedule_background_summary(engine, scenario, updated_room.clone());
@@ -312,6 +303,7 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         whisper_hints: effects.whisper_hints,
         suggested_actions: clean_suggestions,
         suggested_check: clean_check,
+        world_bulletin: effects.world_bulletin,
         ending_reached,
         direct_messages: effects.direct_messages,
     })

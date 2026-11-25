@@ -279,9 +279,14 @@ pub fn cmd_me(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRespon
         p.status_note.trim()
     };
 
+    let loc_txt = if p.location.trim().is_empty() {
+        room.location.as_str()
+    } else {
+        p.location.trim()
+    };
     let mut sections = vec![
         format!(
-            "🎭 **《{}》** ｜ 第 **{}** 回合 ｜ `{act_status}`",
+            "🎭 **《{}》** ｜ 第 **{}** 回合 ｜ `{act_status}`\n📍 **你当前所在**：{loc_txt}",
             room.title, room.turn_number
         ),
         format!(

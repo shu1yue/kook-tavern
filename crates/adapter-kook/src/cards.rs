@@ -3,7 +3,7 @@ use tavern_domain::{ChatMode, EngineResponse, NarrativeStyle};
 
 use crate::card_menus::{render_role_picker_card, render_scenario_menu_card};
 use crate::card_widgets::{
-    ending_toolbar, notice_action_bar, push_npc_section, push_party_cards,
+    ending_toolbar, notice_action_bar, push_bulletin_section, push_npc_section, push_party_cards,
     push_story_action_footer, status_console_rows, truncate_chars,
 };
 
@@ -90,6 +90,7 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
             whisper_hints,
             suggested_actions,
             suggested_check,
+            world_bulletin,
             ending_reached,
             ..
         } => {
@@ -122,7 +123,11 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
 
             push_chunked_sections(&mut modules, narrative, 3200);
 
-            if !state_changes.is_empty() || !whisper_hints.is_empty() {
+            if let Some(b) = world_bulletin {
+                push_bulletin_section(&mut modules, b);
+            }
+
+            if (!state_changes.is_empty() || !whisper_hints.is_empty()) && modules.len() < 39 {
                 modules.push(json!({ "type": "divider" }));
                 let mut lines = Vec::new();
                 lines.extend(state_changes.iter().map(|s| format!("> {s}")));
@@ -228,17 +233,8 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
 
             modules.push(json!({ "type": "divider" }));
             let [row1, row2, row3] = status_console_rows(board_chan, room);
-            modules.push(row1);
-            modules.push(row2);
-            modules.push(row3);
-
-            json!([{
-                "type": "card",
-                "theme": "info",
-                "size": "lg",
-                "modules": modules
-            }])
-            .to_string()
+            modules.extend([row1, row2, row3]);
+            json!([{ "type": "card", "theme": "info", "size": "lg", "modules": modules }]).to_string()
         }
     }
 }
@@ -311,6 +307,10 @@ mod tests {
             suggested_actions: vec!["追问白鸦下落".into(), "潜入地下酒窖".into()],
             suggested_check: Some(tavern_domain::SuggestedCheck {
                 stat: "侦查".into(), reason: "细查柜台暗格".into(),
+            }),
+            world_bulletin: Some(tavern_domain::WorldBulletin {
+                turn_number: 2, masthead: "《余烬号外》".into(), headline: "修女封锁东栈桥".into(),
+                body: "圣光教会今夜加派了灯塔巡哨。".into(), faction: "圣光教会".into(),
             }),
             ending_reached: None,
             direct_messages: vec![tavern_domain::DirectMessageOut {

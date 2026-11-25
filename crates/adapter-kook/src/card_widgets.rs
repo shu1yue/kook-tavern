@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use tavern_domain::{
     ChatMode, NarrativeStyle, NpcState, PendingAction, Player, RoomState, SuggestedCheck,
+    WorldBulletin,
 };
 
 pub fn btn(theme: &str, value: String, label: &str) -> Value {
@@ -271,6 +272,15 @@ pub fn push_npc_section(modules: &mut Vec<Value>, npcs: &[NpcState]) {
         "type": "section",
         "text": { "type": "kmarkdown", "content": format!("🗣️ **关键 NPC 动向与态度**\n{lines}") }
     }));
+}
+
+pub fn push_bulletin_section(modules: &mut Vec<Value>, b: &WorldBulletin) {
+    if modules.len() >= 38 { return; }
+    let fac = if b.faction.trim().is_empty() { String::new() } else { format!(" `{}`", b.faction.trim()) };
+    let body = b.body.trim().replace('\n', "\n> ");
+    let content = format!("📰 **{}**{fac} — **【{}】**\n> {body}", b.masthead, b.headline);
+    modules.push(json!({ "type": "divider" }));
+    modules.push(json!({ "type": "section", "text": { "type": "kmarkdown", "content": truncate_chars(&content, 1200) } }));
 }
 
 pub fn truncate_chars(s: &str, max_chars: usize) -> String {

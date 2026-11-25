@@ -12,7 +12,7 @@ pub fn query_room(conn: &Connection, channel_id: &str) -> Result<Option<RoomStat
             SELECT channel_id, guild_id, scenario_id, title, location, world_time,
                    turn_number, state_version, turn_phase, chat_mode, narrative_style,
                    gm_user_id, web_token, clues_json, npc_states_json, suggested_actions_json,
-                   current_act, world_flags_json, ended_id, ended_title,
+                   current_act, world_flags_json, ended_id, ended_title, bulletins_json,
                    summary, summary_upto_turn, active, created_at, updated_at
             FROM rooms WHERE channel_id = ?1
             "#,
@@ -43,11 +43,12 @@ pub fn query_room(conn: &Connection, channel_id: &str) -> Result<Option<RoomStat
                     world_flags: serde_json::from_str(&r.get::<_, String>(17)?).unwrap_or_default(),
                     ended_id: (!ended_id.is_empty()).then_some(ended_id),
                     ended_title: (!ended_title.is_empty()).then_some(ended_title),
-                    summary: r.get(20)?,
-                    summary_upto_turn: r.get(21)?,
-                    active: r.get::<_, i32>(22)? != 0,
-                    created_at: parse_dt(&r.get::<_, String>(23)?),
-                    updated_at: parse_dt(&r.get::<_, String>(24)?),
+                    bulletins: serde_json::from_str(&r.get::<_, String>(20)?).unwrap_or_default(),
+                    summary: r.get(21)?,
+                    summary_upto_turn: r.get(22)?,
+                    active: r.get::<_, i32>(23)? != 0,
+                    created_at: parse_dt(&r.get::<_, String>(24)?),
+                    updated_at: parse_dt(&r.get::<_, String>(25)?),
                 })
             },
         )
@@ -60,6 +61,7 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
     let npc_json = serde_json::to_string(&room.npc_states)?;
     let suggested_json = serde_json::to_string(&room.suggested_actions)?;
     let flags_json = serde_json::to_string(&room.world_flags)?;
+    let bulletins_json = serde_json::to_string(&room.bulletins)?;
     let ended_id = room.ended_id.as_deref().unwrap_or("");
     let ended_title = room.ended_title.as_deref().unwrap_or("");
     conn.execute(
@@ -68,9 +70,9 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
             channel_id, guild_id, scenario_id, title, location, world_time,
             turn_number, state_version, turn_phase, chat_mode, narrative_style,
             gm_user_id, web_token, clues_json, npc_states_json, suggested_actions_json,
-            current_act, world_flags_json, ended_id, ended_title,
+            current_act, world_flags_json, ended_id, ended_title, bulletins_json,
             summary, summary_upto_turn, active, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
         ON CONFLICT(channel_id) DO UPDATE SET
             guild_id = excluded.guild_id, scenario_id = excluded.scenario_id, title = excluded.title,
             location = excluded.location, world_time = excluded.world_time,
@@ -82,6 +84,7 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
             suggested_actions_json = excluded.suggested_actions_json,
             current_act = excluded.current_act, world_flags_json = excluded.world_flags_json,
             ended_id = excluded.ended_id, ended_title = excluded.ended_title,
+            bulletins_json = excluded.bulletins_json,
             summary = excluded.summary, summary_upto_turn = excluded.summary_upto_turn,
             active = excluded.active, updated_at = excluded.updated_at
         "#,
@@ -90,7 +93,7 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
             room.location, room.world_time, room.turn_number, room.state_version as i64,
             room.turn_phase.as_str(), room.chat_mode.as_str(), room.narrative_style.as_str(),
             room.gm_user_id, room.web_token, clues_json, npc_json, suggested_json,
-            room.current_act.max(1), flags_json, ended_id, ended_title,
+            room.current_act.max(1), flags_json, ended_id, ended_title, bulletins_json,
             room.summary, room.summary_upto_turn, if room.active { 1 } else { 0 },
             room.created_at.to_rfc3339(), room.updated_at.to_rfc3339(),
         ],
@@ -106,8 +109,8 @@ pub fn write_player(conn: &Connection, player: &Player) -> Result<()> {
         r#"
         INSERT INTO players (
             channel_id, user_id, character_name, role_desc, traits_json,
-            hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json, location
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
         ON CONFLICT(channel_id, user_id) DO UPDATE SET
             character_name = excluded.character_name,
             role_desc = excluded.role_desc,
@@ -117,12 +120,13 @@ pub fn write_player(conn: &Connection, player: &Player) -> Result<()> {
             inventory_json = excluded.inventory_json,
             status_note = excluded.status_note,
             is_afk = excluded.is_afk,
-            stats_json = excluded.stats_json
+            stats_json = excluded.stats_json,
+            location = excluded.location
         "#,
         params![
             player.channel_id, player.user_id, player.character_name, player.role_desc,
             traits_json, player.hp, player.max_hp, player.san, player.max_san, inv_json,
-            player.status_note, if player.is_afk { 1 } else { 0 }, stats_json,
+            player.status_note, if player.is_afk { 1 } else { 0 }, stats_json, player.location,
         ],
     )?;
     Ok(())
@@ -177,11 +181,13 @@ pub fn update_player_dm_state(conn: &Connection, player: &Player) -> Result<()> 
             hp = ?3,
             san = ?4,
             inventory_json = ?5,
-            status_note = ?6
+            status_note = ?6,
+            location = ?7
         WHERE channel_id = ?1 AND user_id = ?2
         "#,
         params![
-            player.channel_id, player.user_id, player.hp, player.san, inv_json, player.status_note,
+            player.channel_id, player.user_id, player.hp, player.san, inv_json,
+            player.status_note, player.location,
         ],
     )?;
     Ok(())
@@ -196,7 +202,7 @@ pub fn query_player_by_id(
         .query_row(
             r#"
             SELECT channel_id, user_id, character_name, role_desc, traits_json,
-                   hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json
+                   hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json, location
             FROM players WHERE channel_id = ?1 AND user_id = ?2
             "#,
             params![channel_id, user_id],
@@ -210,7 +216,7 @@ pub fn query_players(conn: &Connection, channel_id: &str) -> Result<Vec<Player>>
     let mut stmt = conn.prepare(
         r#"
         SELECT channel_id, user_id, character_name, role_desc, traits_json,
-               hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json
+               hp, max_hp, san, max_san, inventory_json, status_note, is_afk, stats_json, location
         FROM players WHERE channel_id = ?1 ORDER BY rowid ASC
         "#,
     )?;
@@ -237,6 +243,7 @@ fn map_player_row(r: &Row<'_>) -> rusqlite::Result<Player> {
         status_note: r.get(10)?,
         is_afk: r.get::<_, i32>(11)? != 0,
         stats: serde_json::from_str(&r.get::<_, String>(12)?).unwrap_or_default(),
+        location: r.get(13)?,
     })
 }
 

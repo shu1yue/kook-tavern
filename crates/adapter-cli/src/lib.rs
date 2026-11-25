@@ -230,14 +230,17 @@ async fn print_response(stdout: &mut io::Stdout, resp: &EngineResponse) -> Resul
         }
         EngineResponse::StoryTurn {
             turn_number, scene_title, location, world_time, act_badge, narrative,
-            state_changes, whisper_hints, suggested_actions, suggested_check, ending_reached,
-            direct_messages, ..
+            state_changes, whisper_hints, suggested_actions, suggested_check, world_bulletin,
+            ending_reached, direct_messages, ..
         } => {
             let act_str = act_badge.as_deref().map(|a| format!(" ｜ 🎬 {a}")).unwrap_or_default();
             let mut buf = format!(
                 "\n╔══════════════════════════════════════════════════════════\n║ 🎭 {scene_title}\n║ 📍 {location} ｜ 🕒 {world_time} ｜ 🎲 第 {turn_number} 回合{act_str}\n╠══════════════════════════════════════════════════════════\n{}\n",
                 indent_lines(narrative)
             );
+            if let Some(b) = world_bulletin {
+                buf.push_str(&format!("╟──────────────────────────────────────────────────────────\n║ 📰 {} · 【{}】\n║    {}\n", b.masthead, b.headline, b.body));
+            }
             if !state_changes.is_empty() || !whisper_hints.is_empty() {
                 buf.push_str("╟──────────────────────────────────────────────────────────\n");
                 for line in state_changes { buf.push_str(&format!("║ {line}\n")); }

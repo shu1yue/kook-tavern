@@ -156,10 +156,88 @@ pub fn validate_scenario(sc: &Scenario) -> Result<(), Vec<String>> {
         }
     }
 
+    if sc.map_nodes.len() > 16 {
+        errors.push("地图节点 `map_nodes` 最多允许 16 个".into());
+    }
+    if sc.map_edges.len() > 32 {
+        errors.push("地图连线 `map_edges` 最多允许 32 条".into());
+    }
+    let mut node_ids = HashSet::new();
+    for (idx, node) in sc.map_nodes.iter().enumerate() {
+        let nid = node.id.as_str();
+        let valid_nid = nid == nid.trim()
+            && (2..=32).contains(&nid.len())
+            && nid.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+            && nid.chars().next().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
+        if !valid_nid || !node_ids.insert(nid.to_string()) {
+            errors.push(format!("第 {} 个地图节点 id 无效或重复：`{nid}`（须为 2~32 位小写字母/数字/_/-）", idx + 1));
+        }
+        if node.name.trim().is_empty() || node.name.trim().chars().count() > 24 {
+            errors.push(format!("地图节点 `{nid}` 名称为空或超过 24 字"));
+        }
+        if !(0.0..=100.0).contains(&node.x) || !(0.0..=100.0).contains(&node.y) {
+            errors.push(format!("地图节点 `{nid}` 坐标必须在 0~100 范围内"));
+        }
+        if !matches!(node.kind.trim().to_ascii_lowercase().as_str(), "" | "hub" | "mystery" | "danger" | "secret") {
+            errors.push(format!("地图节点 `{nid}` 类型 `{}` 无效（仅支持 hub/mystery/danger/secret）", node.kind));
+        }
+    }
+    let mut edge_pairs = HashSet::new();
+    for (idx, edge) in sc.map_edges.iter().enumerate() {
+        let (a, b) = (edge.from.as_str(), edge.to.as_str());
+        if !node_ids.contains(a) || !node_ids.contains(b) {
+            errors.push(format!("第 {} 条地图连线 (`{a}` -> `{b}`) 引用了不存在的节点", idx + 1));
+        } else if a == b {
+            errors.push(format!("第 {} 条地图连线不允许自环 (`{a}`)", idx + 1));
+        } else {
+            let key = if a < b { (a, b) } else { (b, a) };
+            if !edge_pairs.insert(key) {
+                errors.push(format!("第 {} 条地图连线重复 (`{a}` <-> `{b}`)", idx + 1));
+            }
+        }
+    }
+    validate_rules_schema(sc, &mut errors);
+
     if errors.is_empty() {
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+fn validate_rules_schema(sc: &Scenario, errors: &mut Vec<String>) {
+    let r = &sc.rules;
+    if !matches!(r.tension_pace.trim().to_ascii_lowercase().as_str(), "" | "steady" | "brisk" | "intense") {
+        errors.push(format!("`rules.tension_pace` 无效：{}", r.tension_pace));
+    }
+    if !matches!(r.lethality.trim().to_ascii_lowercase().as_str(), "" | "forgiving" | "balanced" | "harsh") {
+        errors.push(format!("`rules.lethality` 无效：{}", r.lethality));
+    }
+    if !matches!(r.clue_generosity.trim().to_ascii_lowercase().as_str(), "" | "strict" | "balanced" | "generous") {
+        errors.push(format!("`rules.clue_generosity` 无效：{}", r.clue_generosity));
+    }
+    if r.bulletin_interval > 20 {
+        errors.push("`rules.bulletin_interval` 不能大于 20".into());
+    }
+    if r.factions.len() > 8 {
+        errors.push("`rules.factions` 最多允许 8 个势力".into());
+    }
+    for (idx, fac) in r.factions.iter().enumerate() {
+        if fac.name.trim().is_empty() || fac.goal.trim().is_empty() {
+            errors.push(format!("第 {} 个势力缺少名称或目标", idx + 1));
+        }
+    }
+    if r.must_hit_beats.len() > 12 {
+        errors.push("`rules.must_hit_beats` 最多允许 12 条导演节点".into());
+    }
+    let max_act = sc.acts.len().max(1) as u32;
+    for (idx, beat) in r.must_hit_beats.iter().enumerate() {
+        if beat.act == 0 || beat.act > max_act || beat.by_turn == 0 {
+            errors.push(format!("第 {} 条导演节点 act/by_turn 超出有效范围", idx + 1));
+        }
+        if beat.flag.trim().is_empty() || beat.prompt_hint.trim().is_empty() {
+            errors.push(format!("第 {} 条导演节点缺少 flag 或 prompt_hint", idx + 1));
+        }
     }
 }
 
@@ -201,6 +279,9 @@ mod tests {
                 priority: 100,
                 content: "不要回头".into(),
             }],
+            map_nodes: vec![],
+            map_edges: vec![],
+            rules: Default::default(),
         };
         assert!(validate_scenario(&sc).is_err());
         sc.id = "valid_demo_01".into();

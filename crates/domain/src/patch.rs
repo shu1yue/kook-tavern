@@ -3,12 +3,14 @@ use std::collections::BTreeMap;
 use crate::models::{NpcState, Player, RoomState, Scenario};
 use crate::protocol::{DirectMessageOut, DmStructuredReply, StatePatch};
 use crate::stats::ScenarioEnding;
+use crate::world::WorldBulletin;
 
 #[derive(Debug, Clone, Default)]
 pub struct AppliedTurnEffects {
     pub state_changes: Vec<String>,
     pub whisper_hints: Vec<String>,
     pub direct_messages: Vec<DirectMessageOut>,
+    pub world_bulletin: Option<WorldBulletin>,
 }
 
 /// Authoritative server-side validator & applier for LLM-proposed state patches.
@@ -20,14 +22,22 @@ pub fn apply_dm_reply(
 ) -> AppliedTurnEffects {
     let mut effects = AppliedTurnEffects::default();
 
-    if let Some(loc) = reply.location.as_deref().map(str::trim)
-        && !loc.is_empty()
-        && loc != room.location
+    let prev_room_loc = room.location.clone();
+    if let Some(raw_loc) = reply.location.as_deref().map(str::trim)
+        && !raw_loc.is_empty()
     {
-        effects
-            .state_changes
-            .push(format!("📍 场景移动：{} → {}", room.location, loc));
-        room.location = loc.to_string();
+        let loc: String = raw_loc.chars().take(48).collect();
+        if loc != room.location {
+            effects
+                .state_changes
+                .push(format!("📍 场景移动：{} → {}", room.location, loc));
+            room.location = loc.clone();
+            for p in players.iter_mut() {
+                if !p.is_afk && (p.location.trim().is_empty() || p.location == prev_room_loc) {
+                    p.location = loc.clone();
+                }
+            }
+        }
     }
 
     if let Some(wt) = reply.world_time.as_deref().map(str::trim)
@@ -57,6 +67,11 @@ pub fn apply_dm_reply(
             && !note.trim().is_empty()
         {
             entry.status_note = Some(note.clone());
+        }
+        if let Some(ref ploc) = patch.location
+            && !ploc.trim().is_empty()
+        {
+            entry.location = Some(ploc.clone());
         }
     }
 
@@ -114,6 +129,14 @@ pub fn apply_dm_reply(
             p_notes.push(format!("🏷️ 状态：{note}"));
         }
 
+        if let Some(ploc) = patch.location.as_deref().map(str::trim)
+            && !ploc.is_empty()
+            && ploc != player.location
+        {
+            player.location = ploc.chars().take(48).collect();
+            p_notes.push(format!("🧭 位置：{}", player.location));
+        }
+
         if !p_notes.is_empty() {
             effects
                 .state_changes
@@ -129,25 +152,15 @@ pub fn apply_dm_reply(
         }
     }
 
+    let trim_opt = |opt: &Option<String>, lim: usize| -> String {
+        opt.as_deref().unwrap_or("").trim().chars().take(lim).collect()
+    };
     for npc in reply.npc_updates.iter().take(8) {
         let name: String = npc.name.trim().chars().take(24).collect();
-        let attitude: String = npc
-            .attitude
-            .as_deref()
-            .unwrap_or("")
-            .trim()
-            .chars()
-            .take(16)
-            .collect();
-        let status: String = npc
-            .status
-            .as_deref()
-            .unwrap_or("")
-            .trim()
-            .chars()
-            .take(60)
-            .collect();
-        if name.is_empty() || (attitude.is_empty() && status.is_empty()) {
+        let attitude = trim_opt(&npc.attitude, 16);
+        let status = trim_opt(&npc.status, 60);
+        let nloc = trim_opt(&npc.location, 48);
+        if name.is_empty() || (attitude.is_empty() && status.is_empty() && nloc.is_empty()) {
             continue;
         }
         if let Some(existing) = room
@@ -155,32 +168,20 @@ pub fn apply_dm_reply(
             .iter_mut()
             .find(|n| n.name == name || n.name.eq_ignore_ascii_case(&name))
         {
-            if !attitude.is_empty() {
-                existing.attitude = attitude.clone();
-            }
-            if !status.is_empty() {
-                existing.status = status.clone();
-            }
+            if !attitude.is_empty() { existing.attitude = attitude.clone(); }
+            if !status.is_empty() { existing.status = status.clone(); }
+            if !nloc.is_empty() { existing.location = nloc.clone(); }
         } else if room.npc_states.len() < 24 {
             room.npc_states.push(NpcState {
                 name: name.clone(),
-                attitude: if attitude.is_empty() {
-                    "中立".to_string()
-                } else {
-                    attitude.clone()
-                },
+                attitude: if attitude.is_empty() { "中立".to_string() } else { attitude.clone() },
                 status: status.clone(),
+                location: nloc.clone(),
             });
         }
         let att_label = if attitude.is_empty() { "动态更新" } else { &attitude };
-        let st_suffix = if status.is_empty() {
-            String::new()
-        } else {
-            format!(" — {status}")
-        };
-        effects
-            .state_changes
-            .push(format!("🗣️ **{name}**（{att_label}）{st_suffix}"));
+        let st_suffix = if status.is_empty() { String::new() } else { format!(" — {status}") };
+        effects.state_changes.push(format!("🗣️ **{name}**（{att_label}）{st_suffix}"));
     }
 
     for whisper in &reply.private_whispers {
@@ -239,6 +240,26 @@ pub fn apply_story_progression(
         }
     }
 
+    if let Some(ref draft) = reply.world_bulletin {
+        let headline: String = draft.headline.trim().chars().take(48).collect();
+        let body: String = draft.body.trim().chars().take(240).collect();
+        let faction: String = draft.faction.trim().chars().take(32).collect();
+        if !headline.is_empty() && !body.is_empty() {
+            let b = WorldBulletin {
+                turn_number: resolving_turn,
+                masthead: scenario.rules.effective_masthead(&scenario.name),
+                headline,
+                body,
+                faction,
+            };
+            if room.bulletins.len() >= 12 {
+                room.bulletins.remove(0);
+            }
+            room.bulletins.push(b.clone());
+            effects.world_bulletin = Some(b);
+        }
+    }
+
     let raw_end = reply.trigger_ending_id.as_deref().map(str::trim).unwrap_or("");
     if raw_end.is_empty() || room.ended_id.is_some() {
         return None;
@@ -285,7 +306,7 @@ mod tests {
             gm_user_id: "u1".into(), web_token: "secret_tok".into(),
             clues: vec![], npc_states: vec![], suggested_actions: vec![],
             current_act: 1, world_flags: vec![], ended_id: None, ended_title: None,
-            summary: String::new(), summary_upto_turn: 0, active: true,
+            bulletins: vec![], summary: String::new(), summary_upto_turn: 0, active: true,
             created_at: now, updated_at: now,
         };
         assert!(!format!("{room:?}").contains("secret_tok"));
@@ -294,7 +315,7 @@ mod tests {
             channel_id: "c1".into(), user_id: "u1".into(), character_name: "陆沉".into(),
             role_desc: "机械师".into(), traits: vec![], hp: 50, max_hp: 50, san: 8, max_san: 10,
             inventory: vec!["扳手".into()], status_note: String::new(), is_afk: false,
-            stats: Default::default(),
+            stats: Default::default(), location: String::new(),
         }];
         let reply = DmStructuredReply {
             scene_title: "测试".into(), narrative: "轰！".into(), private_whispers: vec![],
@@ -302,23 +323,25 @@ mod tests {
                 StatePatch {
                     player_name: "陆沉".into(), hp_delta: -25, san_delta: 999,
                     add_items: vec!["火把".into()], remove_items: vec!["不存在的物品".into()],
-                    status_note: None,
+                    status_note: None, location: Some("地下酒窖".into()),
                 },
                 StatePatch {
                     player_name: "陆沉".into(), hp_delta: -25, san_delta: 0,
                     add_items: vec![], remove_items: vec!["扳手".into()],
-                    status_note: Some("重伤".into()),
+                    status_note: Some("重伤".into()), location: None,
                 },
             ],
             new_clues: vec!["线索A".into(), "线索A".into()], npc_updates: vec![],
             world_time: None, location: None, suggested_actions: vec![],
             suggested_check: None, add_flags: vec![], advance_act: false, trigger_ending_id: None,
+            world_bulletin: None, reincarnation_echo: None,
         };
 
         let _ = apply_dm_reply(&mut room, &mut players, &reply);
         assert_eq!(players[0].hp, 20);
         assert_eq!(players[0].san, 10);
         assert_eq!(players[0].inventory, vec!["火把"]);
+        assert_eq!(players[0].location, "地下酒窖");
         assert_eq!(room.clues, vec!["线索A"]);
     }
 }

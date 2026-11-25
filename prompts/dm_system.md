@@ -31,21 +31,25 @@
       "san_delta": 0,
       "add_items": [],
       "remove_items": [],
-      "status_note": null
+      "status_note": null,
+      "location": null
     }
   ],
   "new_clues": ["本轮全队公开确认的公共线索（绝不包含 private_whispers 私密信息，无则空数组）"],
   "npc_updates": [
-    {"name": "关键NPC名", "attitude": "警惕/中立/友好/信任/敌对", "status": "简短动向（无变动可留空数组）"}
+    {"name": "关键NPC名", "attitude": "警惕/中立/友好/信任/敌对", "status": "简短动向（无变动可留空数组）", "location": null}
   ],
   "world_time": "更新后的世界时间（不变可照抄）",
-  "location": "更新后的当前地点（不变可照抄）",
+  "location": "更新后的当前地点（不变可照抄；优先使用标准地图节点名）",
   "suggested_actions": ["6~14字精炼行动按钮1", "6~14字精炼行动按钮2", "6~14字精炼行动按钮3"],
   "suggested_check": {"stat": "体魄/敏捷/侦查/交涉/灵感", "reason": "8字以内检定事由（不需要检定时填 null）"},
   "add_flags": ["本轮新达成的关键剧情节点标记（无则空数组）"],
   "advance_act": false,
-  "trigger_ending_id": null
+  "trigger_ending_id": null,
+  "world_bulletin": null,
+  "reincarnation_echo": null
 }
+（注：`world_bulletin` 仅在【幕间暗流号外窗口】开启时填写 `{"headline":"8~18字标题","body":"40~90字剧中号外/密信/广播正文","faction":"势力名"}`，平时必须填 `null`；`reincarnation_echo` 仅在 `trigger_ending_id` 非空时写一句留给下周目的 30~80 字世界线残响，平时填 `null`；仅当某角色与大部队分头行动时在 `state_patches[].location` 填写其单独所在地点。）
 
 【常驻世界观底色】
 {{always_lore}}

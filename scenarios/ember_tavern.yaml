@@ -169,3 +169,79 @@ worldbook:
       1.【晨雾散尽（真结局）】：集齐钥匙并说服/夺得星铜怀表，完成安全停机程序，星雾退散、港口获救，老雷恩与白鸦十年恩怨在晨光中了结。
       2.【灰金交易（现实结局）】：收下白鸦的三百银盾掩护其逃走，或把星仪卖给教会修女艾琳，小队暴富但灰烬港付出惨重代价。
       3.【余烬轰鸣（悲壮结局）】：强行引爆潮汐星仪摧毁雾源，钟楼在蓝焰中崩塌，小队九死一生逃出生天。
+
+map_nodes:
+  - id: tavern_hall
+    name: "余烬酒馆大厅"
+    x: 15
+    y: 42
+    aliases: ["酒馆", "大厅", "柜台", "吧台", "壁炉"]
+    kind: "hub"
+  - id: wine_cellar
+    name: "地下酿酒窖"
+    x: 24
+    y: 80
+    aliases: ["酒窖", "地下室", "厨房", "17号", "暗格"]
+    kind: "mystery"
+  - id: harbor_wharf
+    name: "星雾码头"
+    x: 44
+    y: 26
+    aliases: ["码头", "港口", "栈桥", "海边"]
+    kind: "mystery"
+  - id: cliff_path
+    name: "峭壁栈道"
+    x: 54
+    y: 66
+    aliases: ["峭壁", "石阶", "栈道", "半山腰", "灯柱"]
+    kind: "danger"
+  - id: clocktower_low
+    name: "旧钟楼一二层"
+    x: 75
+    y: 56
+    aliases: ["钟楼", "一楼", "二楼", "楼梯", "钟楼大厅"]
+    kind: "danger"
+  - id: clocktower_core
+    name: "钟楼三层星仪机房"
+    x: 86
+    y: 22
+    aliases: ["三层", "机房", "观测室", "星仪", "顶层"]
+    kind: "secret"
+
+map_edges:
+  - { from: tavern_hall, to: wine_cellar, label: "厨房活板门", locked: true }
+  - { from: tavern_hall, to: harbor_wharf, label: "港湾石街", locked: false }
+  - { from: harbor_wharf, to: cliff_path, label: "浓雾石阶", locked: false }
+  - { from: cliff_path, to: clocktower_low, label: "锈蚀铁门", locked: false }
+  - { from: clocktower_low, to: clocktower_core, label: "03-17总钥", locked: true }
+
+rules:
+  tension_pace: "brisk"
+  lethality: "balanced"
+  clue_generosity: "balanced"
+  dm_weight_note: "鼓励巧用道具、酒馆情报交易与团队分工；教会暗哨与星雾蔓延应持续制造时间压迫感。"
+  bulletin_name: "《余烬流言板 · 灰烬港号外》"
+  bulletin_interval: 3
+  factions:
+    - name: "圣光教会暗哨（艾琳）"
+      goal: "抢夺03-17钥匙并在午夜前彻底炸毁旧钟楼连同白鸦一并清除"
+      escalation: "封锁码头退路、加价悬赏拉拢或半路截击小队"
+    - name: "叛逃炼金师（白鸦）"
+      goal: "在潮汐星仪爆裂前拿到钥匙脱身，或借冒险者之手稳住核心"
+      escalation: "放出更高赏金、用高频信号引导小队前往三层"
+    - name: "失控星雾与拟声雾傀"
+      goal: "借助午夜过载将淡蓝星雾吞没整座灰烬港"
+      escalation: "模仿熟人声音三声敲门诱骗，令街区守夜人陆续失联"
+  must_hit_beats:
+    - act: 1
+      by_turn: 4
+      flag: "教会暗哨现身"
+      prompt_hint: "灰帽修女艾琳的教会暗哨已盯上接悬赏的小队，可在大厅角落或门外露出一丝寒光试探。"
+    - act: 2
+      by_turn: 7
+      flag: "遭遇拟声雾傀"
+      prompt_hint: "雾中传来极似老雷恩或托比的声音并伴随三声轻敲，引出拟声雾傀的试探与弱点线索。"
+    - act: 3
+      by_turn: 10
+      flag: "星仪午夜过载警报"
+      prompt_hint: "旧钟楼顶层传来沉闷齿轮轰鸣，星仪蓝焰暴涨，提示午夜钟声已迫在眉睫。"

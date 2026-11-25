@@ -3,7 +3,7 @@ use chrono::Utc;
 use rand::Rng;
 use tavern_domain::{
     CardTheme, ChatMode, EngineResponse, IncomingMessage, NarrativeStyle, RoomEvent, RoomState,
-    ScenarioSummary, TurnPhase,
+    ScenarioSummary, TurnPhase, ending_scope_key,
 };
 
 use crate::commands::check::format_act_badge;
@@ -125,9 +125,10 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
     }
 
     let now = Utc::now();
+    let effective_guild = if msg.is_direct { String::new() } else { msg.guild_id.clone().unwrap_or_default() };
     let room = RoomState {
         channel_id: msg.channel_id.clone(),
-        guild_id: msg.guild_id.clone().unwrap_or_default(),
+        guild_id: effective_guild.clone(),
         scenario_id: scenario.id.clone(),
         title: scenario.name.clone(),
         location: scenario.initial_location.clone(),
@@ -146,6 +147,7 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         world_flags: Vec::new(),
         ended_id: None,
         ended_title: None,
+        bulletins: Vec::new(),
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,
@@ -153,10 +155,7 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         updated_at: now,
     };
     engine.store.upsert_room(&room)?;
-    engine.emit_event(RoomEvent::RoomUpdated {
-        channel_id: msg.channel_id.clone(),
-        turn_number: 0,
-    });
+    engine.emit_event(RoomEvent::RoomUpdated { channel_id: msg.channel_id.clone(), turn_number: 0 });
 
     let mode_hint = if msg.is_direct {
         "🕯️ 当前为私聊单人冒险模式（直接发消息或点按钮即可推进）".to_string()
@@ -164,6 +163,25 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         "💬 已默认开启「直接说人话」模式：直接打字或点下方 ①②③ 按钮即行动！场外闲聊请加括号（）或 //，点「🎛️ 面板/设置」可随时切换。".to_string()
     };
     let act_badge = format_act_badge(Some(&scenario), 1);
+    let scope_key = ending_scope_key(
+        (!effective_guild.is_empty()).then_some(effective_guild.as_str()),
+        &msg.channel_id,
+    );
+    let before_ts = room.created_at.to_rfc3339();
+    let echoes = engine
+        .store
+        .list_world_echoes(&scope_key, &scenario.id, Some(&before_ts), 2)
+        .unwrap_or_default();
+    let mut opening_changes = vec![
+        mode_hint,
+        "✨ 先点「🎛️ 面板/设置」→「🎭 选职业入团」拿五维属性与专属装备，或直接点下方 ①②③ 按钮开玩！".to_string(),
+    ];
+    if let Some(latest_echo) = echoes.first() {
+        opening_changes.push(format!(
+            "🌀 **世界线轮回残响**（《{}》）：{}",
+            latest_echo.ending_title, latest_echo.echo_text
+        ));
+    }
 
     Ok(EngineResponse::StoryTurn {
         channel_id: msg.channel_id.clone(),
@@ -173,13 +191,11 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         world_time: scenario.initial_time,
         act_badge,
         narrative: scenario.opening_scene.trim().to_string(),
-        state_changes: vec![
-            mode_hint,
-            "✨ 先点「🎛️ 面板/设置」→「🎭 选职业入团」拿五维属性与专属装备，或直接点下方 ①②③ 按钮开玩！".to_string(),
-        ],
+        state_changes: opening_changes,
         whisper_hints: Vec::new(),
         suggested_actions: opening_actions,
         suggested_check: None,
+        world_bulletin: None,
         ending_reached: None,
         direct_messages: Vec::new(),
     })

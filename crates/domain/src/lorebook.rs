@@ -99,6 +99,9 @@ mod tests {
                     content: "Dragon lore".into(),
                 },
             ],
+            map_nodes: vec![],
+            map_edges: vec![],
+            rules: Default::default(),
         }
     }
 

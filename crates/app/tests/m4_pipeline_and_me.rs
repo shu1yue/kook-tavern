@@ -310,6 +310,9 @@ fn gate5_red_team_regressions_admin_fail_closed_png_safety_and_reload_empty_guar
         acts: vec![],
         endings: vec![],
         worldbook: vec![],
+        map_nodes: vec![],
+        map_edges: vec![],
+        rules: Default::default(),
     };
     let errs = tavern_domain::validate_scenario(&sc).unwrap_err();
     assert!(errs.iter().any(|e| e.contains("id")));

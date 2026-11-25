@@ -83,6 +83,7 @@ pub fn render_plain_fallback(resp: &EngineResponse, include_whispers: bool) -> S
             whisper_hints,
             suggested_actions,
             suggested_check,
+            world_bulletin,
             ending_reached,
             direct_messages,
             ..
@@ -94,6 +95,9 @@ pub fn render_plain_fallback(resp: &EngineResponse, include_whispers: bool) -> S
             let mut out = format!(
                 "**🎭 {scene_title}**\n📍 {location} ｜ 🕒 {world_time} ｜ 🎲 第 {turn_number} 回合{act_str}\n\n{narrative}"
             );
+            if let Some(b) = world_bulletin {
+                out.push_str(&format!("\n\n📰 **{}** — **【{}】**\n> {}", b.masthead, b.headline, b.body));
+            }
             if !state_changes.is_empty() || !whisper_hints.is_empty() {
                 out.push_str("\n\n---\n");
                 for line in state_changes {

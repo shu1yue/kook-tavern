@@ -77,6 +77,8 @@ impl LlmProvider for ControlledSlowLlm {
         _players: &'a [Player],
         _recent_turns: &'a [TurnRecord],
         _actions: &'a [PendingAction],
+        _world_echoes: &'a [tavern_domain::WorldEcho],
+        _allow_nudge: bool,
     ) -> BoxFuture<'a, Result<DmTurnOutput>> {
         let entered = self.entered.clone();
         let release = self.release.clone();
@@ -99,8 +101,11 @@ impl LlmProvider for ControlledSlowLlm {
                     add_flags: vec![],
                     advance_act: false,
                     trigger_ending_id: None,
+                    world_bulletin: None,
+                    reincarnation_echo: None,
                 },
                 usage: LlmUsage::default(),
+                extra_usages: vec![],
             })
         })
     }
@@ -274,6 +279,7 @@ fn external_prompts_hot_load_from_disk() {
         world_flags: vec![],
         ended_id: None,
         ended_title: None,
+        bulletins: vec![],
         summary: String::new(),
         summary_upto_turn: 0,
         active: true,
@@ -282,7 +288,7 @@ fn external_prompts_hot_load_from_disk() {
     };
     store.upsert_room(&room).unwrap();
 
-    let msgs = build_dm_messages(&dir, &scenario, &room, &[], &[], &[]);
+    let msgs = build_dm_messages(&dir, &scenario, &room, &[], &[], &[], &[]);
     assert!(msgs[0].content.contains("CUSTOM_TONE_MARKER"));
     assert!(msgs[0].content.contains("语音开黑极简档"));
     let _ = fs::remove_dir_all(&dir);

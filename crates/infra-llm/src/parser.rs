@@ -1,22 +1,18 @@
-use tavern_domain::{DmStructuredReply, RoomState};
+use tavern_domain::{DmPatchDelta, DmStructuredReply, RoomState};
 use tracing::warn;
 
-/// Defensively parses LLM JSON output:
-/// 1. Direct full-string JSON parse;
-/// 2. Markdown code-fence extraction (` ```json ... ``` `);
-/// 3. Streaming `serde_json::Deserializer` scan from every `{` offset (immune to stray quotes
-///    or malformed earlier `{...}` thought blocks);
-/// 4. Graceful fallback to plain narrative if the model ignored JSON formatting.
-pub fn parse_dm_reply(raw: &str, room: &RoomState) -> DmStructuredReply {
+/// Defensively parses LLM JSON output and reports whether structured JSON succeeded (`true`)
+/// or fell back to plain narrative (`false`).
+pub fn parse_dm_reply_checked(raw: &str, room: &RoomState) -> (DmStructuredReply, bool) {
     let trimmed = raw.trim();
 
     if let Ok(parsed) = serde_json::from_str::<DmStructuredReply>(trimmed) {
-        return normalize_reply(parsed, room);
+        return (normalize_reply(parsed, room), true);
     }
 
     for fenced in extract_fenced_blocks(trimmed) {
         if let Ok(parsed) = serde_json::from_str::<DmStructuredReply>(fenced) {
-            return normalize_reply(parsed, room);
+            return (normalize_reply(parsed, room), true);
         }
     }
 
@@ -27,26 +23,76 @@ pub fn parse_dm_reply(raw: &str, room: &RoomState) -> DmStructuredReply {
         let mut stream =
             serde_json::Deserializer::from_str(&trimmed[idx..]).into_iter::<DmStructuredReply>();
         if let Some(Ok(parsed)) = stream.next() {
-            return normalize_reply(parsed, room);
+            return (normalize_reply(parsed, room), true);
         }
     }
 
     warn!("LLM 未返回标准 JSON，已自动降级为纯文本叙事输出");
-    DmStructuredReply {
-        scene_title: format!("{} · 第 {} 幕", room.title, room.turn_number + 1),
-        narrative: trimmed.to_string(),
-        private_whispers: Vec::new(),
-        state_patches: Vec::new(),
-        new_clues: Vec::new(),
-        npc_updates: Vec::new(),
-        world_time: Some(room.world_time.clone()),
-        location: Some(room.location.clone()),
-        suggested_actions: Vec::new(),
-        suggested_check: None,
-        add_flags: Vec::new(),
-        advance_act: false,
-        trigger_ending_id: None,
+    (
+        DmStructuredReply {
+            scene_title: format!("{} · 第 {} 幕", room.title, room.turn_number + 1),
+            narrative: trimmed.to_string(),
+            private_whispers: Vec::new(),
+            state_patches: Vec::new(),
+            new_clues: Vec::new(),
+            npc_updates: Vec::new(),
+            world_time: Some(room.world_time.clone()),
+            location: Some(room.location.clone()),
+            suggested_actions: Vec::new(),
+            suggested_check: None,
+            add_flags: Vec::new(),
+            advance_act: false,
+            trigger_ending_id: None,
+            world_bulletin: None,
+            reincarnation_echo: None,
+        },
+        false,
+    )
+}
+
+pub fn parse_dm_reply(raw: &str, room: &RoomState) -> DmStructuredReply {
+    parse_dm_reply_checked(raw, room).0
+}
+
+pub fn parse_patch_delta(raw: &str) -> Option<DmPatchDelta> {
+    let trimmed = raw.trim();
+    if let Some(d) = try_parse_valid_delta(trimmed) {
+        return Some(d);
     }
+    for fenced in extract_fenced_blocks(trimmed) {
+        if let Some(d) = try_parse_valid_delta(fenced) {
+            return Some(d);
+        }
+    }
+    for (idx, ch) in trimmed.char_indices() {
+        if ch != '{' {
+            continue;
+        }
+        let mut stream =
+            serde_json::Deserializer::from_str(&trimmed[idx..]).into_iter::<serde_json::Value>();
+        if let Some(Ok(val)) = stream.next()
+            && let Some(d) = value_to_valid_delta(val)
+        {
+            return Some(d);
+        }
+    }
+    None
+}
+
+fn try_parse_valid_delta(s: &str) -> Option<DmPatchDelta> {
+    let val: serde_json::Value = serde_json::from_str(s).ok()?;
+    value_to_valid_delta(val)
+}
+
+fn value_to_valid_delta(val: serde_json::Value) -> Option<DmPatchDelta> {
+    let obj = val.as_object()?;
+    let has_known_key = obj.contains_key("state_patches")
+        || obj.contains_key("location")
+        || obj.contains_key("world_bulletin");
+    if !has_known_key {
+        return None;
+    }
+    serde_json::from_value::<DmPatchDelta>(val).ok()
 }
 
 fn normalize_reply(mut reply: DmStructuredReply, room: &RoomState) -> DmStructuredReply {
@@ -109,6 +155,7 @@ mod tests {
             world_flags: vec![],
             ended_id: None,
             ended_title: None,
+            bulletins: vec![],
             summary: String::new(),
             summary_upto_turn: 0,
             active: true,

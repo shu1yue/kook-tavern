@@ -228,5 +228,8 @@ fn build_mock_generated_scenario(
                 content: "便签背面在强光照射下会浮现真正的安全暗号，可作为秘密纸条单独告知侦查成功者。".into(),
             },
         ],
+        map_nodes: Vec::new(),
+        map_edges: Vec::new(),
+        rules: Default::default(),
     }
 }

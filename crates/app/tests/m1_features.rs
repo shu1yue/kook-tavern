@@ -196,8 +196,8 @@ async fn m1_whitelist_style_afk_whisper_gm_cost_and_budget_breaker() {
     room_next.turn_number += 1;
     room_next.location = "地下酒窖".into();
     room_next.clues.push("新线索".into());
-    let m1 = build_dm_messages(&cfg.prompts_dir, &sc, &room_now, &[], &[], &[]);
-    let m2 = build_dm_messages(&cfg.prompts_dir, &sc, &room_next, &[], &[], &[]);
+    let m1 = build_dm_messages(&cfg.prompts_dir, &sc, &room_now, &[], &[], &[], &[]);
+    let m2 = build_dm_messages(&cfg.prompts_dir, &sc, &room_next, &[], &[], &[], &[]);
     assert_eq!(m1[0].role, "system");
     assert_eq!(m1[0].content, m2[0].content);
     assert_eq!(m1[1].role, "user");

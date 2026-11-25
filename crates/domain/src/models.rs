@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::stats::{CharacterStats, ScenarioAct, ScenarioEnding};
+use crate::world::{ScenarioMapEdge, ScenarioMapNode, ScenarioRules, WorldBulletin};
 
 #[derive(Debug, Error)]
 pub enum DomainError {
@@ -132,6 +133,8 @@ pub struct NpcState {
     pub attitude: String,
     #[serde(default)]
     pub status: String,
+    #[serde(default)]
+    pub location: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,6 +160,12 @@ pub struct Scenario {
     pub endings: Vec<ScenarioEnding>,
     #[serde(default)]
     pub worldbook: Vec<WorldbookEntry>,
+    #[serde(default)]
+    pub map_nodes: Vec<ScenarioMapNode>,
+    #[serde(default)]
+    pub map_edges: Vec<ScenarioMapEdge>,
+    #[serde(default)]
+    pub rules: ScenarioRules,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -196,6 +205,8 @@ pub struct RoomState {
     #[serde(default)]
     pub ended_title: Option<String>,
     #[serde(default)]
+    pub bulletins: Vec<WorldBulletin>,
+    #[serde(default)]
     pub summary: String,
     #[serde(default)]
     pub summary_upto_turn: u32,
@@ -209,15 +220,10 @@ impl fmt::Debug for RoomState {
         f.debug_struct("RoomState")
             .field("channel_id", &self.channel_id)
             .field("scenario_id", &self.scenario_id)
-            .field("title", &self.title)
             .field("location", &self.location)
-            .field("world_time", &self.world_time)
             .field("turn_number", &self.turn_number)
             .field("state_version", &self.state_version)
             .field("turn_phase", &self.turn_phase)
-            .field("chat_mode", &self.chat_mode)
-            .field("narrative_style", &self.narrative_style)
-            .field("gm_user_id", &self.gm_user_id)
             .field("web_token", &"***REDACTED***")
             .field("clues_len", &self.clues.len())
             .field("active", &self.active)
@@ -245,6 +251,8 @@ pub struct Player {
     pub is_afk: bool,
     #[serde(default)]
     pub stats: CharacterStats,
+    #[serde(default)]
+    pub location: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

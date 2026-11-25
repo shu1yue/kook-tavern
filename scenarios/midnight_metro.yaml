@@ -175,3 +175,79 @@ worldbook:
       1.【破晓回轨（真结局）】：识破第 3 条假规则、查明调度录音并在绿色逃生灯闪过瞬间拉下制动，列车平稳驶入现实下一站，手机疯狂弹出凌晨 00:05 的未读消息。
       2.【长明灯火（隐藏圆满结局）】：在脱险前顺手在 5 号车厢纪念铭牌前留下平安符/暖意告别阿婆，阿婆微笑挥手，旧槐树站的血红走字屏化作一行温柔的“一路平安”。
       3.【永夜末班（怪谈坏结局）】：轻信查票员交出车票、在旧槐树站下车或错过 00:30 制动时机，次日车门玻璃上的乘客守则悄悄多出了第 5 条……
+
+map_nodes:
+  - id: car1_cab
+    name: "1号驾驶室"
+    x: 12
+    y: 38
+    aliases: ["1号", "驾驶室", "车头", "控制台"]
+    kind: "secret"
+  - id: car2_inspector
+    name: "2号车厢"
+    x: 31
+    y: 38
+    aliases: ["2号", "查票员车厢"]
+    kind: "danger"
+  - id: car3_start
+    name: "3号车厢"
+    x: 50
+    y: 38
+    aliases: ["3号", "起点", "末班车", "红雨衣"]
+    kind: "hub"
+  - id: car4_granny
+    name: "4号车厢"
+    x: 69
+    y: 38
+    aliases: ["4号", "栗子车厢"]
+    kind: "mystery"
+  - id: car5_hidden
+    name: "5号隐藏空车厢"
+    x: 88
+    y: 38
+    aliases: ["5号", "车尾", "空车厢", "铭牌"]
+    kind: "secret"
+  - id: old_locust
+    name: "旧槐树站台"
+    x: 50
+    y: 80
+    aliases: ["旧槐树", "站台", "废弃站"]
+    kind: "danger"
+
+map_edges:
+  - { from: car1_cab, to: car2_inspector, label: "三角钥匙", locked: true }
+  - { from: car2_inspector, to: car3_start, label: "连接门", locked: false }
+  - { from: car3_start, to: car4_granny, label: "栗子香门", locked: false }
+  - { from: car4_granny, to: car5_hidden, label: "车尾暗门", locked: true }
+  - { from: car3_start, to: old_locust, label: "假靠站门", locked: true }
+
+rules:
+  tension_pace: "intense"
+  lethality: "balanced"
+  clue_generosity: "balanced"
+  dm_weight_note: "严守四条守则真假逻辑与现代道具巧用；熄灯、电流杂音广播与手机电量形成紧迫感。"
+  bulletin_name: "《四号线调度 · 失真车厢广播》"
+  bulletin_interval: 3
+  factions:
+    - name: "蓝衣查票员"
+      goal: "诱骗乘客交出交通卡/工牌，将其标记为四号线永久乘客"
+      escalation: "沿车厢逐节巡检，手里的打孔钳滴落黑水并反复背诵被篡改的第3条守则"
+    - name: "幽灵隧道与假广播"
+      goal: "在00:30旧槐树站假靠站时诱使活人踏出车门"
+      escalation: "制造全车熄灯5秒、门头LED血字刷屏与伪造甜美女声报站"
+    - name: "糖炒栗子阿婆"
+      goal: "暗中护送礼貌遵守老规矩的活人找到现实交界制动时机"
+      escalation: "借温热栗子香驱散寒气，悄悄传递手写黄纸条提示"
+  must_hit_beats:
+    - act: 1
+      by_turn: 4
+      flag: "挺过全车熄灯"
+      prompt_hint: "车厢日光灯骤然全部熄灭进入 5 秒全黑，考验玩家是否牢记第1条守则低头闭眼。"
+    - act: 2
+      by_turn: 7
+      flag: "查票员逼近查验"
+      prompt_hint: "蓝衣查票员推开连接门微笑走来，要求核验交通卡与身份，引出对第3条假规则的拆穿。"
+    - act: 3
+      by_turn: 10
+      flag: "旧槐树站假停靠危机"
+      prompt_hint: "列车减速滑入漆黑站台、血红LED亮起「旧槐树站」，门外黑伞攒动，绿色逃生灯即将闪现。"

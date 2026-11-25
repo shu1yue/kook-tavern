@@ -172,6 +172,39 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
         Ok(())
     })?;
 
+    apply_if_needed(conn, 8, "0008_v12_world_map_echoes", |tx| {
+        add_column_if_missing(tx, "rooms", "bulletins_json", "TEXT NOT NULL DEFAULT '[]'")?;
+        add_column_if_missing(tx, "players", "location", "TEXT NOT NULL DEFAULT ''")?;
+        tx.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS world_echoes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id TEXT NOT NULL,
+                scenario_id TEXT NOT NULL,
+                ending_id TEXT NOT NULL,
+                ending_title TEXT NOT NULL,
+                ending_kind TEXT NOT NULL DEFAULT 'normal',
+                party_names TEXT NOT NULL DEFAULT '',
+                echo_text TEXT NOT NULL,
+                turn_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_world_echoes_scope
+                ON world_echoes (guild_id, scenario_id, id DESC);
+            "#,
+        )?;
+        Ok(())
+    })?;
+
+    apply_if_needed(conn, 9, "0009_v12_echo_source_channel", |tx| {
+        add_column_if_missing(tx, "world_echoes", "source_channel_id", "TEXT NOT NULL DEFAULT ''")?;
+        add_column_if_missing(tx, "world_echoes", "source_turn", "INTEGER NOT NULL DEFAULT 0")?;
+        tx.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_world_echoes_source ON world_echoes (source_channel_id, source_turn);",
+        )?;
+        Ok(())
+    })?;
+
     Ok(())
 }
 

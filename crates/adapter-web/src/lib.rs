@@ -1,4 +1,5 @@
 mod handlers;
+mod map_view;
 mod security;
 mod views;
 

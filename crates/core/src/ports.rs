@@ -6,6 +6,7 @@ use tavern_domain::{
     CharacterStats, ChatMode, DailyUsage, DirectMessageOut, DmTurnOutput, EndingUnlock, LlmUsage,
     NarrativeStyle, PendingAction, Player, PresetRole, RoomEvent, RoomSnapshot, RoomState,
     Scenario, StarterCharacterDefaults, SummaryOutput, TurnRecord, UsageSummary, WhisperRecord,
+    WorldEcho,
 };
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -164,9 +165,19 @@ pub trait RoomStore: Send + Sync {
 
     fn record_ending_unlock(&self, unlock: &EndingUnlock) -> Result<bool>;
     fn list_ending_unlocks(&self, guild_id: &str) -> Result<Vec<EndingUnlock>>;
+
+    fn record_world_echo(&self, echo: &WorldEcho) -> Result<()>;
+    fn list_world_echoes(
+        &self,
+        scope_key: &str,
+        scenario_id: &str,
+        before_rfc3339: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<WorldEcho>>;
 }
 
 pub trait LlmProvider: Send + Sync {
+    #[allow(clippy::too_many_arguments)]
     fn generate_turn<'a>(
         &'a self,
         scenario: &'a Scenario,
@@ -174,6 +185,8 @@ pub trait LlmProvider: Send + Sync {
         players: &'a [Player],
         recent_turns: &'a [TurnRecord],
         actions: &'a [PendingAction],
+        world_echoes: &'a [WorldEcho],
+        allow_nudge: bool,
     ) -> BoxFuture<'a, Result<DmTurnOutput>>;
 
     fn summarize_turns<'a>(

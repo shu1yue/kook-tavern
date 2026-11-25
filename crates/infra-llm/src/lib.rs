@@ -1,6 +1,7 @@
 pub mod generator;
 pub mod mock;
 pub mod parser;
+pub mod prompt_ext;
 pub mod prompts;
 pub mod transport;
 

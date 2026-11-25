@@ -2,7 +2,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Result;
-use tavern_domain::{CardTheme, EngineResponse, RoomEvent, RoomState, Scenario};
+use chrono::Utc;
+use tavern_domain::{
+    CardTheme, EndingBanner, EndingUnlock, EngineResponse, Player, RoomEvent, RoomState, Scenario,
+    ScenarioEnding, WorldEcho, distill_echo_text, ending_scope_key,
+};
 use tracing::{info, warn};
 
 use crate::engine::GameEngine;
@@ -142,4 +146,56 @@ pub fn schedule_background_summary(engine: &GameEngine, scenario: Scenario, room
             Err(err) => warn!(error = %err, "后台自动摘要压缩失败，不影响主线游玩"),
         }
     }));
+}
+
+/// Persists both the server-scoped ending achievement unlock and a fresh reincarnation
+/// worldline echo for future runs of the same scenario in this guild.
+pub fn record_ending_and_echo(
+    engine: &GameEngine,
+    room: &RoomState,
+    players: &[Player],
+    end: &ScenarioEnding,
+    dm_echo: Option<&str>,
+) -> EndingBanner {
+    let party_names = players
+        .iter()
+        .map(|p| p.character_name.as_str())
+        .collect::<Vec<_>>()
+        .join("、");
+    let scope_key = ending_scope_key(Some(&room.guild_id), &room.channel_id);
+    let now = Utc::now();
+    let unlock = EndingUnlock {
+        guild_id: scope_key.clone(),
+        scenario_id: room.scenario_id.clone(),
+        ending_id: end.id.clone(),
+        ending_title: end.title.clone(),
+        ending_kind: end.kind.clone(),
+        turn_count: room.turn_number,
+        party_names: party_names.clone(),
+        unlocked_at: now,
+    };
+    let newly_unlocked = engine.store.record_ending_unlock(&unlock).unwrap_or(false);
+    let echo = WorldEcho {
+        id: 0,
+        guild_id: scope_key,
+        scenario_id: room.scenario_id.clone(),
+        source_channel_id: room.channel_id.clone(),
+        source_turn: room.turn_number,
+        ending_id: end.id.clone(),
+        ending_title: end.title.clone(),
+        ending_kind: end.kind.clone(),
+        party_names: party_names.clone(),
+        echo_text: distill_echo_text(end, dm_echo, &party_names, &room.world_flags),
+        turn_count: room.turn_number,
+        created_at: now,
+    };
+    if let Err(err) = engine.store.record_world_echo(&echo) {
+        warn!(channel_id = %room.channel_id, error = %err, "写入轮回残响失败");
+    }
+    EndingBanner {
+        id: end.id.clone(),
+        title: end.title.clone(),
+        kind: end.kind.clone(),
+        newly_unlocked,
+    }
 }

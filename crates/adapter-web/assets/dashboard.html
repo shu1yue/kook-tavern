@@ -3,47 +3,23 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>🍺 AI 群酒馆 · 实况只读看板</title>
+  <title>🍺 AI 群酒馆 · 实况沙盘看板</title>
   <style>
     :root, [data-theme="ember"] {
-      --bg: #0c0a09;
-      --bg-glow: #291a10;
-      --surface: #161210;
-      --surface-2: #201a16;
-      --border: #382c22;
-      --accent: #f0b429;
-      --accent-soft: rgba(240, 180, 41, 0.14);
-      --accent-border: rgba(240, 180, 41, 0.42);
-      --text: #f3ece4;
-      --muted: #a69582;
-      --hp: #f85149;
-      --san: #58a6ff;
-      --ok: #3fb950;
-      --warn: #d29922;
+      --bg: #0c0a09; --bg-glow: #291a10; --surface: #161210; --surface-2: #201a16;
+      --border: #382c22; --accent: #f0b429; --accent-soft: rgba(240, 180, 41, 0.14);
+      --accent-border: rgba(240, 180, 41, 0.44); --text: #f3ece4; --muted: #a69582;
+      --hp: #f85149; --san: #58a6ff; --ok: #3fb950; --warn: #d29922; --echo: #c084fc;
     }
     [data-theme="fog"] {
-      --bg: #070b14;
-      --bg-glow: #13223b;
-      --surface: #0f1726;
-      --surface-2: #162135;
-      --border: #253654;
-      --accent: #79c0ff;
-      --accent-soft: rgba(121, 192, 255, 0.13);
-      --accent-border: rgba(121, 192, 255, 0.42);
-      --text: #e6edf8;
-      --muted: #8b9ec0;
+      --bg: #070b14; --bg-glow: #13223b; --surface: #0f1726; --surface-2: #162135;
+      --border: #253654; --accent: #79c0ff; --accent-soft: rgba(121, 192, 255, 0.13);
+      --accent-border: rgba(121, 192, 255, 0.44); --text: #e6edf8; --muted: #8b9ec0;
     }
     [data-theme="metro"] {
-      --bg: #060d0b;
-      --bg-glow: #0b2b22;
-      --surface: #0d1715;
-      --surface-2: #12221f;
-      --border: #1e3b35;
-      --accent: #34d399;
-      --accent-soft: rgba(52, 211, 153, 0.13);
-      --accent-border: rgba(52, 211, 153, 0.45);
-      --text: #e4f7f0;
-      --muted: #7ea89b;
+      --bg: #060d0b; --bg-glow: #0b2b22; --surface: #0d1715; --surface-2: #12221f;
+      --border: #1e3b35; --accent: #34d399; --accent-soft: rgba(52, 211, 153, 0.13);
+      --accent-border: rgba(52, 211, 153, 0.45); --text: #e4f7f0; --muted: #7ea89b;
     }
     * { box-sizing: border-box; }
     body {
@@ -54,18 +30,12 @@
       min-height: 100vh;
       transition: background 0.4s ease;
     }
-    .wrap { max-width: 1260px; margin: 0 auto; padding: 18px 16px 40px; }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 18px 16px 44px; }
     .topbar {
       background: linear-gradient(135deg, var(--accent-soft), var(--surface-2));
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 18px 20px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
+      border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px;
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+      justify-content: space-between; margin-bottom: 14px;
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
     }
     .title-area h1 { margin: 0 0 8px; font-size: 22px; color: var(--accent); letter-spacing: 0.5px; }
@@ -78,21 +48,19 @@
     .pill.live { border-color: rgba(63, 185, 80, 0.45); color: #7ee787; }
     .pill.warn { border-color: rgba(210, 153, 34, 0.5); color: #f2cc60; }
     .pill.accent { border-color: var(--accent-border); color: var(--accent); background: var(--accent-soft); }
+    .pill.echo { border-color: rgba(192, 132, 252, 0.45); color: #d8b4fe; background: rgba(192, 132, 252, 0.12); }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
     .dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
-    .controls { display: flex; gap: 8px; align-items: center; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     button.btn {
       background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
       border-radius: 10px; padding: 7px 12px; font-size: 12px; cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
     }
-    button.btn:hover { border-color: var(--accent); color: var(--accent); }
+    button.btn:hover, button.btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
     .act-strip {
-      display: none;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 12px 16px;
-      margin-bottom: 16px;
+      display: none; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 12px 16px; margin-bottom: 16px;
     }
     .act-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
     .act-step {
@@ -108,34 +76,75 @@
     .ending-banner {
       display: none;
       background: linear-gradient(135deg, rgba(240, 180, 41, 0.22), rgba(210, 153, 34, 0.08));
-      border: 1px solid rgba(240, 180, 41, 0.6);
-      border-radius: 14px;
-      padding: 14px 18px;
-      margin-bottom: 16px;
-      color: #fde68a;
-      font-weight: 700;
-      font-size: 15px;
+      border: 1px solid rgba(240, 180, 41, 0.6); border-radius: 14px;
+      padding: 14px 18px; margin-bottom: 16px; color: #fde68a; font-weight: 700; font-size: 15px;
     }
-    .grid { display: grid; grid-template-columns: 370px 1fr; gap: 18px; align-items: start; }
-    @media (max-width: 920px) { .grid { grid-template-columns: 1fr; } }
+    .grid { display: grid; grid-template-columns: 375px 1fr; gap: 18px; align-items: start; }
+    @media (max-width: 940px) { .grid { grid-template-columns: 1fr; } }
     .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 16px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px; margin-bottom: 16px;
     }
     .panel h2 {
       margin: 0 0 12px; font-size: 15px; color: var(--accent);
-      display: flex; align-items: center; justify-content: space-between;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
       border-bottom: 1px solid var(--border); padding-bottom: 8px;
     }
+    /* Interactive SVG Map */
+    .map-canvas-wrap {
+      background: radial-gradient(circle at center, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.32) 100%);
+      border: 1px solid var(--border); border-radius: 12px; overflow: hidden; position: relative;
+    }
+    .map-svg { width: 100%; height: auto; display: block; max-height: 360px; }
+    .map-node-g { cursor: pointer; }
+    .map-node-g:hover .node-core { filter: brightness(1.25); }
+    @keyframes pulseRing {
+      0% { opacity: 0.85; transform: scale(1); }
+      70% { opacity: 0.1; transform: scale(1.7); }
+      100% { opacity: 0; transform: scale(1.85); }
+    }
+    .pulse-ring { transform-box: fill-box; transform-origin: center; animation: pulseRing 2.2s ease-out infinite; }
+    .map-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 11px; color: var(--muted); }
+    .node-inspector {
+      display: none; margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+      background: var(--surface-2); border: 1px solid var(--accent-border); font-size: 12px; line-height: 1.6;
+    }
+    /* Bulletins & Echoes */
+    .bulletin-card {
+      background: linear-gradient(135deg, var(--accent-soft), rgba(0, 0, 0, 0.25));
+      border: 1px solid var(--accent-border); border-left: 4px solid var(--accent);
+      border-radius: 10px; padding: 11px 13px; margin-bottom: 10px;
+    }
+    .bulletin-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .bulletin-head { font-weight: 700; color: var(--accent); font-size: 14px; margin-bottom: 4px; }
+    .bulletin-body { font-size: 13px; line-height: 1.6; color: var(--text); }
+    .echo-card {
+      background: rgba(192, 132, 252, 0.08); border: 1px solid rgba(192, 132, 252, 0.34);
+      border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; font-size: 12px; line-height: 1.55;
+    }
+    /* Chronicle */
+    .filter-row { display: flex; gap: 5px; }
+    .filter-row button.btn { padding: 3px 8px; font-size: 11px; border-radius: 7px; }
+    .chron-list { max-height: 280px; overflow-y: auto; padding-right: 4px; }
+    .chron-item {
+      display: grid; grid-template-columns: 48px 1fr; gap: 8px; align-items: start;
+      padding: 8px 10px; border-radius: 9px; background: var(--surface-2);
+      border: 1px solid var(--border); margin-bottom: 7px; cursor: pointer; font-size: 12px;
+      transition: border-color 0.2s;
+    }
+    .chron-item:hover { border-color: var(--accent); }
+    .chron-item.imp-3 { border-left: 3px solid var(--accent); }
+    .chron-item.imp-2 { border-left: 3px solid var(--san); }
+    .chron-tag {
+      display: inline-block; text-align: center; padding: 2px 6px; border-radius: 6px;
+      font-size: 11px; font-weight: 700; background: rgba(255,255,255,0.06); color: var(--accent);
+    }
+    .chron-head { font-weight: 700; color: var(--text); margin-bottom: 2px; }
+    .chron-meta { font-size: 11px; color: var(--muted); }
+    /* Party & Cards */
     .player-card {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px;
-      margin-bottom: 10px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px; margin-bottom: 10px;
     }
     .player-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
     .player-name { font-weight: 700; font-size: 15px; }
@@ -158,13 +167,10 @@
     .list-item.unlocked { border-color: rgba(63, 185, 80, 0.45); }
     .npc-head { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 3px; }
     .turn-card {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--accent);
-      border-radius: 12px;
-      padding: 14px 16px;
-      margin-bottom: 14px;
+      background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+      border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; transition: box-shadow 0.35s;
     }
+    .turn-card.flash { box-shadow: 0 0 0 2px var(--accent), 0 0 24px var(--accent-soft); }
     .turn-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
     .turn-title { font-weight: 700; color: var(--accent); font-size: 15px; }
     .turn-meta { font-size: 12px; color: var(--muted); }
@@ -193,6 +199,7 @@
       </div>
       <div class="controls">
         <span id="sse-pill" class="pill live"><span id="sse-dot" class="dot"></span><span id="sse-text">实时同步中</span></span>
+        <button id="poster-btn" class="btn" type="button">🖼️ 导出故事长图</button>
         <button id="order-btn" class="btn" type="button">最新在顶</button>
         <button id="refresh-btn" class="btn" type="button">↻ 刷新</button>
       </div>
@@ -209,6 +216,10 @@
           <h2><span>⚔️ 冒险小队</span><span id="party-count" class="pill">0 人</span></h2>
           <div id="party-list"></div>
         </section>
+        <section class="panel" id="bulletin-panel" style="display:none">
+          <h2><span>📰 幕间暗流号外</span><span id="bulletin-count" class="pill accent">0</span></h2>
+          <div id="bulletin-list"></div>
+        </section>
         <section class="panel">
           <h2><span>🗣️ 关键 NPC 态度</span><span id="npc-count" class="pill">0</span></h2>
           <div id="npc-list"></div>
@@ -217,6 +228,10 @@
           <h2><span>🔎 已掌握线索</span><span id="clue-count" class="pill">0</span></h2>
           <div id="clue-list"></div>
         </section>
+        <section class="panel" id="echo-panel" style="display:none">
+          <h2><span>🌀 本服轮回残响</span><span id="echo-count" class="pill echo">0</span></h2>
+          <div id="echo-list"></div>
+        </section>
         <section class="panel" id="gallery-panel" style="display:none">
           <h2><span>🏆 本剧本结局图鉴</span><span id="gallery-count" class="pill">0/0</span></h2>
           <div id="gallery-list"></div>
@@ -224,6 +239,35 @@
       </aside>
 
       <main>
+        <section class="panel" id="map-panel" style="display:none">
+          <h2>
+            <span>🗺️ 实时场景沙盘与站位</span>
+            <span id="map-active-pill" class="pill accent">定位中</span>
+          </h2>
+          <div class="map-canvas-wrap">
+            <svg id="map-svg" class="map-svg" viewBox="0 0 100 62" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+          <div class="map-legend">
+            <span>● 金/青光圈：当前主镜头</span>
+            <span>● 彩色圆徽：玩家实时站位</span>
+            <span>◆ 菱形徽：关键 NPC</span>
+            <span>┈🔒 虚线：受限通道（点击节点查看详情）</span>
+          </div>
+          <div id="node-inspector" class="node-inspector"></div>
+        </section>
+
+        <section class="panel" id="chronicle-panel" style="display:none">
+          <h2>
+            <span>📜 编年史大事记</span>
+            <div class="filter-row">
+              <button class="btn active" type="button" data-imp="1">全部</button>
+              <button class="btn" type="button" data-imp="2">重要 ≥2</button>
+              <button class="btn" type="button" data-imp="3">里程碑</button>
+            </div>
+          </h2>
+          <div id="chronicle-list" class="chron-list"></div>
+        </section>
+
         <section class="panel" id="summary-panel" style="display:none">
           <h2><span>📖 前情提要</span><span id="summary-upto" class="pill"></span></h2>
           <div id="summary-body" class="turn-story"></div>
@@ -246,9 +290,19 @@
       const params = new URLSearchParams(window.location.search);
       const token = params.get("token") || "";
       let newestFirst = true;
+      let minImportance = 1;
+      let selectedNodeId = null;
       let lastData = null;
       let es = null;
       let stopped = false;
+
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const PIN_COLORS = ["#f59e0b", "#38bdf8", "#34d399", "#f472b6", "#a78bfa", "#fb7185"];
+      const THEME_PALETTES = {
+        ember: { bg: "#120e0b", card: "#1e1712", border: "#443426", accent: "#f0b429", text: "#f3ece4", muted: "#a69582" },
+        fog:   { bg: "#09101d", card: "#121e33", border: "#2a3e61", accent: "#79c0ff", text: "#e6edf8", muted: "#8b9ec0" },
+        metro: { bg: "#07110e", card: "#10211d", border: "#1f423a", accent: "#34d399", text: "#e4f7f0", muted: "#7ea89b" }
+      };
 
       function el(tag, className, text) {
         const node = document.createElement(tag);
@@ -256,27 +310,24 @@
         if (text !== undefined && text !== null) node.textContent = String(text);
         return node;
       }
-
+      function svgEl(tag, attrs, text) {
+        const node = document.createElementNS(SVG_NS, tag);
+        if (attrs) Object.keys(attrs).forEach(k => node.setAttribute(k, String(attrs[k])));
+        if (text !== undefined && text !== null) node.textContent = String(text);
+        return node;
+      }
       function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
-
       function setBanner(msg) {
         const b = document.getElementById("banner");
         if (!msg) { b.style.display = "none"; return; }
-        b.textContent = msg;
-        b.style.display = "block";
+        b.textContent = msg; b.style.display = "block";
       }
-
       function setLiveState(ok, label) {
-        const pill = document.getElementById("sse-pill");
-        const dot = document.getElementById("sse-dot");
-        const txt = document.getElementById("sse-text");
-        pill.className = ok ? "pill live" : "pill warn";
-        dot.className = ok ? "dot" : "dot warn";
-        txt.textContent = label;
+        document.getElementById("sse-pill").className = ok ? "pill live" : "pill warn";
+        document.getElementById("sse-dot").className = ok ? "dot" : "dot warn";
+        document.getElementById("sse-text").textContent = label;
       }
-
       function fmtMod(v) { return (v >= 0 ? "+" : "") + v; }
-
       function kindLabel(kind) {
         if (kind === "true") return "🌟 真结局";
         if (kind === "secret") return "🔮 隐藏结局";
@@ -284,7 +335,12 @@
         if (kind === "good") return "✨ 佳结局";
         return "📜 普通结局";
       }
-
+      function nodeColor(kind, accent) {
+        if (kind === "danger") return "#f85149";
+        if (kind === "mystery") return "#79c0ff";
+        if (kind === "secret") return "#c084fc";
+        return accent;
+      }
       function renderBar(label, cur, max, cls) {
         const row = el("div", "bar-row");
         row.appendChild(el("span", "", label));
@@ -298,11 +354,321 @@
         return row;
       }
 
+      function renderMap(data) {
+        const panel = document.getElementById("map-panel");
+        const map = data.map;
+        if (!map || !map.nodes || !map.nodes.length) {
+          panel.style.display = "none";
+          return;
+        }
+        panel.style.display = "block";
+        const pal = THEME_PALETTES[data.theme] || THEME_PALETTES.ember;
+        const svg = document.getElementById("map-svg");
+        clear(svg);
+
+        // Subtle cartographic grid lines
+        for (let gx = 10; gx < 100; gx += 10) {
+          svg.appendChild(svgEl("line", { x1: gx, y1: 0, x2: gx, y2: 62, stroke: pal.border, "stroke-width": 0.16, "stroke-opacity": 0.45 }));
+        }
+        for (let gy = 10; gy < 62; gy += 10) {
+          svg.appendChild(svgEl("line", { x1: 0, y1: gy, x2: 100, y2: gy, stroke: pal.border, "stroke-width": 0.16, "stroke-opacity": 0.45 }));
+        }
+
+        const nodeById = new Map();
+        map.nodes.forEach(n => {
+          nodeById.set(n.id, { ...n, sx: 12 + (n.x / 100) * 76, sy: 10 + (n.y / 100) * 42 });
+        });
+        const activeNode = nodeById.get(map.active_node_id);
+        document.getElementById("map-active-pill").textContent = "📍 " + (activeNode ? activeNode.name : data.location);
+
+        // Draw edges
+        (map.edges || []).forEach(e => {
+          const a = nodeById.get(e.from), b = nodeById.get(e.to);
+          if (!a || !b) return;
+          const bothVisited = a.visited && b.visited;
+          svg.appendChild(svgEl("line", {
+            x1: a.sx, y1: a.sy, x2: b.sx, y2: b.sy,
+            stroke: bothVisited ? pal.accent : pal.muted,
+            "stroke-width": bothVisited ? 0.55 : 0.35,
+            "stroke-opacity": bothVisited ? 0.72 : 0.35,
+            "stroke-dasharray": e.locked ? "1.6 1.2" : "none"
+          }));
+          if (e.label || e.locked) {
+            const mx = (a.sx + b.sx) / 2, my = (a.sy + b.sy) / 2 - 1.1;
+            const lbl = (e.locked ? "🔒" : "") + (e.label || "");
+            const bgW = Math.min(22, Math.max(6, Array.from(lbl).length * 2.1 + 1.8));
+            svg.appendChild(svgEl("rect", {
+              x: mx - bgW / 2, y: my - 2.2, width: bgW, height: 2.9, rx: 0.8,
+              fill: pal.bg, "fill-opacity": 0.78
+            }));
+            svg.appendChild(svgEl("text", {
+              x: mx, y: my, fill: pal.muted, "font-size": 2.05, "text-anchor": "middle"
+            }, lbl));
+          }
+        });
+
+        // Group player & NPC pins by node using safe Map (immune to prototype keys)
+        const pByNode = new Map(), nByNode = new Map();
+        (map.player_pins || []).forEach((p, idx) => {
+          if (!pByNode.has(p.node_id)) pByNode.set(p.node_id, []);
+          pByNode.get(p.node_id).push({ ...p, color: PIN_COLORS[idx % PIN_COLORS.length] });
+        });
+        (map.npc_pins || []).forEach(n => {
+          if (!nByNode.has(n.node_id)) nByNode.set(n.node_id, []);
+          nByNode.get(n.node_id).push(n);
+        });
+
+        // Draw nodes & avatar pins
+        map.nodes.forEach(raw => {
+          const n = nodeById.get(raw.id);
+          const isActive = n.id === map.active_node_id;
+          const isSelected = n.id === selectedNodeId;
+          const col = nodeColor(n.kind, pal.accent);
+          const g = svgEl("g", { class: "map-node-g" });
+          g.addEventListener("click", () => {
+            selectedNodeId = (selectedNodeId === n.id) ? null : n.id;
+            renderMap(lastData);
+          });
+
+          if (isActive) {
+            g.appendChild(svgEl("circle", {
+              cx: n.sx, cy: n.sy, r: 3.4, fill: "none", stroke: pal.accent, "stroke-width": 0.45, class: "pulse-ring"
+            }));
+          }
+          if (isSelected) {
+            g.appendChild(svgEl("circle", {
+              cx: n.sx, cy: n.sy, r: 4.1, fill: "none", stroke: "#ffffff", "stroke-width": 0.4, "stroke-dasharray": "1 0.8"
+            }));
+          }
+          g.appendChild(svgEl("circle", {
+            cx: n.sx, cy: n.sy, r: isActive ? 2.8 : 2.2, class: "node-core",
+            fill: n.visited ? pal.card : "#0b0d10",
+            stroke: n.visited ? col : pal.border,
+            "stroke-width": isActive ? 0.75 : 0.5,
+            opacity: n.visited ? 1 : 0.6
+          }));
+          g.appendChild(svgEl("circle", { cx: n.sx, cy: n.sy, r: 0.9, fill: n.visited ? col : pal.muted }));
+          g.appendChild(svgEl("text", {
+            x: n.sx, y: n.sy + 5.5, fill: isActive ? pal.accent : (n.visited ? pal.text : pal.muted),
+            "font-size": isActive ? 2.75 : 2.4, "font-weight": isActive ? "700" : "500", "text-anchor": "middle"
+          }, n.name));
+
+          // Pin player circular avatars cleanly along upper arc (up to 4 + overflow "+N" badge)
+          const pins = pByNode.get(n.id) || [];
+          const shown = pins.length > 5 ? pins.slice(0, 4) : pins;
+          const totalBadges = shown.length + (pins.length > 5 ? 1 : 0);
+          shown.forEach((p, idx) => {
+            const span = totalBadges === 1 ? 0 : 120;
+            const deg = totalBadges === 1 ? -90 : (-150 + (idx * span) / (totalBadges - 1));
+            const rad = deg * Math.PI / 180;
+            const px = n.sx + Math.cos(rad) * 5.2;
+            const py = n.sy + Math.sin(rad) * 4.5;
+            const pg = svgEl("g", { opacity: p.is_afk ? 0.45 : 1 });
+            pg.appendChild(svgEl("title", {}, p.character_name + "（" + p.role_desc + "｜HP " + p.hp + "/" + p.max_hp + "）"));
+            pg.appendChild(svgEl("circle", {
+              cx: px, cy: py, r: 2.05, fill: p.color,
+              stroke: p.action_ready ? "#7ee787" : "#0b0d10", "stroke-width": p.action_ready ? 0.55 : 0.4
+            }));
+            const initial = Array.from(p.character_name || "?")[0] || "?";
+            pg.appendChild(svgEl("text", {
+              x: px, y: py + 0.78, fill: "#090b0f", "font-size": 1.95, "font-weight": "700", "text-anchor": "middle"
+            }, initial));
+            g.appendChild(pg);
+          });
+          if (pins.length > 5) {
+            const rad = (-30) * Math.PI / 180;
+            const ox = n.sx + Math.cos(rad) * 5.2, oy = n.sy + Math.sin(rad) * 4.5;
+            g.appendChild(svgEl("circle", { cx: ox, cy: oy, r: 2.05, fill: pal.card, stroke: pal.accent, "stroke-width": 0.45 }));
+            g.appendChild(svgEl("text", { x: ox, y: oy + 0.7, fill: pal.accent, "font-size": 1.7, "font-weight": "700", "text-anchor": "middle" }, "+" + (pins.length - 4)));
+          }
+
+          // Pin NPC diamond badges on lower-right side
+          const npins = nByNode.get(n.id) || [];
+          npins.slice(0, 3).forEach((np, idx) => {
+            const nx = n.sx + 4.2 + idx * 2.8, ny = n.sy + 1.5;
+            const ng = svgEl("g", {});
+            ng.appendChild(svgEl("title", {}, "NPC " + np.name + "（" + (np.attitude || "中立") + "）" + (np.status ? "：" + np.status : "")));
+            ng.appendChild(svgEl("polygon", {
+              points: nx + "," + (ny - 1.3) + " " + (nx + 1.3) + "," + ny + " " + nx + "," + (ny + 1.3) + " " + (nx - 1.3) + "," + ny,
+              fill: "#e2e8f0", stroke: pal.bg, "stroke-width": 0.35
+            }));
+            g.appendChild(ng);
+          });
+          svg.appendChild(g);
+        });
+
+        // Inspector panel for clicked node
+        const insp = document.getElementById("node-inspector");
+        clear(insp);
+        const sn = selectedNodeId ? nodeById.get(selectedNodeId) : null;
+        if (sn) {
+          insp.style.display = "block";
+          insp.appendChild(el("div", "turn-title", "🧭 区域详情：" + sn.name + (sn.id === map.active_node_id ? "（当前主镜头）" : (sn.visited ? "（已探索）" : "（未探索）"))));
+          const hereP = (pByNode.get(sn.id) || []).map(p => p.character_name + " (" + p.hp + "/" + p.max_hp + "HP)").join("、") || "无";
+          const hereN = (nByNode.get(sn.id) || []).map(n => n.name + " [" + (n.attitude || "中立") + "]").join("、") || "无";
+          insp.appendChild(el("div", "", "⚔️ 在此角色：" + hereP));
+          insp.appendChild(el("div", "", "🗣️ 在此 NPC：" + hereN));
+        } else {
+          insp.style.display = "none";
+        }
+      }
+
+      function renderChronicle(data) {
+        const panel = document.getElementById("chronicle-panel");
+        const list = document.getElementById("chronicle-list");
+        clear(list);
+        const all = data.chronicle || [];
+        if (!all.length) { panel.style.display = "none"; return; }
+        panel.style.display = "block";
+        const filtered = all.filter(c => c.importance >= minImportance);
+        if (!filtered.length) {
+          list.appendChild(el("div", "empty", "当前筛选级别暂无大事记，点「全部」查看完整记录。"));
+          return;
+        }
+        filtered.slice().reverse().forEach(c => {
+          const row = el("div", "chron-item imp-" + c.importance);
+          row.appendChild(el("span", "chron-tag", c.tag));
+          const body = el("div");
+          body.appendChild(el("div", "chron-head", "第 " + c.turn_number + " 回合 · " + c.headline));
+          body.appendChild(el("div", "chron-meta", c.location + " ｜ " + c.detail));
+          row.appendChild(body);
+          row.addEventListener("click", () => {
+            const target = document.getElementById("turn-card-" + c.turn_number);
+            if (target) {
+              target.scrollIntoView({ behavior: "smooth", block: "center" });
+              target.classList.add("flash");
+              setTimeout(() => target.classList.remove("flash"), 1600);
+            }
+          });
+          list.appendChild(row);
+        });
+      }
+
+      function exportPoster() {
+        if (!lastData) return;
+        const d = lastData;
+        const pal = THEME_PALETTES[d.theme] || THEME_PALETTES.ember;
+        const W = 860, pad = 42, colW = W - pad * 2;
+
+        const tmp = document.createElement("canvas").getContext("2d");
+        if (!tmp) return;
+        function wrapLines(text, font, maxW, maxLines) {
+          tmp.font = font;
+          const out = [];
+          const paras = String(text || "").split(/\n/);
+          for (let i = 0; i < paras.length; i++) {
+            let line = "";
+            for (const ch of Array.from(paras[i])) {
+              if (tmp.measureText(line + ch).width > maxW) {
+                out.push(line);
+                if (maxLines && out.length >= maxLines) return out;
+                line = ch;
+              } else { line += ch; }
+            }
+            if (line) {
+              out.push(line);
+              if (maxLines && out.length >= maxLines) return out;
+            }
+          }
+          return out;
+        }
+
+        const milestones = (d.chronicle || []).filter(c => c.importance >= 2).slice(-8);
+        const clues = (d.clues || []).slice(0, 6);
+        const players = (d.players || []).slice(0, 8);
+
+        let estH = 220 + (d.ended_title ? 66 : 0) + Math.max(1, players.length) * 58 + 70
+          + Math.max(1, milestones.length) * 68 + 70 + Math.max(1, clues.length) * 32 + 120;
+        const H = Math.min(2800, Math.max(760, estH));
+
+        const cv = document.createElement("canvas");
+        cv.width = W; cv.height = H;
+        const ctx = cv.getContext("2d");
+        if (!ctx) return;
+
+        ctx.fillStyle = pal.bg; ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = pal.accent; ctx.lineWidth = 2;
+        ctx.strokeRect(16, 16, W - 32, H - 32);
+
+        let y = 66;
+        ctx.fillStyle = pal.accent; ctx.font = "bold 28px PingFang SC, Microsoft YaHei, sans-serif";
+        ctx.fillText("🎭 《" + d.title + "》冒险纪念长图", pad, y, colW); y += 34;
+        ctx.fillStyle = pal.muted; ctx.font = "15px PingFang SC, Microsoft YaHei, sans-serif";
+        ctx.fillText("📍 " + d.location + "   ｜   🕒 " + d.world_time + "   ｜   🎲 共 " + d.turn_number + " 回合", pad, y, colW); y += 26;
+
+        if (d.ended_title) {
+          ctx.fillStyle = "rgba(240,180,41,0.18)"; ctx.fillRect(pad, y, colW, 46);
+          ctx.strokeStyle = pal.accent; ctx.strokeRect(pad, y, colW, 46);
+          ctx.fillStyle = "#fde68a"; ctx.font = "bold 18px PingFang SC, Microsoft YaHei, sans-serif";
+          ctx.fillText("🏆 达成结局：《" + d.ended_title + "》", pad + 16, y + 29, colW - 32);
+          y += 62;
+        }
+
+        function sectionTitle(label) {
+          y += 14;
+          ctx.fillStyle = pal.accent; ctx.font = "bold 18px PingFang SC, Microsoft YaHei, sans-serif";
+          ctx.fillText(label, pad, y, colW); y += 10;
+          ctx.fillStyle = pal.border; ctx.fillRect(pad, y, colW, 1.5); y += 22;
+        }
+
+        sectionTitle("⚔️ 冒险小队名录");
+        if (!players.length) {
+          ctx.fillStyle = pal.muted; ctx.font = "14px sans-serif"; ctx.fillText("（暂无建卡角色）", pad, y, colW); y += 28;
+        } else {
+          players.forEach(p => {
+            if (y > H - 220) return;
+            ctx.fillStyle = pal.card; ctx.fillRect(pad, y - 16, colW, 46);
+            ctx.fillStyle = pal.text; ctx.font = "bold 15px PingFang SC, sans-serif";
+            ctx.fillText(p.character_name + "（" + p.role_desc + "）", pad + 12, y + 3, colW - 24);
+            ctx.fillStyle = pal.muted; ctx.font = "13px PingFang SC, sans-serif";
+            ctx.fillText("❤️ HP " + p.hp + "/" + p.max_hp + "   🧠 SAN " + p.san + "/" + p.max_san + "   📍 " + (p.location || d.location), pad + 12, y + 22, colW - 24);
+            y += 54;
+          });
+        }
+
+        sectionTitle("📜 编年史高光大事记");
+        if (!milestones.length) {
+          ctx.fillStyle = pal.muted; ctx.font = "14px sans-serif"; ctx.fillText("冒险刚刚启程，等待更多高光时刻…", pad, y, colW); y += 28;
+        } else {
+          milestones.forEach(c => {
+            if (y > H - 170) return;
+            ctx.fillStyle = pal.accent; ctx.font = "bold 14px PingFang SC, sans-serif";
+            ctx.fillText("[" + c.tag + "] 第 " + c.turn_number + " 回合 · " + c.headline, pad, y, colW); y += 20;
+            ctx.fillStyle = pal.text; ctx.font = "13px PingFang SC, sans-serif";
+            wrapLines(c.detail, ctx.font, colW - 14, 2).forEach(ln => {
+              ctx.fillText("  " + ln, pad, y, colW - 8); y += 19;
+            });
+            y += 8;
+          });
+        }
+
+        if (clues.length && y < H - 100) {
+          sectionTitle("🔎 核心线索归档");
+          ctx.fillStyle = pal.text; ctx.font = "13px PingFang SC, sans-serif";
+          clues.forEach((cl, i) => {
+            if (y > H - 60) return;
+            wrapLines((i + 1) + ". " + cl, ctx.font, colW, 1).forEach(ln => {
+              ctx.fillText(ln, pad, y, colW); y += 24;
+            });
+          });
+        }
+
+        ctx.fillStyle = pal.muted; ctx.font = "12px PingFang SC, sans-serif";
+        ctx.fillText("🍺 KOOK AI 群酒馆 · 实况纪念长图（v1.2）", pad, H - 30, colW);
+
+        const a = document.createElement("a");
+        a.download = "tavern_" + (d.scenario_id || "story") + "_turn" + d.turn_number + ".png";
+        a.href = cv.toDataURL("image/png");
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+
       const ALLOWED_THEMES = new Set(["ember", "fog", "metro"]);
       function render(data) {
         lastData = data;
         document.documentElement.dataset.theme = ALLOWED_THEMES.has(data.theme) ? data.theme : "ember";
-        document.title = "🍺 " + data.title + " · 实况看板";
+        document.title = "🍺 " + data.title + " · 实况沙盘看板";
         document.getElementById("room-title").textContent = "🎭 《" + data.title + "》";
 
         const endBanner = document.getElementById("ending-banner");
@@ -318,29 +684,19 @@
         const phaseTxt = data.ended_title ? "🏆 剧终收束" : (data.turn_phase === "resolving" ? "⏳ DM 推演中…" : "🟢 等待行动");
         const modeTxt = data.chat_mode === "roleplay" ? "💬 直接说话" : "⌨️ 指令前缀";
         const styleTxt = data.narrative_style === "voice" ? "🎙️ 语音极简" : "📖 文字沉浸";
-        [
-          "📍 " + data.location,
-          "🕒 " + data.world_time,
-          "🎲 第 " + data.turn_number + " 回合",
-          phaseTxt,
-          modeTxt,
-          styleTxt
-        ].forEach(t => meta.appendChild(el("span", "pill", t)));
+        ["📍 " + data.location, "🕒 " + data.world_time, "🎲 第 " + data.turn_number + " 回合", phaseTxt, modeTxt, styleTxt]
+          .forEach(t => meta.appendChild(el("span", "pill", t)));
 
         // Act stepper & world flags
         const strip = document.getElementById("act-strip");
         const stepsEl = document.getElementById("act-steps");
         const flagsEl = document.getElementById("flags-row");
-        clear(stepsEl);
-        clear(flagsEl);
-        const acts = data.acts || [];
-        const flags = data.world_flags || [];
+        clear(stepsEl); clear(flagsEl);
+        const acts = data.acts || [], flags = data.world_flags || [];
         if (acts.length || flags.length) {
           strip.style.display = "block";
           acts.forEach(a => {
-            const cls = a.index < data.current_act || data.ended_title
-              ? "act-step done"
-              : (a.index === data.current_act ? "act-step active" : "act-step");
+            const cls = a.index < data.current_act || data.ended_title ? "act-step done" : (a.index === data.current_act ? "act-step active" : "act-step");
             const box = el("div", cls);
             const prefix = a.index < data.current_act || data.ended_title ? "✅ " : (a.index === data.current_act ? "🎬 " : "🔒 ");
             box.appendChild(el("div", "act-step-title", prefix + "第 " + a.index + " 幕 · " + a.title));
@@ -348,9 +704,11 @@
             stepsEl.appendChild(box);
           });
           flags.forEach(f => flagsEl.appendChild(el("span", "pill accent", "🚩 " + f)));
-        } else {
-          strip.style.display = "none";
-        }
+        } else { strip.style.display = "none"; }
+
+        // Map & Chronicle
+        renderMap(data);
+        renderChronicle(data);
 
         // Party
         const partyEl = document.getElementById("party-list");
@@ -373,15 +731,12 @@
             card.appendChild(renderBar("🧠 SAN", p.san, p.max_san, "san"));
             if (p.stats) {
               const sRow = el("div", "stats-row");
-              [
-                ["💪体", p.stats.body], ["🏃敏", p.stats.agility],
-                ["🔍侦", p.stats.investigate], ["🗣️交", p.stats.social], ["✨灵", p.stats.insight]
-              ].forEach(([lbl, val]) => {
-                sRow.appendChild(el("span", "stat-badge" + (val >= 2 ? " high" : ""), lbl + fmtMod(val || 0)));
-              });
+              [["💪体", p.stats.body], ["🏃敏", p.stats.agility], ["🔍侦", p.stats.investigate], ["🗣️交", p.stats.social], ["✨灵", p.stats.insight]]
+                .forEach(([lbl, val]) => sRow.appendChild(el("span", "stat-badge" + (val >= 2 ? " high" : ""), lbl + fmtMod(val || 0))));
               card.appendChild(sRow);
             }
             const chips = el("div", "chips");
+            if (p.location) chips.appendChild(el("span", "chip", "📍 " + p.location));
             (p.traits || []).forEach(tr => chips.appendChild(el("span", "chip gold", "✦ " + tr)));
             (p.inventory || []).forEach(it => chips.appendChild(el("span", "chip", "🎒 " + it)));
             (p.roll_notes || []).forEach(rn => chips.appendChild(el("span", "chip gold", rn)));
@@ -389,6 +744,26 @@
             partyEl.appendChild(card);
           });
         }
+
+        // Bulletins
+        const bPanel = document.getElementById("bulletin-panel");
+        const bList = document.getElementById("bulletin-list");
+        clear(bList);
+        const bulletins = data.bulletins || [];
+        if (bulletins.length) {
+          bPanel.style.display = "block";
+          document.getElementById("bulletin-count").textContent = String(bulletins.length);
+          bulletins.slice().reverse().forEach(b => {
+            const box = el("div", "bulletin-card");
+            const top = el("div", "bulletin-top");
+            top.appendChild(el("span", "", b.masthead + " · 第 " + b.turn_number + " 回合"));
+            if (b.faction) top.appendChild(el("span", "pill accent", b.faction));
+            box.appendChild(top);
+            box.appendChild(el("div", "bulletin-head", "【" + b.headline + "】"));
+            box.appendChild(el("div", "bulletin-body", b.body));
+            bList.appendChild(box);
+          });
+        } else { bPanel.style.display = "none"; }
 
         // NPCs
         const npcEl = document.getElementById("npc-list");
@@ -400,7 +775,7 @@
           data.npc_states.forEach(n => {
             const item = el("div", "list-item");
             const nh = el("div", "npc-head");
-            nh.appendChild(el("span", "", n.name));
+            nh.appendChild(el("span", "", n.name + (n.location ? " · 📍" + n.location : "")));
             nh.appendChild(el("span", "pill", n.attitude || "中立"));
             item.appendChild(nh);
             if (n.status) item.appendChild(el("div", "player-role", n.status));
@@ -417,6 +792,22 @@
         } else {
           data.clues.forEach((c, i) => clueEl.appendChild(el("div", "list-item", (i + 1) + ". " + c)));
         }
+
+        // World Echoes
+        const ePanel = document.getElementById("echo-panel");
+        const eList = document.getElementById("echo-list");
+        clear(eList);
+        const echoes = data.world_echoes || [];
+        if (echoes.length) {
+          ePanel.style.display = "block";
+          document.getElementById("echo-count").textContent = String(echoes.length);
+          echoes.forEach(ec => {
+            const box = el("div", "echo-card");
+            box.appendChild(el("div", "npc-head", "🌀 《" + ec.ending_title + "》残响（" + ec.turn_count + "回合）"));
+            box.appendChild(el("div", "", ec.echo_text));
+            eList.appendChild(box);
+          });
+        } else { ePanel.style.display = "none"; }
 
         // Ending Gallery
         const galPanel = document.getElementById("gallery-panel");
@@ -438,9 +829,7 @@
             }
             galList.appendChild(item);
           });
-        } else {
-          galPanel.style.display = "none";
-        }
+        } else { galPanel.style.display = "none"; }
 
         // Summary
         const sumPanel = document.getElementById("summary-panel");
@@ -448,9 +837,7 @@
           sumPanel.style.display = "block";
           document.getElementById("summary-upto").textContent = "已压缩至第 " + data.summary_upto_turn + " 回合";
           document.getElementById("summary-body").textContent = data.summary;
-        } else {
-          sumPanel.style.display = "none";
-        }
+        } else { sumPanel.style.display = "none"; }
 
         // Story feed
         const feed = document.getElementById("story-feed");
@@ -459,19 +846,16 @@
         const items = [];
         if (data.opening_scene) {
           items.push({
-            turn_number: 0,
-            scene_title: data.title + " · 序幕",
-            location: data.location,
-            world_time: "开局",
-            batched_input: "",
-            narrative: data.opening_scene,
-            state_summary: ""
+            turn_number: 0, scene_title: data.title + " · 序幕",
+            location: data.location, world_time: "开局",
+            batched_input: "", narrative: data.opening_scene, state_summary: ""
           });
         }
         data.turns.forEach(t => items.push(t));
         if (newestFirst) items.reverse();
         items.forEach(t => {
           const card = el("article", "turn-card");
+          card.id = "turn-card-" + t.turn_number;
           const h = el("div", "turn-head");
           h.appendChild(el("div", "turn-title", (t.turn_number === 0 ? "🕯️ " : "第 " + t.turn_number + " 幕 · ") + t.scene_title));
           h.appendChild(el("div", "turn-meta", t.location + " ｜ " + t.world_time));
@@ -520,10 +904,19 @@
       }
 
       document.getElementById("refresh-btn").addEventListener("click", fetchState);
+      document.getElementById("poster-btn").addEventListener("click", exportPoster);
       document.getElementById("order-btn").addEventListener("click", (e) => {
         newestFirst = !newestFirst;
         e.target.textContent = newestFirst ? "最新在顶" : "时间正序";
         if (lastData) render(lastData);
+      });
+      document.querySelectorAll(".filter-row button[data-imp]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          minImportance = Number(btn.dataset.imp) || 1;
+          document.querySelectorAll(".filter-row button[data-imp]").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          if (lastData) renderChronicle(lastData);
+        });
       });
 
       fetchState();

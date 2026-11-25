@@ -3,10 +3,12 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use tavern_domain::{
-    NarrativeStyle, PendingAction, Player, RoomState, Scenario, TurnRecord,
+    NarrativeStyle, PendingAction, Player, RoomState, Scenario, TurnRecord, WorldEcho,
     always_active_worldbook, format_batched_actions, match_dynamic_worldbook,
 };
 use tracing::info;
+
+use crate::prompt_ext::{format_dynamic_director_sections, format_static_rules_and_map};
 
 const DEFAULT_DM_SYSTEM: &str = include_str!("../../../prompts/dm_system.md");
 const DEFAULT_STYLE_PROSE: &str = include_str!("../../../prompts/style_prose.md");
@@ -38,6 +40,7 @@ pub fn build_dm_messages(
     players: &[Player],
     recent_turns: &[TurnRecord],
     actions: &[PendingAction],
+    world_echoes: &[WorldEcho],
 ) -> Vec<ChatMessage> {
     let sys_template = load_prompt_file(prompts_dir, "dm_system.md", DEFAULT_DM_SYSTEM);
     let style_guide = match room.narrative_style {
@@ -60,12 +63,17 @@ pub fn build_dm_messages(
             .join("\n\n")
     };
 
-    let system_prompt = sys_template
+    let mut system_prompt = sys_template
         .replace("{{scenario_name}}", &scenario.name)
         .replace("{{genre}}", &scenario.genre)
         .replace("{{dm_style}}", scenario.dm_style.trim())
         .replace("{{narrative_style_guide}}", style_guide.trim())
         .replace("{{always_lore}}", &always_lore);
+    let static_ext = format_static_rules_and_map(scenario);
+    if !static_ext.is_empty() {
+        system_prompt.push_str("\n\n");
+        system_prompt.push_str(&static_ext);
+    }
 
     let batched_input = format_batched_actions(actions);
     let mut lore_corpus = format!("{}\n{}", room.location, batched_input);
@@ -104,6 +112,14 @@ pub fn build_dm_messages(
         None
     };
 
+    let director_ext = format_dynamic_director_sections(
+        scenario,
+        room,
+        players,
+        recent_turns,
+        actions,
+        world_echoes,
+    );
     let dynamic_block = format_dynamic_turn_prompt(
         scenario,
         room,
@@ -111,6 +127,7 @@ pub fn build_dm_messages(
         &dynamic_lore,
         &batched_input,
         opening_recap,
+        &director_ext,
     );
     messages.push(ChatMessage {
         role: "user".to_string(),
@@ -164,6 +181,7 @@ fn format_dynamic_turn_prompt(
     dynamic_lore: &[&tavern_domain::WorldbookEntry],
     batched_input: &str,
     opening_recap: Option<&str>,
+    director_ext: &str,
 ) -> String {
     let party_block = if players.is_empty() {
         "（暂无正式建卡角色，按冒险者小队统一描写）".to_string()
@@ -182,11 +200,17 @@ fn format_dynamic_turn_prompt(
                     p.inventory.join("、")
                 };
                 let afk_tag = if p.is_afk { " [暂离]" } else { "" };
+                let p_loc = if p.location.trim().is_empty() {
+                    room.location.as_str()
+                } else {
+                    p.location.trim()
+                };
                 format!(
-                    "- {}（{}）{} | HP {}/{} | SAN {}/{} | 五维: {} | 特质: {} | 背包: [{}] | 状态: {}",
+                    "- {}（{}）{} | 位置: {} | HP {}/{} | SAN {}/{} | 五维: {} | 特质: {} | 背包: [{}] | 状态: {}",
                     p.character_name,
                     if p.role_desc.is_empty() { "冒险者" } else { &p.role_desc },
                     afk_tag,
+                    p_loc,
                     p.hp,
                     p.max_hp,
                     p.san,
@@ -233,7 +257,14 @@ fn format_dynamic_turn_prompt(
     } else {
         room.npc_states
             .iter()
-            .map(|n| format!("- {}（{}）：{}", n.name, n.attitude, n.status))
+            .map(|n| {
+                let nloc = if n.location.trim().is_empty() {
+                    String::new()
+                } else {
+                    format!(" @{}", n.location.trim())
+                };
+                format!("- {}（{}{}）：{}", n.name, n.attitude, nloc, n.status)
+            })
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -277,7 +308,7 @@ fn format_dynamic_turn_prompt(
 {endings_block}
 
 【本轮触发的隐藏世界书（仅供 DM 裁决参考，切勿直接全盘剧透）】
-{lore_block}
+{lore_block}{director_ext}
 
 【本轮全体玩家行动（请统一裁决并仅输出合法 JSON）】
 {batched_input}"#,

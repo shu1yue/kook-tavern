@@ -1,0 +1,341 @@
+use serde::{Deserialize, Serialize};
+
+use crate::models::{PendingAction, Player, RoomState, Scenario, TurnRecord};
+use crate::protocol::{DmStructuredReply, StatePatch, WorldBulletinDraft};
+use crate::world::resolve_map_node_id;
+
+/// Spotlight fairness analysis inspired by multi-agent narrative pacing lessons:
+/// ensures quieter active players aren't starved of camera focus by chatty teammates.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SpotlightGuidance {
+    pub sidelined_players: Vec<String>,
+    pub prompt_directive: Option<String>,
+}
+
+pub fn analyze_spotlight(
+    players: &[Player],
+    recent_turns: &[TurnRecord],
+    current_actions: &[PendingAction],
+) -> SpotlightGuidance {
+    let active: Vec<&Player> = players.iter().filter(|p| !p.is_afk).collect();
+    if active.len() < 2 || recent_turns.len() < 2 {
+        return SpotlightGuidance::default();
+    }
+
+    let window: Vec<&TurnRecord> = recent_turns.iter().rev().take(3).collect();
+    let mut sidelined = Vec::new();
+
+    for p in &active {
+        let name = p.character_name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let mut neglected = 0usize;
+        for turn in &window {
+            if turn.narrative.contains(name) {
+                break;
+            }
+            neglected += 1;
+        }
+        let acted_now = current_actions
+            .iter()
+            .any(|a| a.user_id == p.user_id && !a.action_text.trim().is_empty());
+        if neglected >= 2 || (neglected >= 1 && acted_now && window.len() >= 2) {
+            sidelined.push(name.to_string());
+        }
+    }
+
+    if sidelined.is_empty() {
+        return SpotlightGuidance::default();
+    }
+
+    let names = sidelined.join("、");
+    let prompt_directive = format!(
+        "【聚光灯均衡提醒】以下活跃角色最近几轮主镜头偏少：{names}。本轮描写请主动给他们安排专属环境细节、NPC 搭话或发现线索的契机，确保镜头均衡、不冷落任何在线队友（仍严禁替其做决定）。"
+    );
+    SpotlightGuidance {
+        sidelined_players: sidelined,
+        prompt_directive: Some(prompt_directive),
+    }
+}
+
+/// Strictly scoped plan describing WHICH exact omitted fields the one-shot repair may touch.
+/// Prevents double-applying HP/SAN deltas or leaking `private_whispers` into public clues.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsistencyNudgePlan {
+    pub prompt: String,
+    pub want_vitals: bool,
+    pub want_items: bool,
+    pub want_location: bool,
+    pub want_bulletin: bool,
+}
+
+/// Strictly scoped JSON-only repair delta returned by the one-shot consistency nudge.
+/// `deny_unknown_fields` prevents stray non-patch `{...}` objects from silently matching.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DmPatchDelta {
+    #[serde(default)]
+    pub state_patches: Vec<StatePatch>,
+    #[serde(default)]
+    pub location: Option<String>,
+    #[serde(default)]
+    pub world_bulletin: Option<WorldBulletinDraft>,
+}
+
+/// Detects clear mismatches where DM narrative describes concrete state changes
+/// (damage, key item gain, map relocation, or due bulletin) omitted from JSON fields.
+pub fn detect_consistency_nudge(
+    scenario: &Scenario,
+    room: &RoomState,
+    players: &[Player],
+    reply: &DmStructuredReply,
+    bulletin_expected: bool,
+) -> Option<ConsistencyNudgePlan> {
+    if players.is_empty() || reply.narrative.trim().is_empty() {
+        return None;
+    }
+
+    let mut issues = Vec::new();
+    let text = reply.narrative.as_str();
+    let text_low = text.to_ascii_lowercase();
+
+    let mut want_vitals = false;
+    let mut want_items = false;
+    let mut want_location = false;
+    let mut want_bulletin = false;
+
+    // 1. Explicit damage / SAN shock narrated, yet zero HP/SAN delta across all state_patches
+    let has_hp_or_san_patch = reply
+        .state_patches
+        .iter()
+        .any(|p| p.hp_delta != 0 || p.san_delta != 0);
+    let damage_cues = [
+        "受了伤", "鲜血渗出", "划开一道口子", "重重摔", "一阵剧痛", "灼伤",
+        "理智一震", "头晕目眩", "san值", "一阵恶寒直冲脑海", "咳出血", "击中肩膀",
+    ];
+    if !has_hp_or_san_patch && damage_cues.iter().any(|k| text_low.contains(k)) {
+        want_vitals = true;
+        issues.push(
+            "正文描写了角色受伤或理智受创，但 `state_patches` 中未填写任何 `hp_delta`/`san_delta`（若确实未造成数值变化可留空，否则请补全）"
+                .to_string(),
+        );
+    }
+
+    // 2. Explicit key item handed over / picked up, yet zero add_items
+    let has_add_item = reply.state_patches.iter().any(|p| !p.add_items.is_empty());
+    let gain_verbs = ["递给你", "交给了", "塞进你手", "拾起了", "摸出了", "收入囊中", "揣进怀里", "拿到了"];
+    let item_nouns = ["钥匙", "怀表", "药剂", "抗雾剂", "铜哨", "手电", "简图", "银盾", "纸条", "密信", "短刃", "手术刀", "平安符"];
+    if !has_add_item
+        && gain_verbs.iter().any(|v| text.contains(v))
+        && item_nouns.iter().any(|n| text.contains(n))
+    {
+        want_items = true;
+        issues.push(
+            "正文描写了角色拿到/获赠关键道具，但 `state_patches.add_items` 为空，请仅补全对应角色的 `add_items`（勿重复已扣过的 HP/SAN）"
+                .to_string(),
+        );
+    }
+
+    // 3. Explicit relocation to a different known scenario map node, yet `location` unchanged
+    if !scenario.map_nodes.is_empty() {
+        let cur_node = resolve_map_node_id(&scenario.map_nodes, &room.location);
+        let reply_loc = reply.location.as_deref().unwrap_or(&room.location);
+        let reply_node = resolve_map_node_id(&scenario.map_nodes, reply_loc);
+        if reply_node == cur_node {
+            let move_verbs = ["来到", "步入", "推门进入", "走下", "踏入", "抵达", "钻进", "穿过连接门进入"];
+            if move_verbs.iter().any(|v| text.contains(v)) {
+                for node in &scenario.map_nodes {
+                    if Some(node.id.as_str()) == cur_node.as_deref() {
+                        continue;
+                    }
+                    let moved_there = move_verbs.iter().any(|v| {
+                        text.contains(&format!("{v}{}", node.name))
+                            || node
+                                .aliases
+                                .iter()
+                                .any(|a| a.chars().count() >= 2 && text.contains(&format!("{v}{a}")))
+                    });
+                    if moved_there {
+                        want_location = true;
+                        issues.push(format!(
+                            "正文已将小队带入新地点「{}」，但 `location` 仍停留在「{}」，请更新 `location`",
+                            node.name, reply_loc
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Scheduled in-world bulletin was requested this turn but omitted
+    if bulletin_expected && reply.world_bulletin.is_none() {
+        want_bulletin = true;
+        issues.push(
+            "本轮已触发幕间暗流号外窗口，但未返回 `world_bulletin`，请补写一条简短的幕后势力号外（严禁泄露任何 private_whispers 内容）"
+                .to_string(),
+        );
+    }
+
+    if issues.is_empty() {
+        return None;
+    }
+
+    let player_names = players
+        .iter()
+        .map(|p| p.character_name.as_str())
+        .collect::<Vec<_>>()
+        .join("、");
+    let prompt = format!(
+        "【状态一致性补齐校验】检测到正文与结构化字段可能存在遗漏：\n- {}\n\n当前角色名单：[{}]。\n请**仅输出一个合法 JSON 补丁对象**（只填本次遗漏项，严禁重复首轮已扣过的 HP/SAN，严禁泄露任何私密纸条），结构严格限定为：\n{{\"state_patches\":[],\"location\":null,\"world_bulletin\":null}}\n如果经核实某项无需改动，请保持空数组或 null。",
+        issues.join("\n- "),
+        player_names
+    );
+    Some(ConsistencyNudgePlan {
+        prompt,
+        want_vitals,
+        want_items,
+        want_location,
+        want_bulletin,
+    })
+}
+
+/// Safely merges ONLY the fields explicitly requested by `plan`, preventing double-applied
+/// HP/SAN deltas or unintended state mutations.
+pub fn merge_patch_delta(
+    reply: &mut DmStructuredReply,
+    plan: &ConsistencyNudgePlan,
+    delta: DmPatchDelta,
+) {
+    if plan.want_vitals || plan.want_items {
+        for mut p in delta.state_patches {
+            if !plan.want_vitals {
+                p.hp_delta = 0;
+                p.san_delta = 0;
+            }
+            if !plan.want_items {
+                p.add_items.clear();
+            }
+            p.remove_items.clear();
+            p.status_note = None;
+            p.location = None;
+            if p.hp_delta != 0 || p.san_delta != 0 || !p.add_items.is_empty() {
+                reply.state_patches.push(p);
+            }
+        }
+    }
+    if plan.want_location
+        && let Some(loc) = delta.location.map(|s| s.trim().to_string())
+        && !loc.is_empty()
+    {
+        reply.location = Some(loc);
+    }
+    if plan.want_bulletin && reply.world_bulletin.is_none() && delta.world_bulletin.is_some() {
+        reply.world_bulletin = delta.world_bulletin;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+
+    use super::*;
+    use crate::models::{ChatMode, NarrativeStyle, StarterCharacterDefaults, TurnPhase};
+    use crate::world::ScenarioMapNode;
+
+    fn mk_player(uid: &str, name: &str) -> Player {
+        Player {
+            channel_id: "c1".into(), user_id: uid.into(), character_name: name.into(),
+            role_desc: "旅人".into(), traits: vec![], hp: 10, max_hp: 10, san: 10, max_san: 10,
+            inventory: vec![], status_note: String::new(), is_afk: false,
+            stats: Default::default(), location: String::new(),
+        }
+    }
+
+    #[test]
+    fn spotlight_and_scoped_merge_prevent_double_damage() {
+        let now = Utc::now();
+        let players = vec![mk_player("u1", "阿明"), mk_player("u2", "小红")];
+        let turns = vec![
+            TurnRecord {
+                id: 1, channel_id: "c1".into(), turn_number: 1, batched_input: "".into(),
+                scene_title: "1".into(), narrative: "阿明和老雷恩聊得很起劲。".into(),
+                state_summary: "".into(), location: "大厅".into(), world_time: "21:00".into(),
+                created_at: now,
+            },
+            TurnRecord {
+                id: 2, channel_id: "c1".into(), turn_number: 2, batched_input: "".into(),
+                scene_title: "2".into(), narrative: "阿明推开了吧台后的暗门。".into(),
+                state_summary: "".into(), location: "大厅".into(), world_time: "21:10".into(),
+                created_at: now,
+            },
+        ];
+        assert_eq!(analyze_spotlight(&players, &turns, &[]).sidelined_players, vec!["小红"]);
+        assert!(analyze_spotlight(&players[..1], &turns, &[]).sidelined_players.is_empty());
+
+        let sc = Scenario {
+            id: "s1".into(), name: "S".into(), tagline: "t".into(), genre: "g".into(),
+            theme: "ember".into(), dm_style: "d".into(), initial_location: "酒馆大厅".into(),
+            initial_time: "21:00".into(), opening_scene: "开场足够长一段场景文字描写。".into(),
+            opening_actions: vec![], player_defaults: StarterCharacterDefaults {
+                max_hp: 10, max_san: 10, starter_items: vec![],
+            },
+            preset_roles: vec![], acts: vec![], endings: vec![], worldbook: vec![],
+            map_nodes: vec![
+                ScenarioMapNode {
+                    id: "hall".into(), name: "酒馆大厅".into(), x: 20.0, y: 50.0,
+                    aliases: vec!["大厅".into()], kind: "hub".into(),
+                },
+                ScenarioMapNode {
+                    id: "cellar".into(), name: "地下酒窖".into(), x: 40.0, y: 80.0,
+                    aliases: vec!["酒窖".into()], kind: "mystery".into(),
+                },
+            ],
+            map_edges: vec![], rules: Default::default(),
+        };
+        let room = RoomState {
+            channel_id: "c1".into(), guild_id: "g1".into(), scenario_id: "s1".into(),
+            title: "S".into(), location: "酒馆大厅".into(), world_time: "21:00".into(),
+            turn_number: 1, state_version: 1, turn_phase: TurnPhase::Collecting,
+            chat_mode: ChatMode::Strict, narrative_style: NarrativeStyle::Prose,
+            gm_user_id: "u1".into(), web_token: "tok".into(), clues: vec![], npc_states: vec![],
+            suggested_actions: vec![], current_act: 1, world_flags: vec![],
+            ended_id: None, ended_title: None, bulletins: vec![], summary: String::new(),
+            summary_upto_turn: 0, active: true, created_at: now, updated_at: now,
+        };
+        // Primary reply already deducted HP -3, only missed item & location!
+        let mut reply = DmStructuredReply {
+            scene_title: "深入地窖".into(),
+            narrative: "老雷恩把铜钥匙递给你，一阵恶寒让你的SAN值剧震，你走下地下酒窖。".into(),
+            private_whispers: vec![],
+            state_patches: vec![StatePatch {
+                player_name: "阿明".into(), hp_delta: -3, ..Default::default()
+            }],
+            new_clues: vec![], npc_updates: vec![], world_time: None,
+            location: Some("酒馆大厅".into()), suggested_actions: vec![],
+            suggested_check: None, add_flags: vec![], advance_act: false,
+            trigger_ending_id: None, world_bulletin: None, reincarnation_echo: None,
+        };
+        let plan = detect_consistency_nudge(&sc, &room, &players, &reply, true).unwrap();
+        assert!(!plan.want_vitals);
+        assert!(plan.want_items && plan.want_location && plan.want_bulletin);
+
+        // Even if LLM echoes hp_delta: -3 in delta, merge_patch_delta MUST strip it!
+        merge_patch_delta(
+            &mut reply,
+            &plan,
+            DmPatchDelta {
+                state_patches: vec![StatePatch {
+                    player_name: "阿明".into(), hp_delta: -3, add_items: vec!["铜钥匙".into()],
+                    ..Default::default()
+                }],
+                location: Some("地下酒窖".into()),
+                world_bulletin: None,
+            },
+        );
+        let total_hp: i32 = reply.state_patches.iter().map(|p| p.hp_delta).sum();
+        assert_eq!(total_hp, -3);
+        assert_eq!(reply.location.as_deref(), Some("地下酒窖"));
+    }
+}
