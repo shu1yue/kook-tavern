@@ -21,6 +21,7 @@ use crate::views::build_room_public_view;
 
 const DASHBOARD_HTML: &str = include_str!("../assets/dashboard.html");
 const HUD_HTML: &str = include_str!("../assets/hud.html");
+const LANDING_HTML: &str = include_str!("../assets/landing.html");
 
 #[derive(Debug, Deserialize)]
 pub struct TokenQuery {
@@ -43,6 +44,16 @@ struct HealthResp {
     version: &'static str,
 }
 
+pub async fn landing_page(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<WebState>,
+) -> Response {
+    if !state.rate_limiter.allow(addr.ip()) {
+        return too_many_requests();
+    }
+    (StatusCode::OK, security_headers(), Html(LANDING_HTML)).into_response()
+}
+
 pub async fn healthz() -> impl IntoResponse {
     (
         StatusCode::OK,
@@ -50,7 +61,7 @@ pub async fn healthz() -> impl IntoResponse {
         Json(HealthResp {
             status: "ok",
             service: "kook-tavern-dm",
-            version: "1.7.2",
+            version: "1.7.3",
         }),
     )
 }

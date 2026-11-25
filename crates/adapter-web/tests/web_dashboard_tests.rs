@@ -40,7 +40,14 @@ async fn web_dashboard_enforces_readonly_token_auth_sanitization_and_live_sse() 
     let base = format!("http://{addr}");
     let http = reqwest::Client::new();
 
-    // 1. /healthz returns 200 OK with strict security headers
+    // 1. `/` private tavern showcase page and `/healthz` return 200 OK with strict security headers
+    let home = http.get(format!("{base}/")).send().await.unwrap();
+    assert_eq!(home.status(), StatusCode::OK);
+    assert_eq!(home.headers().get("x-frame-options").unwrap(), "DENY");
+    let home_html = home.text().await.unwrap();
+    assert!(home_html.contains("私人 AI 跑团酒馆"));
+    assert!(home_html.contains("noindex, nofollow"));
+
     let hz = http.get(format!("{base}/healthz")).send().await.unwrap();
     assert_eq!(hz.status(), StatusCode::OK);
     assert_eq!(hz.headers().get("x-frame-options").unwrap(), "DENY");

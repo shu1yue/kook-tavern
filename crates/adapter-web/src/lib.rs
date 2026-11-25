@@ -81,6 +81,7 @@ impl WebState {
 
 pub fn build_router(state: WebState) -> Router {
     Router::new()
+        .route("/", get(handlers::landing_page))
         .route("/healthz", get(handlers::healthz))
         .route("/room/{channel_id}", get(handlers::room_page))
         .route("/api/room/{channel_id}", get(handlers::room_api))

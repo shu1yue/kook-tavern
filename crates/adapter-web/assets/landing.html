@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>🍺 要来一杯吗 · 私人 AI 跑团酒馆</title>
+  <style>
+    :root {
+      --bg: #0c0a09; --bg-glow: #2d1b0e; --surface: #15110f; --surface-2: #1f1915;
+      --border: #36291f; --accent: #f0b429; --accent-2: #fb923c;
+      --accent-soft: rgba(240, 180, 41, 0.13); --accent-border: rgba(240, 180, 41, 0.42);
+      --text: #f3ece4; --muted: #a3927f; --ok: #3fb950; --whisper: #c084fc; --info: #60a5fa;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(ellipse 80% 45% at 50% -10%, rgba(240, 180, 41, 0.18), transparent 70%),
+        radial-gradient(circle at 85% 20%, rgba(192, 132, 252, 0.08), transparent 45%),
+        var(--bg);
+      color: var(--text);
+      font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+      font-size: 14px; line-height: 1.65;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 24px 18px 64px; }
+    /* Top Nav */
+    .topnav {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 10px 16px; border-radius: 14px;
+      background: rgba(21, 17, 15, 0.86); backdrop-filter: blur(10px);
+      border: 1px solid var(--border); margin-bottom: 24px;
+      position: sticky; top: 12px; z-index: 30;
+    }
+    .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 15px; color: var(--accent); }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 6px; }
+    .nav-links a {
+      color: var(--muted); text-decoration: none; font-size: 12.5px; font-weight: 600;
+      padding: 5px 10px; border-radius: 8px; transition: all 0.2s;
+    }
+    .nav-links a:hover { color: var(--accent); background: var(--accent-soft); }
+    /* Hero */
+    .hero {
+      background: linear-gradient(145deg, rgba(240, 180, 41, 0.12), rgba(21, 17, 15, 0.94) 55%);
+      border: 1px solid var(--accent-border); border-radius: 22px;
+      padding: 34px 28px 28px; margin-bottom: 28px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42);
+      position: relative; overflow: hidden;
+    }
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 5px 13px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      background: rgba(63, 185, 80, 0.12); border: 1px solid rgba(63, 185, 80, 0.42);
+      color: #86efac; margin-bottom: 16px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: pulse 2s infinite; }
+    @keyframes pulse { 50% { opacity: 0.45; } }
+    .hero h1 {
+      margin: 0 0 12px; font-size: clamp(26px, 4.5vw, 38px); line-height: 1.25;
+      letter-spacing: 0.3px;
+      background: linear-gradient(90deg, #fde68a, var(--accent), #fb923c);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .hero-lead {
+      margin: 0 0 22px; max-width: 720px; font-size: 15px; color: #ddd1c4;
+    }
+    .hero-lead strong { color: var(--text); }
+    .stats-strip {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    }
+    @media (max-width: 640px) { .stats-strip { grid-template-columns: repeat(2, 1fr); } .hero { padding: 24px 18px; } }
+    .stat-card {
+      background: rgba(12, 10, 9, 0.55); border: 1px solid var(--border);
+      border-radius: 13px; padding: 12px 14px;
+    }
+    .stat-num { font-size: 22px; font-weight: 800; color: var(--accent); line-height: 1.2; }
+    .stat-lbl { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    /* Sections */
+    .sec { margin-bottom: 34px; }
+    .sec-head { margin-bottom: 16px; }
+    .sec-kicker { font-size: 11.5px; font-weight: 700; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; }
+    .sec-title { margin: 4px 0 6px; font-size: 22px; font-weight: 800; color: var(--text); }
+    .sec-desc { margin: 0; color: var(--muted); font-size: 13.5px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    @media (max-width: 760px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 18px 18px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .card:hover { border-color: var(--accent-border); transform: translateY(-2px); }
+    .card-ico { font-size: 24px; margin-bottom: 8px; }
+    .card h3 { margin: 0 0 7px; font-size: 16px; color: var(--text); }
+    .card p { margin: 0; color: var(--muted); font-size: 13.5px; }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+    .tag {
+      font-size: 11px; padding: 2px 9px; border-radius: 999px;
+      background: var(--surface-2); border: 1px solid var(--border); color: #d6c8b8;
+    }
+    .tag.gold { border-color: var(--accent-border); color: var(--accent); background: var(--accent-soft); }
+    .tag.purple { border-color: rgba(192,132,252,0.45); color: #e9d5ff; background: rgba(192,132,252,0.12); }
+    .tag.green { border-color: rgba(63,185,80,0.45); color: #86efac; background: rgba(63,185,80,0.12); }
+    /* 3-Step Guide */
+    .step-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 18px; position: relative;
+    }
+    .step-num {
+      display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent); color: #150e08; font-weight: 800; font-size: 14px; margin-bottom: 10px;
+    }
+    .step-card h3 { margin: 0 0 6px; font-size: 15px; }
+    .step-card p { margin: 0; font-size: 13px; color: var(--muted); }
+    code {
+      background: var(--surface-2); border: 1px solid var(--border);
+      padding: 1px 6px; border-radius: 6px; font-size: 12px; color: var(--accent);
+    }
+    /* Architecture Diagram */
+    .arch-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 18px; padding: 18px; overflow-x: auto;
+    }
+    .arch-svg { width: 100%; min-width: 620px; height: auto; display: block; }
+    .arch-notes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+    @media (max-width: 760px) { .arch-notes { grid-template-columns: 1fr; } }
+    .arch-note {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 14px; font-size: 12.5px; color: var(--muted);
+    }
+    .arch-note strong { display: block; color: var(--text); margin-bottom: 4px; font-size: 13px; }
+    /* Devlog & Filter Tabs */
+    .filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .f-btn {
+      background: var(--surface); color: var(--muted); border: 1px solid var(--border);
+      border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .f-btn.active, .f-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+    .timeline { position: relative; padding-left: 22px; }
+    .timeline::before {
+      content: ""; position: absolute; left: 6px; top: 8px; bottom: 8px; width: 2px;
+      background: linear-gradient(180deg, var(--accent), var(--border));
+    }
+    .tl-item {
+      position: relative; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px 16px; margin-bottom: 12px;
+    }
+    .tl-item::before {
+      content: ""; position: absolute; left: -21px; top: 18px; width: 10px; height: 10px;
+      border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent);
+    }
+    .tl-item.wip::before { background: var(--info); box-shadow: 0 0 8px var(--info); }
+    .tl-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 5px; }
+    .tl-title { font-weight: 800; font-size: 14.5px; color: var(--text); }
+    .tl-ver { font-size: 11.5px; color: var(--accent); font-weight: 700; }
+    .tl-body { margin: 0; font-size: 13px; color: var(--muted); }
+    .bug-story {
+      background: linear-gradient(135deg, rgba(192,132,252,0.09), var(--surface));
+      border: 1px solid rgba(192,132,252,0.34); border-radius: 14px;
+      padding: 15px 17px; margin-bottom: 12px;
+    }
+    .bug-story h4 { margin: 0 0 6px; font-size: 14.5px; color: #e9d5ff; }
+    .bug-story p { margin: 0; font-size: 13px; color: #d6c8b8; }
+    .hidden { display: none; }
+    /* Footer */
+    footer {
+      margin-top: 38px; padding: 22px 20px; border-radius: 16px; text-align: center;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); font-size: 13px;
+    }
+    footer strong { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="topnav">
+      <div class="brand">🍺 要来一杯吗 · 私人 AI 跑团酒馆</div>
+      <div class="nav-links">
+        <a href="#features">能玩什么</a>
+        <a href="#guide">30秒上手</a>
+        <a href="#arch">小服务器底盘</a>
+        <a href="#progress">折腾日记</a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <div class="live-badge" id="live-badge">
+        <span class="dot"></span>
+        <span id="live-text">正在确认酒馆炉火状态…</span>
+      </div>
+      <h1>把奇幻跑团酒馆，搬进咱们的 KOOK 语音频道</h1>
+      <p class="hero-lead">
+        这是一个运行在老板自家轻量云服务器上的 <strong>私人好友圈 AI 多人跑团引擎</strong>。
+        不用啃厚规则书、不用抓人当苦力主持人——进频道点两下按钮就能开桌，AI 主持人实时推进剧情、偷偷给不同人塞<strong>专属秘密小纸条</strong>，旁边还能一键拉出<strong>永远置顶的 5 子页悬浮 HUD</strong>，边语音吹水边玩！
+      </p>
+      <div class="stats-strip">
+        <div class="stat-card"><div class="stat-num" id="stat-ver">v1.7.3</div><div class="stat-lbl">当前线上运行版本</div></div>
+        <div class="stat-card"><div class="stat-num">22+</div><div class="stat-lbl">从原型打磨至今的迭代</div></div>
+        <div class="stat-card"><div class="stat-num">3 套规则</div><div class="stat-lbl">2d6 轻量 / D&amp;D d20 / d100</div></div>
+        <div class="stat-card"><div class="stat-num">60 项</div><div class="stat-lbl">自动化测试与安全质检</div></div>
+      </div>
+    </section>
+
+    <section class="sec" id="features">
+      <div class="sec-head">
+        <div class="sec-kicker">What You Can Play</div>
+        <h2 class="sec-title">✨ 这酒馆到底能玩出啥花样？</h2>
+        <p class="sec-desc">不为卷商业平台，只为了让三五好友语音开黑时玩得够爽、够省心。</p>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-ico">📖</div>
+          <h3>像翻小说一样的连贯卡片流</h3>
+          <p>支持零代码全按钮操作，也可以直接说人话自由发挥。每次推进新回合，上一轮旧卡片会自动灰化并撤掉按钮——公屏永远清爽，再也不怕翻乱点错。</p>
+          <div class="tag-row"><span class="tag gold">原地刷新不刷屏</span><span class="tag">随时回档上轮</span><span class="tag">语音/文字双档文风</span></div>
+        </div>
+        <div class="card">
+          <div class="card-ico">🤫</div>
+          <h3>真多人信息差：专属秘密小纸条</h3>
+          <p>AI 主持人会根据每个人的行动与侦查结果，单独递送<strong>“仅本人可见”</strong>的暗线情报。谁摸了尸、谁被暗哨盯上、谁心里藏了小算盘，队友全看不见！</p>
+          <div class="tag-row"><span class="tag purple">队友绝对不可见</span><span class="tag">AI 防泄密二道审计</span><span class="tag">多结局图鉴收集</span></div>
+        </div>
+        <div class="card">
+          <div class="card-ico">🪟</div>
+          <h3>外挂级 5 子页置顶悬浮 HUD</h3>
+          <p>怕刚开局人名太多眼睛冒圈圈？一键拉出独立悬浮角色卡（Chrome/Edge 支持原生画中画永远置顶在 KOOK 上层），1 秒实时同步血条、背包、密语、人物关系星图和零剧透百科。</p>
+          <div class="tag-row"><span class="tag gold">交互式人物关系星图</span><span class="tag green">SSE 实时同步</span><span class="tag">HMAC 防串号隔离</span></div>
+        </div>
+        <div class="card">
+          <div class="card-ico">🛠️</div>
+          <h3>能玩也能造：世界书商店 &amp; 剧本工坊</h3>
+          <p>除了内置的蒸汽悬疑、克苏鲁、赛博、经典 D&amp;D 五幕长篇外，还做了开源世界书商店和 5 步引导式 AI 剧本工坊——群友有好脑洞，几分钟就能搓出能直接玩的新本！</p>
+          <div class="tag-row"><span class="tag">开源世界书商店</span><span class="tag">5 步 AI 锻造</span><span class="tag">跨团角色库存档</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" id="guide">
+      <div class="sec-head">
+        <div class="sec-kicker">30-Second Quickstart</div>
+        <h2 class="sec-title">🎲 第一次进酒馆？3 步就能上桌</h2>
+        <p class="sec-desc">完全不需要背任何命令，跟着亮着的按钮点就行。</p>
+      </div>
+      <div class="grid-3">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <h3>挑个剧本，一键选职业</h3>
+          <p>进 KOOK 炉火桌点绿色 <code>▶️ 开启剧本</code>，开局卡上直接点个喜欢的职业（如机械师、神秘学者）就能带着初始装备直接上桌。</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <h3>点按钮，或者直接打人话</h3>
+          <p>懒得打字就点推荐选项和检定骰子；想整活直接发你想做的事！平时群里插科打诨加个括号 <code>(哈哈)</code> 或 <code>//</code> 就不会打扰 DM。</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <h3>拉出置顶悬浮 HUD</h3>
+          <p>点 <code>🪪 我的角色卡</code> → <code>🪟 悬浮角色卡 HUD</code> → 右上角 <code>📌 浮窗</code>，血量、暗线纸条、NPC 关系图全自动贴在屏幕旁陪跑！</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" id="arch">
+      <div class="sec-head">
+        <div class="sec-kicker">Under The Hood</div>
+        <h2 class="sec-title">⚙️ 小水管服务器里塞了啥硬核底盘？</h2>
+        <p class="sec-desc">不是跑在本地电脑上的临时脚本，而是 7×24 运行在自家 2C2G 云服务器上的完整 Rust 工程。</p>
+      </div>
+      <div class="arch-box">
+        <svg class="arch-svg" viewBox="0 0 880 215" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#f0b429"/>
+            </marker>
+          </defs>
+          <!-- KOOK -->
+          <rect x="12" y="54" width="160" height="96" rx="14" fill="#1f1915" stroke="#60a5fa" stroke-width="1.8"/>
+          <text x="92" y="88" text-anchor="middle" fill="#93c5fd" font-size="14" font-weight="800">🎮 KOOK 频道</text>
+          <text x="92" y="110" text-anchor="middle" fill="#a3927f" font-size="11.5">故事卡片流 / 原地刷新</text>
+          <text x="92" y="128" text-anchor="middle" fill="#a3927f" font-size="11.5">按钮交互 / 私密临时卡</text>
+
+          <!-- Rust Core -->
+          <rect x="236" y="24" width="228" height="162" rx="16" fill="#241a12" stroke="#f0b429" stroke-width="2.2"/>
+          <text x="350" y="52" text-anchor="middle" fill="#f0b429" font-size="15" font-weight="800">🦀 Rust 8-Crate 引擎</text>
+          <text x="350" y="75" text-anchor="middle" fill="#f3ece4" font-size="12">状态机 · 多规则掷骰 · 导演节奏</text>
+          <rect x="256" y="92" width="188" height="34" rx="8" fill="#15110f" stroke="#36291f"/>
+          <text x="350" y="113" text-anchor="middle" fill="#d6c8b8" font-size="11.5">🗄️ SQLite 持久化 + 原子回档</text>
+          <rect x="256" y="136" width="188" height="34" rx="8" fill="#15110f" stroke="#36291f"/>
+          <text x="350" y="157" text-anchor="middle" fill="#86efac" font-size="11.5">🌐 内嵌 Axum + SSE 实时推送</text>
+
+          <!-- Dual AI -->
+          <rect x="530" y="18" width="334" height="78" rx="14" fill="#1f1915" stroke="#c084fc" stroke-width="1.8"/>
+          <text x="697" y="45" text-anchor="middle" fill="#e9d5ff" font-size="13.5" font-weight="800">🧠 双层 AI 协同大脑</text>
+          <text x="697" y="66" text-anchor="middle" fill="#a3927f" font-size="11.5">DeepSeek：长线叙事 + 括号自愈解析 + 缓存省钱</text>
+          <text x="697" y="83" text-anchor="middle" fill="#a3927f" font-size="11.5">百炼 System One (Jev)：闲聊过滤 + 语义召回 + 防泄密</text>
+
+          <!-- Cloudflare + HUD -->
+          <rect x="530" y="116" width="334" height="78" rx="14" fill="#1f1915" stroke="#3fb950" stroke-width="1.8"/>
+          <text x="697" y="143" text-anchor="middle" fill="#86efac" font-size="13.5" font-weight="800">🔒 Cloudflare 加密隧道 → 悬浮 HUD</text>
+          <text x="697" y="164" text-anchor="middle" fill="#a3927f" font-size="11.5">服务器零暴露端口 · 自动正式 HTTPS · 画中画置顶</text>
+          <text x="697" y="181" text-anchor="middle" fill="#a3927f" font-size="11.5">HMAC-SHA256 个人签名令牌 · 结团/离桌自动失效</text>
+
+          <!-- Arrows -->
+          <line x1="174" y1="102" x2="230" y2="102" stroke="#f0b429" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)"/>
+          <line x1="466" y1="62" x2="524" y2="57" stroke="#f0b429" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)"/>
+          <line x1="466" y1="152" x2="524" y2="155" stroke="#f0b429" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)"/>
+        </svg>
+        <div class="arch-notes">
+          <div class="arch-note"><strong>🪶 极致省资源</strong>纯 Rust 编译成单个二进制常驻运行，内存占用极低，在小水管 2C2G 机器上和其它机器人和平共处。</div>
+          <div class="arch-note"><strong>💰 吃透前缀缓存</strong>静态世界观与动态上下文严格分层，稳定命中 DeepSeek 缓存，一帮人玩一晚上往往只要几毛钱。</div>
+          <div class="arch-note"><strong>🛡️ 隐私与防翻车</strong>私密纸条绝不进公屏、HUD 仅本人签名可看、零剧透词典不露反派底牌，还有 60 条单测/集成测兜底。</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" id="progress">
+      <div class="sec-head">
+        <div class="sec-kicker">Development Progress</div>
+        <h2 class="sec-title">🧱 老板的折腾进度日记</h2>
+        <p class="sec-desc">从第一行原型代码到今天，所有踩过的真坑和实弹升级都记在账上。</p>
+      </div>
+      <div class="filter-row">
+        <button class="f-btn active" data-tab="milestones">📈 阶段进度（v0.1 → v1.7）</button>
+        <button class="f-btn" data-tab="stories">🤣 实弹试玩搞笑踩坑录</button>
+        <button class="f-btn" data-tab="roadmap">🗺️ 接下来还想折腾啥</button>
+      </div>
+
+      <div id="tab-milestones" class="timeline">
+        <div class="tl-item">
+          <div class="tl-top"><span class="tl-title">✅ 阶段一 · 搭好酒馆地基</span><span class="tl-ver">v0.1.0 → v0.5.1</span></div>
+          <p class="tl-body">完成纯 Rust 多模块底座、KOOK 零代码按钮卡片、3 个首发深度剧本、NPC 记忆、战报墙归档，以及内嵌只读 Web 实时大屏（SSE 同步）。</p>
+        </div>
+        <div class="tl-item">
+          <div class="tl-top"><span class="tl-title">✅ 阶段二 · 规则引擎、双 AI 与剧本工坊</span><span class="tl-ver">v0.6.0 → v1.5.0</span></div>
+          <p class="tl-body">补齐五维三档检定、多结局图鉴、个人专属 <code>/me</code> 角色卡、暗流号外与互动沙盘地图、阿里百炼 Jev 潜意识反射层、经典 D&amp;D d20 规则与跨团角色库、开源世界书商店和 5 步 AI 剧本工坊。</p>
+        </div>
+        <div class="tl-item">
+          <div class="tl-top"><span class="tl-title">✅ 阶段三 · 亲测打磨剧场手感 &amp; 置顶悬浮 HUD</span><span class="tl-ver">v1.6.0 → v1.7.3</span></div>
+          <p class="tl-body">改造为 KOOK 原地刷新连贯故事流、加上退团与防误触结束按钮、补强 LLM 容错与平台审核防吞回合，并接通 Cloudflare HTTPS 做出 5 子页置顶悬浮 HUD 与眼前这页酒馆主页！</p>
+        </div>
+      </div>
+
+      <div id="tab-stories" class="hidden">
+        <div class="bug-story">
+          <h4>🤣 坑 #1：DeepSeek 手滑多敲了一个右括号 <code>]</code>（v1.6.2 已焊死）</h4>
+          <p>实弹测试第 2 轮时，大模型吐 JSON 手抖在结尾多敲了一个方括号，结果旧版解析器直接罢工，差点把整坨带秘密纸条的原始 JSON 全糊公屏上！后来连夜写了“三段式括号栈自愈修复器 + 零密语泄露兜底”，就算模型写歪也能把剧情和暗线 100% 抢救回来。</p>
+        </div>
+        <div class="bug-story">
+          <h4>🤣 坑 #2：史诗大成功被“持枪”两个字吞了（v1.7.1 已焊死）</h4>
+          <p>试玩掷出 <code>[6, 6] + 2 = 14</code> 满级侦查大成功，结果老雷恩一句“持枪戒备”撞上 KOOK 平台 40011 敏感词审核，整张卡片被拦截！现在加上了蒸汽奇幻词自动柔化重发 + 保底不断档交互卡 + <code>/resend</code> 一键补发，大成功一滴都不丢。</p>
+        </div>
+        <div class="bug-story">
+          <h4>🤣 坑 #3：卡片越弹越多 + 陌生人名看到眼睛冒圈圈（v1.6.0 &amp; v1.7.2 已重构）</h4>
+          <p>最早开局、选职业、掷骰子、看角色卡全在公屏各自发新卡，聊天流碎得像补丁；后来先用 KOOK 原地编辑把公屏收束成纯净故事流，又干脆用 Cloudflare 隧道搭出 5 子页置顶悬浮 HUD 和交互式人物关系星图，终于清爽了！</p>
+        </div>
+      </div>
+
+      <div id="tab-roadmap" class="hidden timeline">
+        <div class="tl-item wip">
+          <div class="tl-top"><span class="tl-title">🚧 悄悄搞事模式（私聊秘密行动 <code>/secret</code>）</span><span class="tl-ver">规划中</span></div>
+          <p class="tl-body">想偷偷干件不让队友看见的事？支持通过私信提交秘密行动与暗骰，DM 悄悄结算后再用秘密纸条把结果塞回你的悬浮 HUD。</p>
+        </div>
+        <div class="tl-item wip">
+          <div class="tl-top"><span class="tl-title">🚧 多人开黑实弹压力与体验微调</span><span class="tl-ver">持续打磨</span></div>
+          <p class="tl-body">继续拉群友实弹跑团，打磨多人选职业防撞车提示、悬浮 HUD 交互手感，顺手用工坊多攒几套大家爱玩的私房脑洞本。</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <strong>🍺 要来一杯吗 · 私人好友圈 AI 跑团酒馆</strong><br/>
+      小水管服务器精力有限，暂不对外公开招客——熟人推门进 KOOK 炉火桌就能直接开整，欢迎随时来踹 Bug 和给新剧本点菜喵！
+    </footer>
+  </div>
+<script>
+(() => {
+  fetch('/healthz', { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (data && data.status === 'ok') {
+        document.getElementById('live-text').textContent = `炉火正旺 · 正在老板的服务器上实时营业（v${data.version}）`;
+        document.getElementById('stat-ver').textContent = `v${data.version}`;
+      }
+    })
+    .catch(() => {
+      document.getElementById('live-text').textContent = '酒馆引擎在线运行中';
+    });
+
+  document.querySelectorAll('.f-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.getAttribute('data-tab');
+      document.querySelectorAll('.f-btn').forEach(b => b.classList.toggle('active', b === btn));
+      ['milestones', 'stories', 'roadmap'].forEach(id => {
+        document.getElementById('tab-' + id).classList.toggle('hidden', id !== target);
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>
