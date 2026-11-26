@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn repairs_deepseek_stray_closing_bracket_and_never_leaks_private_whispers() {
         // Exact production bug from Turn 2: stray `]]` after `new_clues` + trailing comma + raw newline!
-        let broken = "{\"scene_title\": \"松脂药与袖袋里的图\", \"narrative\": \"魂芳白接过灰陶瓶。\n老雷恩冷冷瞥了你一眼。\", \"private_whispers\": [{\"player_name\": \"魂芳白\", \"secret\": \"三层稳压栓绝密图纸\"}], \"state_patches\": [{\"player_name\": \"魂芳白\", \"hp_delta\": 0, \"san_delta\": 0, \"add_items\": [\"浸湿的钟楼楼梯简图\"], \"remove_items\": []}], \"new_clues\": [\"信使呼吸渐稳\"]], \"npc_updates\": [{\"name\": \"老雷恩\", \"attitude\": \"中立\", \"status\": \"警觉\",}], \"suggested_actions\": [\"出示断钥匙\", \"听雾中动静\"]}";
+        let broken = "{\"scene_title\": \"松脂药与袖袋里的图\", \"narrative\": \"林星河接过灰陶瓶。\n老雷恩冷冷瞥了你一眼。\", \"private_whispers\": [{\"player_name\": \"林星河\", \"secret\": \"三层稳压栓绝密图纸\"}], \"state_patches\": [{\"player_name\": \"林星河\", \"hp_delta\": 0, \"san_delta\": 0, \"add_items\": [\"浸湿的钟楼楼梯简图\"], \"remove_items\": []}], \"new_clues\": [\"信使呼吸渐稳\"]], \"npc_updates\": [{\"name\": \"老雷恩\", \"attitude\": \"中立\", \"status\": \"警觉\",}], \"suggested_actions\": [\"出示断钥匙\", \"听雾中动静\"]}";
         let (repaired, ok) = parse_dm_reply_checked(broken, &dummy_room());
         assert!(ok, "expected stray `]]`, raw newline, and trailing comma to repair cleanly");
         assert_eq!(repaired.scene_title, "松脂药与袖袋里的图");

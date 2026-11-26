@@ -1,0 +1,15 @@
+services:
+  kook-tavern-dm:
+    build: .
+    container_name: kook-tavern-dm
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      # Bind to localhost by default; put Cloudflare Tunnel / Nginx / Caddy in front for HTTPS
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - ./data:/app/data
+      - ./exports:/app/exports
+      - ./prompts:/app/prompts:ro
+      - ./scenarios/community:/app/scenarios/community

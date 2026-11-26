@@ -2,7 +2,9 @@
 name = "kook-tavern-dm"
 version.workspace = true
 edition.workspace = true
-description = "KOOK AI Tavern & Lightweight TRPG DM Engine"
+license.workspace = true
+repository.workspace = true
+description = "KOOK AI Tavern & Multiplayer TRPG DM Engine"
 
 [[bin]]
 name = "kook-tavern-dm"

@@ -62,9 +62,9 @@ async fn v18_midgame_dropin_briefing_whisper_ledger_and_persisted_live_cards() {
     let engine = test_engine(store.clone());
 
     // 1. Start room & veteran joins on Turn 0 -> normal public Notice (NOT a drop-in briefing)
-    let _ = engine.handle_message(msg("ch_18", "u_vet", "魂芳白", "/start ember_tavern")).await.unwrap();
+    let _ = engine.handle_message(msg("ch_18", "u_vet", "林星河", "/start ember_tavern")).await.unwrap();
     let r0 = engine
-        .handle_button_in_guild(Some("g_v18"), "ch_18", "u_vet", "魂芳白", "tavern:pickrole:ch_18:0")
+        .handle_button_in_guild(Some("g_v18"), "ch_18", "u_vet", "林星河", "tavern:pickrole:ch_18:0")
         .await
         .unwrap();
     assert!(matches!(r0, EngineResponse::Notice { .. }), "Turn 0 join stays standard Notice");
@@ -77,10 +77,10 @@ async fn v18_midgame_dropin_briefing_whisper_ledger_and_persisted_live_cards() {
     assert!(matches!(rebuilt0, EngineResponse::StoryTurn { turn_number: 0, .. }));
 
     // 2. Advance to Turn 1 & inject a summary + private whisper for veteran
-    let t1 = engine.handle_message(msg("ch_18", "u_vet", "魂芳白", "/act 我向老雷恩打听断钥匙")).await.unwrap();
+    let t1 = engine.handle_message(msg("ch_18", "u_vet", "林星河", "/act 我向老雷恩打听断钥匙")).await.unwrap();
     assert!(matches!(t1, EngineResponse::StoryTurn { turn_number: 1, .. }));
     let mut room = store.get_room("ch_18").unwrap().unwrap();
-    room.summary = "【编年史封卷（永不覆写）】\n### 卷 1（第 1~1 轮）· 蓝血信使\n魂芳白救下托比，从老雷恩处拿到地下酒窖钥匙。".into();
+    room.summary = "【编年史封卷（永不覆写）】\n### 卷 1（第 1~1 轮）· 蓝血信使\n林星河救下托比，从老雷恩处拿到地下酒窖钥匙。".into();
     room.summary_upto_turn = 1;
     store.upsert_room(&room).unwrap();
 
@@ -99,7 +99,7 @@ async fn v18_midgame_dropin_briefing_whisper_ledger_and_persisted_live_cards() {
             assert_eq!(user_id, "u_new1");
             assert!(title.contains("半路空降"));
             assert!(body.contains("老雷恩处拿到地下酒窖钥匙"));
-            assert!(body.contains("魂芳白"));
+            assert!(body.contains("林星河"));
             assert!(actions.iter().any(|a| a.label.contains("悬浮 HUD") && a.value.contains("https://tavern.example.test/hud/")));
         }
         other => panic!("expected PrivateNotice drop-in briefing, got {other:?}"),
@@ -113,7 +113,7 @@ async fn v18_midgame_dropin_briefing_whisper_ledger_and_persisted_live_cards() {
     match drop_quick {
         EngineResponse::PrivateNotice { user_id, body, actions, .. } => {
             assert_eq!(user_id, "u_new2");
-            assert!(body.contains("魂芳白"));
+            assert!(body.contains("林星河"));
             let role_btn = actions.iter().find(|a| a.label.contains("选预设职业")).expect("rolemenu button");
             assert_eq!(role_btn.value, "tavern:rolemenu:ch_18");
             // Gate 10 P1-1 round-trip verification: clicking the button ACTUALLY opens RolePicker!
@@ -135,7 +135,7 @@ async fn v18_midgame_dropin_briefing_whisper_ledger_and_persisted_live_cards() {
 
     // 6. Existing veteran switching role mid-game stays standard `Notice`, NOT a newcomer briefing!
     let vet_switch = engine
-        .handle_button_in_guild(Some("g_v18"), "ch_18", "u_vet", "魂芳白", "tavern:pickrole:ch_18:2")
+        .handle_button_in_guild(Some("g_v18"), "ch_18", "u_vet", "林星河", "tavern:pickrole:ch_18:2")
         .await
         .unwrap();
     assert!(matches!(vet_switch, EngineResponse::Notice { ref title, .. } if title.contains("切换")));
@@ -149,7 +149,7 @@ async fn v18_midgame_dropin_briefing_whisper_ledger_and_persisted_live_cards() {
 
     // 8. After `/reset`, persisted story card record remains readable so dispatcher can archive old buttons
     //    even across a restart, while `rebuild_story_turn_for_archive` gracefully returns `None`!
-    let _ = engine.handle_message(msg("ch_18", "u_vet", "魂芳白", "/reset")).await.unwrap();
+    let _ = engine.handle_message(msg("ch_18", "u_vet", "林星河", "/reset")).await.unwrap();
     assert_eq!(restarted.get_persisted_story_card("ch_18").unwrap(), Some(("msg_turn1_xyz".into(), 1)));
     assert!(restarted.rebuild_story_turn_for_archive("ch_18", 1).unwrap().is_none());
     restarted.set_persisted_story_card("ch_18", None).unwrap();
@@ -179,7 +179,7 @@ fn v182_map_node_entry_deterministically_advances_act_and_awards_levelup() {
         summary: String::new(), summary_upto_turn: 0, active: true, created_at: now, updated_at: now,
     };
     let mut players = vec![tavern_domain::Player {
-        channel_id: "ch_act".into(), user_id: "u1".into(), character_name: "魂芳白".into(),
+        channel_id: "ch_act".into(), user_id: "u1".into(), character_name: "林星河".into(),
         role_desc: "星象神秘学者".into(), traits: vec![], hp: 11, max_hp: 12, san: 2, max_san: 10,
         inventory: vec![], status_note: String::new(), is_afk: false, stats: Default::default(),
         location: "旧钟楼一二层".into(), dnd: Default::default(),

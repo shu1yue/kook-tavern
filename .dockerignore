@@ -1,0 +1,15 @@
+.git
+.github
+target
+.env
+.env.*
+!.env.example
+data
+exports
+scenarios/community
+DEPLOY_ECS.md
+.ops
+.DS_Store
+*.db
+*.db-wal
+*.db-shm

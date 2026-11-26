@@ -310,7 +310,7 @@ async fn player_floating_hud_enforces_hmac_isolation_spoiler_safety_and_live_sse
 
     let mut seeded_players = Vec::new();
     for (uid, name, role) in [
-        ("u_alice", "魂芳白", "星象神秘学者"),
+        ("u_alice", "林星河", "星象神秘学者"),
         ("u_bob", "铁手阿凯", "齿轮机械师"),
     ] {
         let p = Player {
@@ -346,7 +346,7 @@ async fn player_floating_hud_enforces_hmac_isolation_spoiler_safety_and_live_sse
         id: 0,
         channel_id: "chan_hud_1".into(),
         turn_number: 2,
-        batched_input: "魂芳白：查看柜台".into(),
+        batched_input: "林星河：查看柜台".into(),
         scene_title: "独眼酒保的实话".into(),
         narrative: "老雷恩推过来一把黄铜钥匙，门外传来三声轻敲。".into(),
         state_summary: "获得酒窖钥匙".into(),
@@ -357,7 +357,7 @@ async fn player_floating_hud_enforces_hmac_isolation_spoiler_safety_and_live_sse
     let whispers = vec![
         tavern_domain::DirectMessageOut {
             user_id: "u_alice".into(),
-            player_name: "魂芳白".into(),
+            player_name: "林星河".into(),
             content: "ALICE_ONLY_BELLTOWER_SECRET".into(),
         },
         tavern_domain::DirectMessageOut {
@@ -402,7 +402,7 @@ async fn player_floating_hud_enforces_hmac_isolation_spoiler_safety_and_live_sse
                 3,
                 &[tavern_domain::DirectMessageOut {
                     user_id: "u_alice".into(),
-                    player_name: "魂芳白".into(),
+                    player_name: "林星河".into(),
                     content: "ALICE_NEWER_TURN3_SECRET".into(),
                 }],
             )
@@ -444,7 +444,7 @@ async fn player_floating_hud_enforces_hmac_isolation_spoiler_safety_and_live_sse
         .unwrap();
     assert_eq!(hud_api.status(), StatusCode::OK);
     let body = hud_api.text().await.unwrap();
-    assert!(body.contains("魂芳白"));
+    assert!(body.contains("林星河"));
     assert!(body.contains("铁手阿凯"));
     assert!(body.contains("老雷恩"));
     assert!(body.contains("\"attitude_tier\":\"ally\""));

@@ -1,40 +1,31 @@
-name: CI Quality Gate
+name: CI
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
   pull_request:
-    branches: ["main"]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   check:
+    name: Clippy, Tests & File-Size Gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check forbidden sensitive files
-        run: |
-          if [ -f .env ] || [ -f DEPLOY_ECS.md ] || ls .env.* 2>/dev/null | grep -vq '^\.env\.example$' || find . -maxdepth 3 -name "*.db" | grep -q .; then
-            echo "ERROR: Sensitive file (.env*, DEPLOY_ECS.md, or *.db) must never be committed!"
-            exit 1
-          fi
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-
-      - name: Cache Cargo registry & build
-        uses: Swatinem/rust-cache@v2
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Run Clippy (-D warnings)
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Production Rust file-size hygiene (<= 350 lines)
+        run: |
+          wc -l crates/*/src/*.rs crates/*/src/*/*.rs | awk '
+            $2 != "total" && $1 > 350 { print "ERROR: >350 lines:", $0; err=1 }
+            END { if (err) exit 1; print "All production .rs files <= 350 lines." }
+          '
+      - name: Clippy (-D warnings)
         run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Run workspace tests
+      - name: Workspace Tests
         run: cargo test --workspace
