@@ -207,7 +207,7 @@ pub fn cmd_rest(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result
     let kind = match arg.trim().to_ascii_lowercase().as_str() {
         "" | "short" | "短" | "短休" => RestKind::Short,
         "long" | "长" | "长休" | "营地" => RestKind::Long,
-        _ => return Ok(notice_warn("🏕️ 营地休整用法", "- `/rest short`（短休）：恢复部分 HP 与短休招牌技\n- `/rest long`（长休，房主/管理员）：满血满 SAN 并恢复全部招牌技")),
+        _ => return Ok(notice_warn("🏕️ 营地休整用法", "- `/rest short`（`/短休`）：恢复部分 HP、少量 SAN 与短休招牌技\n- `/rest long`（`/长休`，房主/管理员）：满血满 SAN 并恢复全部招牌技")),
     };
     let is_gm = engine.cfg.is_gm_or_admin(&msg.user_id, &room.gm_user_id);
     let gap = if kind == RestKind::Long { 2 } else { 1 };

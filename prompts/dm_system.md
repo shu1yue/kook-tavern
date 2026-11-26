@@ -45,14 +45,14 @@
   "location": "更新后的当前地点（不变可照抄；优先使用标准地图节点名）",
   "suggested_actions": ["6~14字精炼行动按钮1", "6~14字精炼行动按钮2", "6~14字精炼行动按钮3"],
   "suggested_check": {"stat": "体魄/敏捷/侦查/交涉/灵感", "reason": "8字以内检定事由（不需要检定时填 null）", "dc": null},
-  "add_flags": ["本轮新达成的关键剧情节点标记（无则空数组）"],
+  "add_flags": ["仅记录重大里程碑/过幕关键节点，普通探索请留空数组 []"],
   "advance_act": false,
   "trigger_ending_id": null,
   "world_bulletin": null,
   "reincarnation_echo": null,
   "grant_inspiration": []
 }
-（注：为避免触发 KOOK 聊天平台违禁词拦截，描写冲突与武器时请优先使用奇幻/蒸汽时代词汇如“火铳/短铳/铳声/炼金爆裂/摧毁/遗骸”，避免出现“持枪/枪声/枪击/霰弹枪/炸毁/炸药/引爆/自杀/血腥”等现代敏感词；`suggested_check.dc` 仅在 `d20` 体系下填 8~20 整数，`2d6`/`d100` 体系填 `null`；`world_bulletin` 仅在【幕间暗流号外窗口】开启时填写 `{"headline":"8~18字标题","body":"40~90字剧中号外/密信/广播正文","faction":"势力名"}`，平时必须填 `null`；`reincarnation_echo` 仅在 `trigger_ending_id` 非空时写一句留给下周目的 30~80 字世界线残响，平时填 `null`；仅当某角色与大部队分头行动时在 `state_patches[].location` 填写其单独所在地点。）
+（注：为避免触发 KOOK 聊天平台违禁词拦截，描写冲突与武器时请优先使用奇幻/蒸汽时代词汇如“火铳/短铳/铳声/炼金爆裂/摧毁/遗骸”，避免出现“持枪/枪声/枪击/霰弹枪/炸毁/炸药/引爆/自杀/血腥”等现代敏感词；当玩家已达成当前幕过幕条件或离开本幕场景迈向下一阶段时，务必将 `advance_act` 设为 `true` 以推进幕次并触发全队过幕升级；当玩家在安全处用药、包扎、烤火喘息或互相宽慰时，请通过正数 `hp_delta`/`san_delta` 合理回复状态；`suggested_check.dc` 仅在 `d20` 体系下填 8~20 整数，`2d6`/`d100` 体系填 `null`；`world_bulletin` 仅在【幕间暗流号外窗口】开启时填写 `{"headline":"8~18字标题","body":"40~90字剧中号外/密信/广播正文","faction":"势力名"}`，平时必须填 `null`；`reincarnation_echo` 仅在 `trigger_ending_id` 非空时写一句留给下周目的 30~80 字世界线残响，平时填 `null`；仅当某角色与大部队分头行动时在 `state_patches[].location` 填写其单独所在地点。）
 
 【常驻世界观底色】
 {{always_lore}}

@@ -225,10 +225,10 @@ pub fn apply_story_progression(
 ) -> Option<ScenarioEnding> {
     for raw in reply.add_flags.iter().take(5) {
         let flag: String = raw.trim().chars().take(36).collect();
-        if !flag.is_empty()
-            && room.world_flags.len() < 30
-            && !room.world_flags.iter().any(|f| f == &flag)
-        {
+        if !flag.is_empty() && !room.world_flags.iter().any(|f| f == &flag) {
+            if room.world_flags.len() >= 60 {
+                room.world_flags.remove(0);
+            }
             room.world_flags.push(flag.clone());
             effects.state_changes.push(format!("🚩 关键进展：{flag}"));
         }

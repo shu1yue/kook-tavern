@@ -2,6 +2,12 @@
 
 > 每次版本上线前，用大白话记录“这次改了什么”以及“万一线上出状况怎么 10 秒回滚”。
 
+## [1.8.1] - 修复幕次卡死不推进与 `world_flags` 30 条上限 + `/短休` 兼顾少量回 SAN
+### 本次改动
+- **修复“打 30 轮卡在第 1 幕不升级”根因**（`crates/infra-llm/src/prompt_ext.rs`、`prompts/dm_system.md`）：在 DM Prompt 幕次进度栏完整注入当前幕 `advance_flags` 过幕条件与下一幕预告，明确指示 DM 达成目标或跨出前幕场景时将 `advance_act` 设为 `true`，正常推进幕次并触发全队过幕升级（`/levelup`）。
+- **解除 `world_flags` 30 条静默丢弃上限**（`crates/domain/src/patch.rs`）：上限提升至 60 条并改为滚动保留最新进展，同时约束 DM 仅写入关键里程碑，防止长剧本后半程新节点被静默吞掉。
+- **优化回血 / 回 SAN 体验**（`crates/domain/src/dnd_ops.rs`、`prompts/dm_system.md`）：`/短休`（`/rest short`）在回血和刷新短休技之外同时回复少量 SAN（1~2 点），并明确引导 DM 在玩家安全用药/包扎/喘息时通过正数 `hp_delta`/`san_delta` 合理回复状态。
+
 ## [1.8.0] - 4 层多人长剧本记忆引擎 + 半路空降私密前情包 + 反 AI 腔文风精修 + 活卡重启持久化
 ### 本次改动
 - **4 层多人长剧本抗失忆引擎**（`crates/infra-llm/src/memory.rs`、`prompts.rs`、`prompts/summarizer.md`）：

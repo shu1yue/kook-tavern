@@ -85,6 +85,12 @@ pub fn apply_rest_to_players(players: &mut [Player], kind: RestKind) -> Vec<Stri
                 if p.hp > old {
                     items.push(format!("HP {}→{}", old, p.hp));
                 }
+                let san_heal = (p.max_san / 5).clamp(1, 2);
+                let old_san = p.san;
+                p.san = (p.san + san_heal).clamp(0, p.max_san);
+                if p.san > old_san {
+                    items.push(format!("SAN {}→{}", old_san, p.san));
+                }
                 let mut recharged = 0u32;
                 for ab in &mut p.dnd.abilities {
                     if ab.recharge == AbilityRecharge::ShortRest && ab.uses_left < ab.max_uses {

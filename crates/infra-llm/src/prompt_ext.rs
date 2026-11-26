@@ -225,7 +225,8 @@ pub fn format_act_progress(scenario: &Scenario, room: &RoomState) -> String {
     let flags = if room.world_flags.is_empty() {
         "无".to_string()
     } else {
-        room.world_flags.join("、")
+        let start = room.world_flags.len().saturating_sub(20);
+        room.world_flags[start..].join("、")
     };
     if scenario.acts.is_empty() {
         return format!("自由推进 ｜ 已触发节点：[{flags}]");
@@ -235,12 +236,21 @@ pub fn format_act_progress(scenario: &Scenario, room: &RoomState) -> String {
         .saturating_sub(1)
         .min(total - 1);
     let act = &scenario.acts[idx];
-    format!(
+    let mut out = format!(
         "第 {}/{} 幕【{}】｜ 本幕目标：{} ｜ 已触发节点：[{}]",
-        idx + 1,
-        total,
-        act.title,
-        act.goal,
-        flags
-    )
+        idx + 1, total, act.title, act.goal, flags
+    );
+    if idx + 1 < total {
+        let next = &scenario.acts[idx + 1];
+        let cond = if act.advance_flags.is_empty() {
+            act.goal.clone()
+        } else {
+            act.advance_flags.join(" / ")
+        };
+        out.push_str(&format!(
+            "\n- 过幕判定条件：[{cond}] → 下一幕预告：第 {}/{} 幕【{}】（目标：{}）。若小队已达成上述目标或已离开本幕核心场景迈向下一阶段，本轮请务必将 JSON 中的 `advance_act` 设为 `true` 以正式转幕并触发全队升级！",
+            idx + 2, total, next.title, next.goal
+        ));
+    }
+    out
 }
