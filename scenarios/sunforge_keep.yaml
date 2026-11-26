@@ -376,3 +376,17 @@ worldbook:
     content: |
       秘库最深处石碑刻着连大匠师也隐瞒的往事：『晨日核心』其实是一位上古火元素领主自愿沉睡化作的契约之心。
       强行摧毁它会释放灼热震爆；而带着敬意诵念古矮人安抚词（仅适合用 private_whispers 告诉通过 DC 15 灵感/奥秘检定的角色），竟能唤醒核心的善意意识，直接反噬执政官维克多！
+
+clocks:
+  - id: eclipse_countdown
+    name: "日蚀降临倒计时"
+    kind: threat
+    segments: 8
+    auto_tick_every: 3
+    on_full: "暗紫日蚀吞没山谷，执政官维克多在日蚀圣坛启动最终抽能仪轨，熔火魔像苏醒阻路，小队必须立即闯入圣坛决战或阻止蚀日冠冕铸成！"
+  - id: valves_secured
+    name: "镇压闸与核心破局"
+    kind: progress
+    segments: 6
+    auto_tick_every: 0
+    on_full: "大匠师巴林获救、镇压闸被扭转且晨日核心停机口令齐备，执政官的护盾彻底碎裂，立刻进入终局正面决战与结局抉择！"

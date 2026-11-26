@@ -63,6 +63,10 @@ const FORGE_SYSTEM_PROMPT: &str = r#"你是专业的线上多人 TRPG / 群酒�
   "worldbook": [
     {"id": "wb_public_intro", "title": "公开背景与登场人物简介（1条，无剧透）", "keywords": ["背景", "人物"], "always_active": true, "player_visible": true, "priority": 100, "content": "用大白话介绍故事背景与 3~4 位核心 NPC 的公开身份（绝不剧透真凶）"},
     {"id": "wb_plot_1", "title": "本局专属关键NPC/Boss真相（生成4~6条）", "keywords": ["人物名", "所在地图节点名", "关键道具"], "always_active": false, "player_visible": false, "priority": 92, "content": "具体直白真相、NPC 动机、正面摊牌触发方式与破解条件"}
+  ],
+  "clocks": [
+    {"id": "crisis_clock", "name": "核心危机倒计时（4~8字）", "kind": "threat", "segments": 6, "auto_tick_every": 2, "on_full": "大白话写清满格后幕后危机立刻失控爆发、反派正面现身逼迫终局抉择"},
+    {"id": "breakthrough_clock", "name": "真相破局进度（4~8字）", "kind": "progress", "segments": 4, "auto_tick_every": 0, "on_full": "大白话写清满格后核心真相与破局途径彻底敞开，立刻进入终局决断"}
   ]
 }
 要求：
@@ -70,7 +74,8 @@ const FORGE_SYSTEM_PROMPT: &str = r#"你是专业的线上多人 TRPG / 群酒�
 2. acts 严格等于用户要求的幕数（3、5 或 6 幕），层层递进，第 2 幕起的 `enter_nodes` 填对应阶段 `map_nodes.id` 以便玩家走到该地点自动转幕；endings 为 3~4 个（含 true 与 bad）；
 3. map_nodes 提供 5~8 个合理坐标（0~100）的地点并用 map_edges 连通，node id 仅含小写英文数字下划线；
 4. 核心 NPC 控制在 3~5 位，每位都有清晰身份与明确动机；终幕 Boss/核心真相世界书的 `keywords` 必须包含终幕所在 `map_nodes.name`，防止玩家进场后 Boss 失踪；
-5. 若用户已提供基础世界书，worldbook 只需补写本局专属的公开背景、关键 NPC 真相与 Boss 机制（不要重复照抄基础世界书）。"#;
+5. clocks 必须提供 1 个威胁钟（kind: "threat"，3幕用6格/auto_tick_every=2，5~6幕用8格/auto_tick_every=3）与 1 个进度钟（kind: "progress"，4~6格/auto_tick_every=0），保证绝不水剧情；
+6. 若用户已提供基础世界书，worldbook 只需补写本局专属的公开背景、关键 NPC 真相与 Boss 机制（不要重复照抄基础世界书）。"#;
 
 pub fn build_forge_messages(req: &ForgeScenarioRequest) -> Vec<ChatMessage> {
     let d = &req.draft;

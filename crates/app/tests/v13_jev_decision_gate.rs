@@ -241,7 +241,7 @@ fn semantic_lore_union_preserves_prefix_cache_and_keyword_floor() {
         narrative_style: NarrativeStyle::Prose, gm_user_id: "u1".into(),
         web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![],
-        ended_id: None, ended_title: None, bulletins: vec![], check_system: Default::default(),
+        ended_id: None, ended_title: None, bulletins: vec![], clocks: vec![], check_system: Default::default(),
         last_rest_turn: 0, summary: String::new(), summary_upto_turn: 0, active: true,
         created_at: now, updated_at: now,
     };
@@ -279,7 +279,7 @@ fn semantic_reply_audit_suppresses_false_positives_and_redacts_whisper_leak() {
         narrative_style: NarrativeStyle::Prose, gm_user_id: "u1".into(),
         web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![],
-        ended_id: None, ended_title: None, bulletins: vec![], check_system: Default::default(),
+        ended_id: None, ended_title: None, bulletins: vec![], clocks: vec![], check_system: Default::default(),
         last_rest_turn: 0, summary: String::new(), summary_upto_turn: 0, active: true,
         created_at: now, updated_at: now,
     };
@@ -293,18 +293,21 @@ fn semantic_reply_audit_suppresses_false_positives_and_redacts_whisper_leak() {
     // Case A: Keyword heuristic false positive ("幸好没受了伤") suppressed by semantic audit!
     let fp_reply = DmStructuredReply {
         scene_title: "惊险闪避".into(),
+        turn_outcome: "成功闪避袭击".into(),
         narrative: "你灵巧地侧身闪避，幸好没受了伤，稳稳落回原位。".into(),
         private_whispers: vec![], state_patches: vec![], new_clues: vec![],
         npc_updates: vec![], world_time: None, location: None, suggested_actions: vec![],
         suggested_check: None, add_flags: vec![], advance_act: false,
         trigger_ending_id: None, world_bulletin: None, reincarnation_echo: None,
-        grant_inspiration: vec![],
+        grant_inspiration: vec![], clock_updates: vec![],
     };
     assert!(detect_consistency_nudge(&sc, &room, &players, &fp_reply, false).is_some());
     let clean_audit = ReplyAuditVerdict {
         prob_missed_vitals: 0.04,
         prob_missed_item: 0.02,
         prob_whisper_leak: 0.0,
+        prob_cryptic_riddle: 0.0,
+        prob_plot_stall: 0.0,
         provider: "mock",
         latency_ms: 88.0,
     };
@@ -316,6 +319,7 @@ fn semantic_reply_audit_suppresses_false_positives_and_redacts_whisper_leak() {
     // Case B: Whisper leak detected -> redacted_narrative cleanly scrubs public text!
     let mut leak_reply = DmStructuredReply {
         scene_title: "吧台低语".into(),
+        turn_outcome: "阿明发现密信线索".into(),
         narrative: "老雷恩擦拭着酒杯，其实他抽屉里藏着红月教团的密信，大厅众人一时无言。".into(),
         private_whispers: vec![PrivateWhisper {
             player_name: "阿明".into(),
@@ -324,12 +328,14 @@ fn semantic_reply_audit_suppresses_false_positives_and_redacts_whisper_leak() {
         state_patches: vec![], new_clues: vec![], npc_updates: vec![], world_time: None,
         location: None, suggested_actions: vec![], suggested_check: None, add_flags: vec![],
         advance_act: false, trigger_ending_id: None, world_bulletin: None, reincarnation_echo: None,
-        grant_inspiration: vec![],
+        grant_inspiration: vec![], clock_updates: vec![],
     };
     let leak_audit = ReplyAuditVerdict {
         prob_missed_vitals: 0.02,
         prob_missed_item: 0.01,
         prob_whisper_leak: 0.93,
+        prob_cryptic_riddle: 0.0,
+        prob_plot_stall: 0.0,
         provider: "mock",
         latency_ms: 110.0,
     };
@@ -529,7 +535,7 @@ async fn openai_provider_wires_jev_lore_recall_and_whisper_redaction_end_to_end(
         narrative_style: NarrativeStyle::Prose, gm_user_id: "u1".into(),
         web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![],
-        ended_id: None, ended_title: None, bulletins: vec![], check_system: Default::default(),
+        ended_id: None, ended_title: None, bulletins: vec![], clocks: vec![], check_system: Default::default(),
         last_rest_turn: 0, summary: String::new(), summary_upto_turn: 0, active: true,
         created_at: now, updated_at: now,
     };
@@ -562,6 +568,8 @@ async fn openai_provider_wires_jev_lore_recall_and_whisper_redaction_end_to_end(
             prob_missed_vitals: 0.01,
             prob_missed_item: 0.02,
             prob_whisper_leak: 0.94,
+            prob_cryptic_riddle: 0.0,
+            prob_plot_stall: 0.0,
             provider: "mock",
             latency_ms: 95.0,
         }),
@@ -602,7 +610,7 @@ async fn gate7_red_team_regressions_null_fields_bounds_soft_prefix_and_partial_f
         narrative_style: NarrativeStyle::Prose, gm_user_id: "u1".into(),
         web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![],
-        ended_id: None, ended_title: None, bulletins: vec![], check_system: Default::default(),
+        ended_id: None, ended_title: None, bulletins: vec![], clocks: vec![], check_system: Default::default(),
         last_rest_turn: 0, summary: String::new(), summary_upto_turn: 0, active: true,
         created_at: now, updated_at: now,
     };
@@ -615,15 +623,17 @@ async fn gate7_red_team_regressions_null_fields_bounds_soft_prefix_and_partial_f
     let long_narrative = "风雪在余烬酒馆的窗棂外呼啸拍打，壁炉里干柴噼啪作响。老雷恩擦拭着一只缺口陶杯，目光在吧台阴影与墙上焦黑徽记之间缓缓游移，大厅里的旅人们各怀心事地压低了交谈声，空气中弥漫着松脂与冷铁交织的紧张气息。";
     let mut reply = DmStructuredReply {
         scene_title: "风雪余烬".into(),
+        turn_outcome: "大厅局势紧张".into(),
         narrative: long_narrative.into(),
         private_whispers: vec![PrivateWhisper { player_name: "阿明".into(), secret: "密信线索".into() }],
         state_patches: vec![], new_clues: vec![], npc_updates: vec![], world_time: None,
         location: None, suggested_actions: vec![], suggested_check: None, add_flags: vec![],
         advance_act: false, trigger_ending_id: None, world_bulletin: None, reincarnation_echo: None,
-        grant_inspiration: vec![],
+        grant_inspiration: vec![], clock_updates: vec![],
     };
     let leak_audit = ReplyAuditVerdict {
         prob_missed_vitals: 0.0, prob_missed_item: 0.0, prob_whisper_leak: 0.91,
+        prob_cryptic_riddle: 0.0, prob_plot_stall: 0.0,
         provider: "mock", latency_ms: 50.0,
     };
     let plan = detect_consistency_nudge_with_audit(

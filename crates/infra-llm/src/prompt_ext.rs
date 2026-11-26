@@ -183,6 +183,51 @@ pub fn format_dynamic_director_sections(
         );
     }
 
+    // 0.5 Blades-in-the-Dark Pacing Clock pressure & mandatory full-clock eruption
+    let full_clocks: Vec<String> = room
+        .clocks
+        .iter()
+        .filter(|c| c.filled >= c.segments)
+        .map(|c| {
+            format!(
+                "- 【{}】（{} {}/{}）：{}",
+                c.name,
+                c.kind.label(),
+                c.filled,
+                c.segments,
+                c.on_full
+            )
+        })
+        .collect();
+    if !full_clocks.is_empty() {
+        sections.push(format!(
+            "【⏰ 时钟满格·强制爆发指令】以下局势钟已填满，**本轮必须在 `narrative` 中立刻兑现其满格后果（直接触发危机爆发、核心人物现身摊牌或终局抉择）**，严禁继续兜圈子或水剧情！\n{}",
+            full_clocks.join("\n")
+        ));
+    } else {
+        let near_clocks: Vec<String> = room
+            .clocks
+            .iter()
+            .filter(|c| c.segments >= 2 && c.filled + 1 == c.segments)
+            .map(|c| {
+                format!(
+                    "- 【{}】（{} {}/{}，仅差 1 格即爆发）：{}",
+                    c.name,
+                    c.kind.label(),
+                    c.filled,
+                    c.segments,
+                    c.on_full
+                )
+            })
+            .collect();
+        if !near_clocks.is_empty() {
+            sections.push(format!(
+                "【⚠️ 局势时钟临近满格预警】以下时钟只差最后 1 格，请在本轮用直白具体的迹象传达紧迫感，并把关键选择摆到台面上：\n{}",
+                near_clocks.join("\n")
+            ));
+        }
+    }
+
     let total_acts = scenario.acts.len() as u32;
     if total_acts > 0 {
         let cur_act = room.current_act.clamp(1, total_acts);
@@ -340,7 +385,7 @@ pub fn format_act_progress(scenario: &Scenario, room: &RoomState) -> String {
             act.advance_flags.join(" / ")
         };
         out.push_str(&format!(
-            "\n- 过幕判定条件：[{cond}] → 下一幕预告：第 {}/{} 幕【{}】（目标：{}）。若小队已达成上述目标或已离开本幕核心场景迈向下一阶段，本轮请务必将 JSON 中的 `advance_act` 设为 `true` 以正式转幕并触发全队升级！",
+            "\n- 过幕判定条件：[{cond}] → 下一幕预告：第 {}/{} 幕【{}】（目标：{}）。若小队已达成上述目标或已离开本幕核心场景迈向下一阶段，本轮请务必将 JSON 中的 `advance_act` 设为 `true` 以正式转幕并触发过幕成长/领悟！",
             idx + 2, total, next.title, next.goal
         ));
     }

@@ -23,13 +23,14 @@ pub use dnd::{
 };
 pub use dnd_ops::{
     LevelUpChoice, apply_inspiration_grants, apply_level_up, apply_rest_to_players,
-    award_act_milestone, check_tier_hint_for, check_tier_label_for, parse_point_buy_stats,
-    reset_dnd_profile_for_new_room, validate_point_buy,
+    award_act_milestone, award_act_milestone_for, check_tier_hint_for, check_tier_label_for,
+    parse_point_buy_stats, reset_dnd_profile_for_new_room, validate_point_buy,
 };
 pub use dnd_prof::match_proficiency;
 pub use guards::{
     ConsistencyNudgePlan, DmPatchDelta, SpotlightGuidance, analyze_spotlight,
-    detect_consistency_nudge, detect_consistency_nudge_with_audit, merge_patch_delta,
+    detect_consistency_nudge, detect_consistency_nudge_with_audit, detect_cryptic_riddle_slop,
+    detect_plot_stall_slop, merge_patch_delta,
 };
 pub use lorebook::{always_active_worldbook, match_dynamic_worldbook, match_worldbook};
 pub use models::*;
@@ -45,6 +46,7 @@ pub use workshop::{
     WorkshopDraft, validate_worldbook_pack,
 };
 pub use world::{
-    DirectorBeat, FactionAgenda, ScenarioMapEdge, ScenarioMapNode, ScenarioRules, WorldBulletin,
-    due_director_beats, resolve_map_node_id, should_trigger_bulletin,
+    ClockKind, ClockState, DirectorBeat, FactionAgenda, ScenarioClock, ScenarioMapEdge,
+    ScenarioMapNode, ScenarioRules, WorldBulletin, due_director_beats, format_clock_bar,
+    init_room_clocks, resolve_map_node_id, should_trigger_bulletin,
 };

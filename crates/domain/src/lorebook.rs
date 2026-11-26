@@ -105,6 +105,7 @@ mod tests {
             map_nodes: vec![],
             map_edges: vec![],
             rules: Default::default(),
+            clocks: vec![],
         }
     }
 

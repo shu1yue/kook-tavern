@@ -170,9 +170,23 @@
     }
     .acc-detail ul { margin: 4px 0 8px; padding-left: 16px; }
     .acc-detail li { margin-bottom: 4px; }
-    /* Goal Page */
+    /* Goal Page & Blades-in-the-Dark SVG Clocks */
     .goal-title { font-size: 15px; font-weight: 800; color: var(--accent); margin-bottom: 5px; }
     .goal-desc { font-size: 13px; color: var(--text); }
+    .clocks-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
+    .clock-tile {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 10px; border-radius: 11px;
+      background: var(--surface-2); border: 1px solid var(--border);
+    }
+    .clock-tile.threat.hot { border-color: rgba(248, 81, 73, 0.65); background: rgba(248, 81, 73, 0.09); }
+    .clock-tile.progress.hot { border-color: rgba(63, 185, 80, 0.65); background: rgba(63, 185, 80, 0.09); }
+    .clock-svg { width: 48px; height: 48px; flex-shrink: 0; }
+    .clock-meta { min-width: 0; flex: 1; }
+    .clock-name { font-size: 12px; font-weight: 700; color: var(--text); line-height: 1.3; }
+    .clock-sub { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+    .clock-sub.danger { color: #fca5a5; font-weight: 700; }
+    .clock-sub.done { color: #7ee787; font-weight: 700; }
     .act-pill {
       padding: 9px 11px; border-radius: 10px; background: var(--surface-2);
       border: 1px solid var(--border); margin-bottom: 7px; font-size: 12.5px;
@@ -559,6 +573,42 @@
     });
   }
 
+  function renderClockWheel(c) {
+    const segs = Math.max(3, Math.min(12, Number(c.segments) || 6));
+    const filled = Math.max(0, Math.min(segs, Number(c.filled) || 0));
+    const isThreat = c.kind === 'threat';
+    const fillCol = isThreat ? '#f85149' : '#3fb950';
+    const trackCol = 'rgba(255,255,255,0.07)';
+    const cx = 26, cy = 26, r = 22;
+    let wedges = '';
+    for (let i = 0; i < segs; i++) {
+      const a0 = -Math.PI / 2 + (i * 2 * Math.PI) / segs;
+      const a1 = -Math.PI / 2 + ((i + 1) * 2 * Math.PI) / segs;
+      const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
+      const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+      const large = (a1 - a0) > Math.PI ? 1 : 0;
+      const d = `M ${cx} ${cy} L ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)} Z`;
+      wedges += `<path d="${d}" fill="${i < filled ? fillCol : trackCol}" stroke="#15110f" stroke-width="1.8"/>`;
+    }
+    const hot = filled >= segs || filled + 1 >= segs;
+    const subCls = filled >= segs ? (isThreat ? 'danger' : 'done') : '';
+    const subTxt = filled >= segs
+      ? (isThreat ? '🚨 已满·危机爆发' : '🎉 已满·破局就绪')
+      : `${isThreat ? '威胁钟' : '进度钟'} ${filled}/${segs}${c.auto_tick_every ? ` · 每${c.auto_tick_every}轮+1` : ''}`;
+    return `<div class="clock-tile ${isThreat ? 'threat' : 'progress'} ${hot ? 'hot' : ''}">
+      <svg class="clock-svg" viewBox="0 0 52 52" aria-label="${esc(c.name)} ${filled}/${segs}">
+        <circle cx="${cx}" cy="${cy}" r="${r + 1.2}" fill="none" stroke="${hot ? fillCol : 'var(--border)'}" stroke-width="1.4" opacity="0.8"/>
+        ${wedges}
+        <circle cx="${cx}" cy="${cy}" r="9" fill="#15110f"/>
+        <text x="${cx}" y="${cy + 3.2}" text-anchor="middle" fill="${hot ? fillCol : '#f3ece4'}" font-size="8.5" font-weight="800">${filled}/${segs}</text>
+      </svg>
+      <div class="clock-meta">
+        <div class="clock-name">${esc(c.name)}</div>
+        <div class="clock-sub ${subCls}">${esc(subTxt)}</div>
+      </div>
+    </div>`;
+  }
+
   function renderGoal() {
     const acts = state.acts || [];
     const curAct = acts.find(a => a.index === state.current_act) || acts[0];
@@ -579,6 +629,14 @@
         <div class="goal-title">${esc(curAct.title)}</div>
         <div class="goal-desc">${esc(curAct.goal)}</div>
         ${(state.world_flags||[]).length ? `<div class="chips" style="margin-top:10px">${state.world_flags.map(f => `<span class="chip sm ally">🚩 ${esc(f)}</span>`).join('')}</div>` : ''}
+      </div>`;
+    }
+
+    const clocks = state.clocks || [];
+    if (clocks.length) {
+      html += `<div class="card">
+        <div class="label"><span>⏳ 局势进度钟</span><span>🔴威胁 🟢破局</span></div>
+        <div class="clocks-grid">${clocks.map(renderClockWheel).join('')}</div>
       </div>`;
     }
 

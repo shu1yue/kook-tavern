@@ -3,7 +3,7 @@ use chrono::Utc;
 use rand::Rng;
 use tavern_domain::{
     CardTheme, ChatMode, EngineResponse, IncomingMessage, NarrativeStyle, RoomEvent, RoomState,
-    ScenarioSummary, TurnPhase, ending_scope_key,
+    ScenarioSummary, TurnPhase, ending_scope_key, format_clock_bar, init_room_clocks,
 };
 
 use crate::commands::check::format_act_badge;
@@ -147,6 +147,7 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         ended_id: None,
         ended_title: None,
         bulletins: Vec::new(),
+        clocks: init_room_clocks(&scenario),
         check_system: scenario.rules.check_system,
         last_rest_turn: 0,
         summary: String::new(),
@@ -345,6 +346,22 @@ pub fn cmd_summary(engine: &GameEngine, channel_id: &str) -> Result<EngineRespon
             cur.title,
             cur.goal
         ));
+    }
+
+    let active_clocks = if !room.clocks.is_empty() {
+        room.clocks.clone()
+    } else if let Some(sc) = &scenario {
+        init_room_clocks(sc)
+    } else {
+        Vec::new()
+    };
+    if !active_clocks.is_empty() {
+        let bars = active_clocks
+            .iter()
+            .map(format_clock_bar)
+            .collect::<Vec<_>>()
+            .join("\n");
+        todo_lines.push(format!("⏳ **局势进度钟**：\n{bars}"));
     }
 
     let trimmed_sum = room.summary.trim();

@@ -262,7 +262,11 @@ impl DecisionGate for SystemOneJevGate {
         has_item_patch: bool,
     ) -> BoxFuture<'a, Option<ReplyAuditVerdict>> {
         Box::pin(async move {
-            if has_vitals_patch && has_item_patch && whispers_summary.trim().is_empty() {
+            if has_vitals_patch
+                && has_item_patch
+                && whispers_summary.trim().is_empty()
+                && narrative.trim().chars().count() < 40
+            {
                 return Some(ReplyAuditVerdict::default());
             }
             let (state, questions, req_keys) = build_audit_state_and_questions(
@@ -273,6 +277,8 @@ impl DecisionGate for SystemOneJevGate {
                 prob_missed_vitals: extract_yes_prob(&parsed, "missed_vitals").unwrap_or(0.0),
                 prob_missed_item: extract_yes_prob(&parsed, "missed_item").unwrap_or(0.0),
                 prob_whisper_leak: extract_yes_prob(&parsed, "leaked_whisper").unwrap_or(0.0),
+                prob_cryptic_riddle: extract_yes_prob(&parsed, "is_cryptic_riddle").unwrap_or(0.0),
+                prob_plot_stall: extract_yes_prob(&parsed, "is_plot_stall").unwrap_or(0.0),
                 provider,
                 latency_ms,
             };

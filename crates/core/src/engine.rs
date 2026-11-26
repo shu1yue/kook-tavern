@@ -256,6 +256,18 @@ impl GameEngine {
                 }
             })
             .unwrap_or_default();
+        let active_clocks = if !room.clocks.is_empty() {
+            room.clocks.clone()
+        } else if let Some(sc) = &scenario {
+            tavern_domain::init_room_clocks(sc)
+        } else {
+            Vec::new()
+        };
+        let clock_lines: Vec<String> = active_clocks
+            .iter()
+            .take(4)
+            .map(tavern_domain::format_clock_bar)
+            .collect();
         let opening_roles = if room.turn_number == 0 {
             scenario
                 .map(|s| s.preset_roles.into_iter().take(4).collect())
@@ -268,6 +280,7 @@ impl GameEngine {
             turn_number: room.turn_number,
             rule_badge: room.check_system.short_badge().to_string(),
             current_goal,
+            clock_lines,
             party_lines,
             turn_progress,
             opening_roles,

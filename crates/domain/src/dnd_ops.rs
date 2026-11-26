@@ -226,6 +226,45 @@ pub fn apply_inspiration_grants(
 }
 
 pub fn award_act_milestone(players: &mut [Player], state_changes: &mut Vec<String>) {
+    award_act_milestone_for(players, CheckSystem::TwoD6, state_changes);
+}
+
+/// Applies act-transition milestone rewards tailored to the active rule system:
+/// - `2d6` / `d20`: classic Lv.+1 + `/levelup` growth point;
+/// - `d100` (CoC / rule-horror): grounded investigator breather (+2 SAN + Inspiration, NO RPG leveling!).
+pub fn award_act_milestone_for(
+    players: &mut [Player],
+    check_system: CheckSystem,
+    state_changes: &mut Vec<String>,
+) {
+    if check_system == CheckSystem::D100 {
+        let mut recovered = Vec::new();
+        for p in players.iter_mut().filter(|p| !p.is_afk) {
+            let old_san = p.san;
+            p.san = (p.san + 2).clamp(0, p.max_san);
+            let gained_insp = !p.dnd.inspiration;
+            p.dnd.inspiration = true;
+            let mut tags = Vec::new();
+            if p.san > old_san {
+                tags.push(format!("SAN {}→{}", old_san, p.san));
+            }
+            if gained_insp {
+                tags.push("获【调查直觉/激励点】".to_string());
+            }
+            if tags.is_empty() {
+                tags.push("神智稳固".to_string());
+            }
+            recovered.push(format!("{}（{}）", p.character_name, tags.join("，")));
+        }
+        if !recovered.is_empty() {
+            state_changes.push(format!(
+                "🔍 **阶段领悟（d100 调查喘息）**：{}",
+                recovered.join("、")
+            ));
+        }
+        return;
+    }
+
     let mut leveled = Vec::new();
     for p in players.iter_mut().filter(|p| !p.is_afk) {
         p.dnd.level = (p.dnd.level + 1).min(20);

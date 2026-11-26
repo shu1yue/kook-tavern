@@ -91,6 +91,7 @@ impl LlmProvider for ControlledSlowLlm {
             Ok(DmTurnOutput {
                 reply: DmStructuredReply {
                     scene_title: format!("慢速回应第{next_turn}幕"),
+                    turn_outcome: "延迟回应推进剧情".into(),
                     narrative: "延迟到达的剧情".into(),
                     private_whispers: vec![],
                     state_patches: vec![],
@@ -106,6 +107,7 @@ impl LlmProvider for ControlledSlowLlm {
                     world_bulletin: None,
                     reincarnation_echo: None,
                     grant_inspiration: vec![],
+                    clock_updates: vec![],
                 },
                 usage: LlmUsage::default(),
                 extra_usages: vec![],
@@ -283,6 +285,7 @@ fn external_prompts_hot_load_from_disk() {
         ended_id: None,
         ended_title: None,
         bulletins: vec![],
+        clocks: vec![],
         check_system: Default::default(),
         last_rest_turn: 0,
         summary: String::new(),

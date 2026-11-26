@@ -256,6 +256,33 @@ fn format_dynamic_turn_prompt(
     };
 
     let act_block = format_act_progress(scenario, room);
+    let clocks_block = if room.clocks.is_empty() {
+        "（暂未启用进度钟）".to_string()
+    } else {
+        room.clocks
+            .iter()
+            .map(|c| {
+                let auto_hint = if c.auto_tick_every > 0 {
+                    format!("，每{}轮自动+1", c.auto_tick_every)
+                } else {
+                    String::new()
+                };
+                let full_tag = if c.filled >= c.segments { "【已满·必须兑现！】" } else { "" };
+                format!(
+                    "- `{}`（{} · {}）：{}/{}{}{} ｜ 满格后果：{}",
+                    c.id,
+                    c.name,
+                    c.kind.label(),
+                    c.filled,
+                    c.segments,
+                    auto_hint,
+                    full_tag,
+                    c.on_full
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
     let endings_block = if scenario.endings.is_empty() {
         "（自由探索模组，无需触发预设结局）".to_string()
     } else {
@@ -300,6 +327,8 @@ fn format_dynamic_turn_prompt(
 - 当前地点：{location}
 - 当前时间：{world_time}
 - 当前幕次进度：{act_block}
+- 局势进度钟与威胁钟（用 `clock_updates` 推进，满格必须兑现后果）：
+{clocks_block}
 - 队员状态（当前共 {party_count} 人）：
 {party_block}
 - 已掌握线索：

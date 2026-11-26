@@ -267,7 +267,7 @@ impl LlmProvider for OpenAiLlmProvider {
                 if let Some(plan) = detect_consistency_nudge_with_audit(
                     scenario, room, players, &reply, bulletin_due, audit.as_ref(), self.audit_threshold,
                 ) {
-                    let nudge_tokens = if plan.want_narrative_redact {
+                    let nudge_tokens = if plan.want_narrative_redact || plan.want_narrative_rewrite {
                         self.max_tokens
                     } else {
                         self.max_tokens.min(400)
@@ -281,7 +281,9 @@ impl LlmProvider for OpenAiLlmProvider {
                                 info!(
                                     channel_id = %room.channel_id,
                                     redact = plan.want_narrative_redact,
-                                    "一次性状态一致性补齐生效"
+                                    rewrite = plan.want_narrative_rewrite,
+                                    clocks = plan.want_clocks,
+                                    "一次性状态/叙事质量拦截补齐生效"
                                 );
                                 if plan.want_narrative_redact {
                                     did_whisper_redact = true;

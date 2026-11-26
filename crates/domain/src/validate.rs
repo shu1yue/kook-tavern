@@ -294,6 +294,7 @@ mod tests {
             map_nodes: vec![],
             map_edges: vec![],
             rules: Default::default(),
+            clocks: vec![],
         };
         assert!(validate_scenario(&sc).is_err());
         sc.id = "valid_demo_01".into();

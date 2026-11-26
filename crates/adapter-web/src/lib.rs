@@ -1,5 +1,5 @@
 mod handlers;
-mod hud_views;
+pub mod hud_views;
 mod map_view;
 mod security;
 mod views;

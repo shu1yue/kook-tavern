@@ -6,7 +6,9 @@ use thiserror::Error;
 
 use crate::dnd::{CharacterAbility, CheckSystem, PlayerDndProfile};
 use crate::stats::{CharacterStats, ScenarioAct, ScenarioEnding};
-use crate::world::{ScenarioMapEdge, ScenarioMapNode, ScenarioRules, WorldBulletin};
+use crate::world::{
+    ClockState, ScenarioClock, ScenarioMapEdge, ScenarioMapNode, ScenarioRules, WorldBulletin,
+};
 
 #[derive(Debug, Error)]
 pub enum DomainError {
@@ -173,6 +175,8 @@ pub struct Scenario {
     pub map_edges: Vec<ScenarioMapEdge>,
     #[serde(default)]
     pub rules: ScenarioRules,
+    #[serde(default)]
+    pub clocks: Vec<ScenarioClock>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -213,6 +217,8 @@ pub struct RoomState {
     pub ended_title: Option<String>,
     #[serde(default)]
     pub bulletins: Vec<WorldBulletin>,
+    #[serde(default)]
+    pub clocks: Vec<ClockState>,
     #[serde(default)]
     pub check_system: CheckSystem,
     #[serde(default)]

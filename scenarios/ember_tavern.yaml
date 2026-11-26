@@ -253,3 +253,17 @@ rules:
       by_turn: 11
       flag: "白鸦正面现身摊牌"
       prompt_hint: "反锁在三层玻璃观测室的叛逃炼金师白鸦（卡修斯）必须立刻拍窗现身、用大白话正面摊牌，亮出星铜怀表与三百银盾，让玩家在安全停机/交易脱身/强行摧毁之间做出明确终局抉择。"
+
+clocks:
+  - id: star_overload
+    name: "午夜星仪过载"
+    kind: threat
+    segments: 6
+    auto_tick_every: 2
+    on_full: "午夜钟声响起，潮汐星仪彻底过载喷出漫天蓝焰！教会修女艾琳带队破门冲入钟楼，白鸦拍窗急吼求救，必须当场在安全停机、银盾交易或强行摧毁中立刻做出终局抉择！"
+  - id: shutdown_progress
+    name: "安全停机突破"
+    kind: progress
+    segments: 4
+    auto_tick_every: 0
+    on_full: "03-17 完整总钥与星铜怀表真相彻底明朗，通往钟楼三层星仪核心的障碍全面打通，白鸦当场现身摊牌，立刻推进最终结局！"

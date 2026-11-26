@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::Serialize;
-use tavern_domain::{CharacterStats, RoomState, TurnPhase, WorldBulletin};
+use tavern_domain::{CharacterStats, ClockKind, RoomState, TurnPhase, WorldBulletin, init_room_clocks};
 
 use crate::WebState;
 use crate::map_view::{ScenarioMapView, build_scenario_map_view};
@@ -38,8 +38,21 @@ pub struct PlayerHudView {
     pub clues: Vec<String>,
     pub glossary: Vec<GlossaryEntryView>,
     pub bulletins: Vec<WorldBulletin>,
+    pub clocks: Vec<ClockPublicView>,
     pub map: ScenarioMapView,
     pub recent_turns: Vec<TurnDigestView>,
+}
+
+/// Strictly spoiler-safe pacing clock view (never leaks DM-only `on_full` text before eruption).
+#[derive(Debug, Serialize)]
+pub struct ClockPublicView {
+    pub id: String,
+    pub name: String,
+    pub kind: &'static str,
+    pub filled: u8,
+    pub segments: u8,
+    pub auto_tick_every: u8,
+    pub triggered: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -246,6 +259,29 @@ pub fn build_player_hud_view(
     }).collect();
 
     let dashboard_path = format!("/room/{}?token={}", room.channel_id.replace(':', "%3A"), room.web_token);
+    let raw_clocks = if !room.clocks.is_empty() {
+        room.clocks
+    } else if let Some(sc) = &scenario {
+        init_room_clocks(sc)
+    } else {
+        Vec::new()
+    };
+    let clocks: Vec<ClockPublicView> = raw_clocks
+        .into_iter()
+        .take(4)
+        .map(|c| ClockPublicView {
+            id: c.id,
+            name: c.name,
+            kind: match c.kind {
+                ClockKind::Threat => "threat",
+                ClockKind::Progress => "progress",
+            },
+            filled: c.filled,
+            segments: c.segments,
+            auto_tick_every: c.auto_tick_every,
+            triggered: c.triggered,
+        })
+        .collect();
 
     Ok(Some(PlayerHudView {
         title: room.title, scenario_id: room.scenario_id, genre, tagline, theme,
@@ -255,7 +291,7 @@ pub fn build_player_hud_view(
         suggested_actions: room.suggested_actions,
         summary: room.summary, summary_upto_turn: room.summary_upto_turn,
         ended_id: room.ended_id, ended_title: room.ended_title, dashboard_path,
-        me, party, npcs, clues: room.clues, glossary, bulletins: room.bulletins, map, recent_turns,
+        me, party, npcs, clues: room.clues, glossary, bulletins: room.bulletins, clocks, map, recent_turns,
     }))
 }
 

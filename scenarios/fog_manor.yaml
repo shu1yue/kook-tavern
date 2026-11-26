@@ -257,3 +257,17 @@ rules:
       by_turn: 10
       flag: "午夜钟声临近"
       prompt_hint: "庄园老座钟指向 23:45，书房门缝渗出刺骨寒气，镜中真爵士的拍打声越发急促。"
+
+clocks:
+  - id: mirror_swap
+    name: "午夜镜像置换"
+    kind: threat
+    segments: 6
+    auto_tick_every: 2
+    on_full: "午夜十二点老座钟轰然敲响，假爵士彻底露出狰狞真容并猛扑向银烛台，黑曜落地镜掀起冰冷吸力，必须立刻碎镜救人或强行突围，严禁继续拖延！"
+  - id: mirror_break
+    name: "揭穿替身破局"
+    kind: progress
+    segments: 4
+    auto_tick_every: 0
+    on_full: "左手签名破绽、真爵士全名与纯银压制之法全部拼齐，假爵士无处可躲被迫在三楼书房当场摊牌，立刻进入碎镜终局对峙！"

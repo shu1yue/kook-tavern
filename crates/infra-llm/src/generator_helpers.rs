@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
 use tavern_domain::{
-    AbilityRecharge, CharacterAbility, CharacterStats, ForgeScenarioRequest, PresetRole, Scenario,
-    ScenarioAct, ScenarioEnding, ScenarioMapEdge, ScenarioMapNode, StarterCharacterDefaults,
-    WorldbookEntry, normalize_theme, sanitize_scenario_id,
+    AbilityRecharge, CharacterAbility, CharacterStats, ClockKind, ForgeScenarioRequest, PresetRole,
+    Scenario, ScenarioAct, ScenarioClock, ScenarioEnding, ScenarioMapEdge, ScenarioMapNode,
+    StarterCharacterDefaults, WorldbookEntry, normalize_theme, sanitize_scenario_id,
 };
 
 /// Clamps raw stat fields directly into fair point-buy bounds (`-1..=3`, sum `<= 3`)
@@ -170,6 +170,64 @@ pub(crate) fn sanitize_map_and_beats(sc: &mut Scenario) {
         });
     }
     sc.rules.must_hit_beats.truncate(12);
+
+    // 4. Sanitize and guarantee Blades-in-the-Dark pacing clocks (at least 1 Threat + 1 Progress)
+    let mut seen_clocks = HashSet::new();
+    let mut clean_clocks = Vec::new();
+    for (i, mut c) in std::mem::take(&mut sc.clocks).into_iter().take(4).enumerate() {
+        if c.name.trim().is_empty() {
+            continue;
+        }
+        let base = sanitize_scenario_id(&c.id);
+        let mut cid = if base.len() >= 2 && base != "custom_scenario" && !seen_clocks.contains(&base) {
+            base
+        } else {
+            format!("clock_{}", i + 1)
+        };
+        let mut seq = i + 2;
+        while seen_clocks.contains(&cid) {
+            cid = format!("clock_{seq}");
+            seq += 1;
+        }
+        c.id = cid.clone();
+        c.name = c.name.trim().chars().take(16).collect();
+        c.segments = c.segments.clamp(3, 12);
+        c.auto_tick_every = c.auto_tick_every.min(6);
+        if c.on_full.trim().is_empty() {
+            c.on_full = match c.kind {
+                ClockKind::Threat => format!("《{}》的核心危机彻底失控并直接逼近眼前，立刻进入终局正面对决！", sc.name),
+                ClockKind::Progress => format!("《{}》的关键真相与破局缺口彻底敞开，立刻推进最终结局收束！", sc.name),
+            };
+        }
+        seen_clocks.insert(cid);
+        clean_clocks.push(c);
+    }
+    let long_campaign = sc.acts.len() >= 5;
+    if !clean_clocks.iter().any(|c| c.kind == ClockKind::Threat) {
+        clean_clocks.insert(
+            0,
+            ScenarioClock {
+                id: "crisis_countdown".into(),
+                name: "幕后危机倒计时".into(),
+                kind: ClockKind::Threat,
+                segments: if long_campaign { 8 } else { 6 },
+                auto_tick_every: if long_campaign { 3 } else { 2 },
+                on_full: format!("《{}》的幕后危机彻底失控，反派与危险正面找上门来，必须当场做出终局抉择！", sc.name),
+            },
+        );
+    }
+    if !clean_clocks.iter().any(|c| c.kind == ClockKind::Progress) {
+        clean_clocks.push(ScenarioClock {
+            id: "truth_breakthrough".into(),
+            name: "核心破局进度".into(),
+            kind: ClockKind::Progress,
+            segments: if long_campaign { 6 } else { 4 },
+            auto_tick_every: 0,
+            on_full: format!("《{}》的核心真相与破局条件全部就位，幕后黑手无处遁形，立即迎来终局摊牌！", sc.name),
+        });
+    }
+    clean_clocks.truncate(4);
+    sc.clocks = clean_clocks;
 }
 
 pub(crate) fn short_fnv1a(s: &str) -> u32 {
@@ -284,5 +342,6 @@ pub(crate) fn build_mock_forged_scenario(req: &ForgeScenarioRequest) -> Scenario
             ScenarioMapEdge { from: "clue_hall".into(), to: "core_vault".into(), label: "暗道".into(), locked: false },
         ],
         rules: Default::default(),
+        clocks: Vec::new(),
     }
 }

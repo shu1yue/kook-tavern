@@ -49,10 +49,23 @@ pub struct WorldBulletinDraft {
     pub faction: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ClockUpdate {
+    pub id: String,
+    #[serde(default)]
+    pub delta: i8,
+    #[serde(default)]
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmStructuredReply {
     #[serde(default)]
     pub scene_title: String,
+    /// Plan-first plain-Chinese summary (15-35 chars) committed BEFORE `narrative`
+    /// so the LLM decides concrete plot progression before writing prose.
+    #[serde(default)]
+    pub turn_outcome: String,
     pub narrative: String,
     #[serde(default)]
     pub private_whispers: Vec<PrivateWhisper>,
@@ -82,6 +95,8 @@ pub struct DmStructuredReply {
     pub reincarnation_echo: Option<String>,
     #[serde(default)]
     pub grant_inspiration: Vec<String>,
+    #[serde(default)]
+    pub clock_updates: Vec<ClockUpdate>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -157,6 +172,7 @@ pub struct LiveStoryHud {
     pub turn_number: u32,
     pub rule_badge: String,
     pub current_goal: String,
+    pub clock_lines: Vec<String>,
     pub party_lines: Vec<String>,
     pub turn_progress: Vec<String>,
     pub opening_roles: Vec<PresetRole>,

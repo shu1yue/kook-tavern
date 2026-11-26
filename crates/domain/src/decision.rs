@@ -14,6 +14,8 @@ pub struct ReplyAuditVerdict {
     pub prob_missed_vitals: f64,
     pub prob_missed_item: f64,
     pub prob_whisper_leak: f64,
+    pub prob_cryptic_riddle: f64,
+    pub prob_plot_stall: f64,
     pub provider: &'static str,
     pub latency_ms: f64,
 }

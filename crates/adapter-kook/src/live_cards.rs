@@ -217,6 +217,9 @@ fn push_live_hud_modules(modules: &mut Vec<Value>, channel_id: &str, hud: &LiveS
     if !hud.current_goal.trim().is_empty() {
         hud_lines.push(format!("🎯 **当前目标**：{}", truncate_chars(hud.current_goal.trim(), 120)));
     }
+    if !hud.clock_lines.is_empty() {
+        hud_lines.push(format!("⏳ **局势钟**：{}", hud.clock_lines.join("　｜　")));
+    }
     if !hud.party_lines.is_empty() {
         hud_lines.push(format!("👥 **当前小队**：{}", hud.party_lines.join(" ｜ ")));
     } else if !hud.opening_roles.is_empty() {
@@ -309,6 +312,7 @@ mod tests {
             turn_number: 0,
             rule_badge: "经典 D&D (d20)".into(),
             current_goal: "查清蓝血信使与断钥匙真相".into(),
+            clock_lines: vec!["🔴 ⏳ **午夜星仪过载** ●●○○○○ `2/6`".into()],
             party_lines: vec!["**沐涵**（齿轮机械师 · ❤️12/12 🧠10/10）".into()],
             turn_progress: vec!["🎲 **沐涵**：🔍 侦查 16（✨成功）（待行动）".into()],
             opening_roles: vec![PresetRole {
@@ -329,6 +333,7 @@ mod tests {
         assert!(live_json.contains("tavern:pickrole:ch_live:0"));
         assert!(live_json.contains("沐涵"));
         assert!(live_json.contains("侦查 16"));
+        assert!(live_json.contains("午夜星仪过载"));
 
         let archived_json = render_story_turn_card(&story, None, true);
         let av: Value = serde_json::from_str(&archived_json).unwrap();

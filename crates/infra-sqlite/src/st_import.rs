@@ -201,6 +201,7 @@ fn convert_st_json(
         map_nodes: Vec::new(),
         map_edges: Vec::new(),
         rules: Default::default(),
+        clocks: Vec::new(),
     };
 
     if let Err(errs) = validate_scenario(&sc) {

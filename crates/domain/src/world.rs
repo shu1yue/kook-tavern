@@ -150,6 +150,145 @@ pub struct WorldBulletin {
     pub faction: String,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ClockKind {
+    #[default]
+    Threat,
+    Progress,
+}
+
+impl ClockKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            ClockKind::Threat => "威胁钟",
+            ClockKind::Progress => "进度钟",
+        }
+    }
+}
+
+fn default_clock_segments() -> u8 {
+    6
+}
+
+/// Blades-in-the-Dark style pacing clock definition declared on a Scenario.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScenarioClock {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub kind: ClockKind,
+    #[serde(default = "default_clock_segments")]
+    pub segments: u8,
+    /// Deterministic server auto-tick every N turns (0 = ticks only on DM/player progress).
+    #[serde(default)]
+    pub auto_tick_every: u8,
+    /// Concrete narrative consequence enforced the moment this clock reaches full.
+    #[serde(default)]
+    pub on_full: String,
+}
+
+/// Live runtime state of a pacing clock persisted in `RoomState`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ClockState {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub kind: ClockKind,
+    #[serde(default)]
+    pub filled: u8,
+    #[serde(default = "default_clock_segments")]
+    pub segments: u8,
+    #[serde(default)]
+    pub auto_tick_every: u8,
+    #[serde(default)]
+    pub on_full: String,
+    #[serde(default)]
+    pub triggered: bool,
+}
+
+/// Builds initial room clocks from scenario YAML, falling back to a universal 2-clock pair
+/// (Threat + Progress) so legacy, SillyTavern, and custom scenarios all get hard pacing pressure.
+pub fn init_room_clocks(scenario: &Scenario) -> Vec<ClockState> {
+    let mut out: Vec<ClockState> = scenario
+        .clocks
+        .iter()
+        .filter(|c| !c.id.trim().is_empty() && !c.name.trim().is_empty())
+        .take(4)
+        .map(|c| {
+            let on_full = if c.on_full.trim().is_empty() {
+                match c.kind {
+                    ClockKind::Threat => {
+                        "危机彻底爆发并直接找上门来，必须当场迎战或承受惨痛代价！".to_string()
+                    }
+                    ClockKind::Progress => {
+                        "核心真相与破局缺口彻底敞开，立即进入终局摊牌与最终抉择！".to_string()
+                    }
+                }
+            } else {
+                c.on_full.trim().to_string()
+            };
+            ClockState {
+                id: c.id.trim().to_string(),
+                name: c.name.trim().to_string(),
+                kind: c.kind,
+                filled: 0,
+                segments: c.segments.clamp(3, 12),
+                auto_tick_every: c.auto_tick_every.min(6),
+                on_full,
+                triggered: false,
+            }
+        })
+        .collect();
+
+    if out.is_empty() {
+        out.push(ClockState {
+            id: "crisis_countdown".to_string(),
+            name: "幕后危机倒计时".to_string(),
+            kind: ClockKind::Threat,
+            filled: 0,
+            segments: 6,
+            auto_tick_every: 2,
+            on_full: format!(
+                "《{}》的幕后危机彻底失控并直接逼到玩家眼前，局势恶化进入生死摊牌，严禁继续拖延！",
+                scenario.name
+            ),
+            triggered: false,
+        });
+        out.push(ClockState {
+            id: "truth_breakthrough".to_string(),
+            name: "核心破局进度".to_string(),
+            kind: ClockKind::Progress,
+            filled: 0,
+            segments: 4,
+            auto_tick_every: 0,
+            on_full: format!(
+                "《{}》的关键真相与幕后黑手彻底暴露，破局条件全部齐备，立即推进最终决战与结局收束！",
+                scenario.name
+            ),
+            triggered: false,
+        });
+    }
+    out
+}
+
+/// Formats a single pacing clock as a compact visual bar for KOOK cards and `/story`.
+pub fn format_clock_bar(c: &ClockState) -> String {
+    let total = c.segments.clamp(1, 12) as usize;
+    let filled = (c.filled as usize).min(total);
+    let bar = format!("{}{}", "●".repeat(filled), "○".repeat(total - filled));
+    let icon = match c.kind {
+        ClockKind::Threat => "🔴 ⏳",
+        ClockKind::Progress => "🟢 🔑",
+    };
+    let suffix = if filled >= total {
+        " **【已满·爆发！】**"
+    } else {
+        ""
+    };
+    format!("{icon} **{}** {bar} `{filled}/{total}`{suffix}", c.name)
+}
+
 /// Resolves a free-form location string onto the best matching scenario map node ID.
 pub fn resolve_map_node_id(nodes: &[ScenarioMapNode], location_text: &str) -> Option<String> {
     let text = location_text.trim();

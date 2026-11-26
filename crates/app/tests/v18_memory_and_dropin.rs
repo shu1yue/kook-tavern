@@ -175,7 +175,7 @@ fn v182_map_node_entry_deterministically_advances_act_and_awards_levelup() {
         chat_mode: tavern_domain::ChatMode::Roleplay, narrative_style: tavern_domain::NarrativeStyle::Prose,
         gm_user_id: "u1".into(), web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![], ended_id: None, ended_title: None,
-        bulletins: vec![], check_system: tavern_domain::CheckSystem::TwoD6, last_rest_turn: 0,
+        bulletins: vec![], clocks: vec![], check_system: tavern_domain::CheckSystem::TwoD6, last_rest_turn: 0,
         summary: String::new(), summary_upto_turn: 0, active: true, created_at: now, updated_at: now,
     };
     let mut players = vec![tavern_domain::Player {
@@ -185,11 +185,11 @@ fn v182_map_node_entry_deterministically_advances_act_and_awards_levelup() {
         location: "旧钟楼一二层".into(), dnd: Default::default(),
     }];
     let reply = tavern_domain::DmStructuredReply {
-        scene_title: "爬梯".into(), narrative: "抵达二层。".into(), state_patches: vec![],
+        scene_title: "爬梯".into(), turn_outcome: "抵达二层".into(), narrative: "抵达二层。".into(), state_patches: vec![],
         private_whispers: vec![], new_clues: vec![], npc_updates: vec![],
         world_time: Some("23:12".into()), location: Some("旧钟楼一二层".into()), suggested_actions: vec![],
         suggested_check: None, add_flags: vec![], advance_act: false, trigger_ending_id: None,
-        world_bulletin: None, reincarnation_echo: None, grant_inspiration: vec![],
+        world_bulletin: None, reincarnation_echo: None, grant_inspiration: vec![], clock_updates: vec![],
     };
     let mut effects = tavern_domain::AppliedTurnEffects::default();
     let _ = tavern_domain::apply_story_progression(&mut room, &mut players, &sc, &reply, 33, &mut effects);

@@ -166,6 +166,7 @@ pub fn commit_turn_cas_tx(
     let suggested_json = serde_json::to_string(&updated_room.suggested_actions)?;
     let flags_json = serde_json::to_string(&updated_room.world_flags)?;
     let bulletins_json = serde_json::to_string(&updated_room.bulletins)?;
+    let clocks_json = serde_json::to_string(&updated_room.clocks)?;
     let ended_id = updated_room.ended_id.as_deref().unwrap_or("");
     let ended_title = updated_room.ended_title.as_deref().unwrap_or("");
     let affected = tx.execute(
@@ -175,7 +176,7 @@ pub fn commit_turn_cas_tx(
             turn_phase = 'collecting', clues_json = ?7, npc_states_json = ?8,
             suggested_actions_json = ?9, current_act = ?10, world_flags_json = ?11,
             ended_id = ?12, ended_title = ?13, bulletins_json = ?14,
-            summary = ?15, summary_upto_turn = ?16, updated_at = ?17
+            summary = ?15, summary_upto_turn = ?16, updated_at = ?17, clocks_json = ?18
         WHERE channel_id = ?1 AND state_version = ?2 AND turn_phase = 'resolving'
         "#,
         params![
@@ -183,7 +184,7 @@ pub fn commit_turn_cas_tx(
             updated_room.world_time, updated_room.turn_number, updated_room.state_version as i64,
             clues_json, npc_json, suggested_json, updated_room.current_act.max(1), flags_json,
             ended_id, ended_title, bulletins_json, updated_room.summary,
-            updated_room.summary_upto_turn, updated_room.updated_at.to_rfc3339(),
+            updated_room.summary_upto_turn, updated_room.updated_at.to_rfc3339(), clocks_json,
         ],
     )?;
     if affected == 0 {
@@ -279,6 +280,7 @@ pub fn pop_and_restore_snapshot_tx(
     let suggested_json = serde_json::to_string(&snapshot.room.suggested_actions)?;
     let flags_json = serde_json::to_string(&snapshot.room.world_flags)?;
     let bulletins_json = serde_json::to_string(&snapshot.room.bulletins)?;
+    let clocks_json = serde_json::to_string(&snapshot.room.clocks)?;
     let ended_id = snapshot.room.ended_id.as_deref().unwrap_or("");
     let ended_title = snapshot.room.ended_title.as_deref().unwrap_or("");
     tx.execute(
@@ -291,7 +293,7 @@ pub fn pop_and_restore_snapshot_tx(
             current_act = ?13, world_flags_json = ?14, ended_id = ?15, ended_title = ?16,
             bulletins_json = ?17, check_system = ?18, last_rest_turn = ?19,
             summary = ?20, summary_upto_turn = ?21,
-            active = ?22, updated_at = ?23
+            active = ?22, updated_at = ?23, clocks_json = ?24
         WHERE channel_id = ?1
         "#,
         params![
@@ -302,7 +304,7 @@ pub fn pop_and_restore_snapshot_tx(
             snapshot.room.current_act.max(1), flags_json, ended_id, ended_title,
             bulletins_json, snapshot.room.check_system.as_str(), snapshot.room.last_rest_turn,
             snapshot.room.summary, snapshot.room.summary_upto_turn,
-            if snapshot.room.active { 1 } else { 0 }, Utc::now().to_rfc3339(),
+            if snapshot.room.active { 1 } else { 0 }, Utc::now().to_rfc3339(), clocks_json,
         ],
     )?;
 

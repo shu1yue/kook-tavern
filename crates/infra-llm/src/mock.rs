@@ -1,9 +1,9 @@
 use anyhow::Result;
 use tavern_core::{BoxFuture, LlmProvider};
 use tavern_domain::{
-    CheckSystem, DmStructuredReply, DmTurnOutput, ForgeScenarioOutput, ForgeScenarioRequest,
-    LlmUsage, NpcUpdate, PendingAction, Player, PrivateWhisper, RoomState, Scenario, StatePatch,
-    SuggestedCheck, SummaryOutput, TurnRecord, WorldBulletinDraft, WorldEcho,
+    CheckSystem, ClockKind, ClockUpdate, DmStructuredReply, DmTurnOutput, ForgeScenarioOutput,
+    ForgeScenarioRequest, LlmUsage, NpcUpdate, PendingAction, Player, PrivateWhisper, RoomState,
+    Scenario, StatePatch, SuggestedCheck, SummaryOutput, TurnRecord, WorldBulletinDraft, WorldEcho,
     format_batched_actions, match_dynamic_worldbook, should_trigger_bulletin,
 };
 
@@ -163,8 +163,28 @@ impl LlmProvider for MockLlmProvider {
             } else {
                 Vec::new()
             };
+            let mut clock_updates = Vec::new();
+            if !new_clues.is_empty()
+                && let Some(prog) = room.clocks.iter().find(|c| c.kind == ClockKind::Progress)
+            {
+                clock_updates.push(ClockUpdate {
+                    id: prog.id.clone(),
+                    delta: 1,
+                    reason: "查获关键线索".to_string(),
+                });
+            }
+            if state_patches.iter().any(|p| p.hp_delta < 0)
+                && let Some(threat) = room.clocks.iter().find(|c| c.kind == ClockKind::Threat)
+            {
+                clock_updates.push(ClockUpdate {
+                    id: threat.id.clone(),
+                    delta: 1,
+                    reason: "强行突破惊动局势".to_string(),
+                });
+            }
             let reply = DmStructuredReply {
                 scene_title: format!("{} · 第 {} 幕", scenario.name, turn_next),
+                turn_outcome: format!("推进调查并结算第 {turn_next} 轮行动"),
                 narrative: format!(
                     "[Mock DM 离线演练] {}。\n寒风掠过窗棂，烛火剧烈摇曳了一下。周围人的目光齐刷刷聚向你们，空气里弥漫着山雨欲来的紧张气息。{}{}",
                     joined_actions, lore_hint, echo_hint
@@ -191,6 +211,7 @@ impl LlmProvider for MockLlmProvider {
                 world_bulletin,
                 reincarnation_echo,
                 grant_inspiration,
+                clock_updates,
             };
 
             Ok(DmTurnOutput {

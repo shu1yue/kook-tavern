@@ -279,7 +279,7 @@ async fn director_beats_spotlight_and_consistency_nudge_work_end_to_end() {
         chat_mode: tavern_domain::ChatMode::Roleplay, narrative_style: tavern_domain::NarrativeStyle::Prose,
         gm_user_id: "u1".into(), web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![], ended_id: None,
-        ended_title: None, bulletins: vec![], check_system: Default::default(), last_rest_turn: 0,
+        ended_title: None, bulletins: vec![], clocks: vec![], check_system: Default::default(), last_rest_turn: 0,
         summary: String::new(), summary_upto_turn: 0, active: true, created_at: now, updated_at: now,
     };
     let players = vec![
@@ -321,11 +321,13 @@ async fn director_beats_spotlight_and_consistency_nudge_work_end_to_end() {
     // Consistency nudge catches missing item + location drift, and merge_patch_delta repairs cleanly
     let mut reply = tavern_domain::DmStructuredReply {
         scene_title: "地窖探秘".into(),
+        turn_outcome: "拿到铜哨并进入地下酿酒窖".into(),
         narrative: "老雷恩把防雾铜哨递给你，你推门进入地下酿酒窖。".into(),
         private_whispers: vec![], state_patches: vec![], new_clues: vec![], npc_updates: vec![],
         world_time: None, location: Some("余烬酒馆大厅".into()), suggested_actions: vec![],
         suggested_check: None, add_flags: vec![], advance_act: false, trigger_ending_id: None,
         world_bulletin: None, reincarnation_echo: None, grant_inspiration: vec![],
+        clock_updates: vec![],
     };
     let plan = detect_consistency_nudge(&sc, &room, &players, &reply, false).unwrap();
     assert!(plan.want_items);
@@ -343,6 +345,7 @@ async fn director_beats_spotlight_and_consistency_nudge_work_end_to_end() {
             location: Some("地下酿酒窖".into()),
             world_bulletin: None,
             redacted_narrative: None,
+            clock_updates: vec![],
         },
     );
     assert_eq!(reply.location.as_deref(), Some("地下酿酒窖"));

@@ -54,13 +54,13 @@ pub fn parse_dm_reply_checked(raw: &str, room: &RoomState) -> (DmStructuredReply
 
     (
         DmStructuredReply {
-            scene_title: fallback_title, narrative: fallback_narrative,
+            scene_title: fallback_title, turn_outcome: String::new(), narrative: fallback_narrative,
             private_whispers: Vec::new(), state_patches: Vec::new(), new_clues: Vec::new(),
             npc_updates: Vec::new(), world_time: Some(room.world_time.clone()),
             location: Some(room.location.clone()), suggested_actions: Vec::new(),
             suggested_check: None, add_flags: Vec::new(), advance_act: false,
             trigger_ending_id: None, world_bulletin: None, reincarnation_echo: None,
-            grant_inspiration: Vec::new(),
+            grant_inspiration: Vec::new(), clock_updates: Vec::new(),
         },
         false,
     )
@@ -233,7 +233,8 @@ fn value_to_valid_delta(val: serde_json::Value) -> Option<DmPatchDelta> {
     let has_known_key = obj.contains_key("state_patches")
         || obj.contains_key("location")
         || obj.contains_key("world_bulletin")
-        || obj.contains_key("redacted_narrative");
+        || obj.contains_key("redacted_narrative")
+        || obj.contains_key("clock_updates");
     if !has_known_key {
         return None;
     }
@@ -291,7 +292,7 @@ mod tests {
             chat_mode: ChatMode::Strict, narrative_style: NarrativeStyle::Prose,
             gm_user_id: "u1".into(), web_token: "tok".into(), clues: vec![], npc_states: vec![],
             suggested_actions: vec![], current_act: 1, world_flags: vec![], ended_id: None,
-            ended_title: None, bulletins: vec![], check_system: Default::default(),
+            ended_title: None, bulletins: vec![], clocks: vec![], check_system: Default::default(),
             last_rest_turn: 0, summary: String::new(), summary_upto_turn: 0, active: true,
             created_at: now, updated_at: now,
         }

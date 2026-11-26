@@ -91,7 +91,7 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         return Ok(limit_notice);
     }
 
-    let Some(lease) = engine.store.try_begin_resolving(channel_id)? else {
+    let Some(mut lease) = engine.store.try_begin_resolving(channel_id)? else {
         return Ok(EngineResponse::Notice {
             title: "⏳ 当前无法开始结算".to_string(),
             body: "上一条结算刚被触发或本局已结束，稍后再试喵！".to_string(),
@@ -154,6 +154,11 @@ pub async fn resolve_turn(engine: &GameEngine, channel_id: &str) -> Result<Engin
         players: lease.players.clone(),
         pending_actions: actions.clone(),
     };
+
+    // Lazily hydrate clocks on legacy pre-v2.0 live rooms BEFORE calling LLM so the DM sees them immediately
+    if lease.room.clocks.is_empty() {
+        lease.room.clocks = tavern_domain::init_room_clocks(&scenario);
+    }
 
     // Reserve an ordered in-flight slot before LLM call so concurrent multi-room bursts
     // respect daily limits without mutually rejecting each other.

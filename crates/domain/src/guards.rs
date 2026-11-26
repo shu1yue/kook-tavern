@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::decision::ReplyAuditVerdict;
 use crate::models::{PendingAction, Player, RoomState, Scenario, TurnRecord};
-use crate::protocol::{DmStructuredReply, StatePatch, WorldBulletinDraft};
+use crate::protocol::{ClockUpdate, DmStructuredReply, StatePatch, WorldBulletinDraft};
 use crate::world::resolve_map_node_id;
 
 /// Spotlight fairness analysis inspired by multi-agent narrative pacing lessons:
@@ -70,6 +70,8 @@ pub struct ConsistencyNudgePlan {
     pub want_location: bool,
     pub want_bulletin: bool,
     pub want_narrative_redact: bool,
+    pub want_narrative_rewrite: bool,
+    pub want_clocks: bool,
 }
 
 fn null_as_empty_vec<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
@@ -93,6 +95,74 @@ pub struct DmPatchDelta {
     pub world_bulletin: Option<WorldBulletinDraft>,
     #[serde(default)]
     pub redacted_narrative: Option<String>,
+    #[serde(default, deserialize_with = "null_as_empty_vec")]
+    pub clock_updates: Vec<ClockUpdate>,
+}
+
+/// Local zero-dependency detector for cryptic AI-riddle / ellipsis-spam prose.
+/// Precision-tuned to catch obvious evasive riddles without false-positiving on normal scenes.
+pub fn detect_cryptic_riddle_slop(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.chars().count() < 40 {
+        return false;
+    }
+    let ellipsis_count = trimmed.matches("……").count() + trimmed.matches("...").count();
+    let riddle_cues = [
+        "时机未到",
+        "天机不可",
+        "时候到了你自然会懂",
+        "有些事知道太多",
+        "你还没准备好知道",
+        "谜底藏在",
+        "仿佛在诉说着什么",
+        "讳莫如深",
+        "意味深长地笑",
+        "欲言又止",
+        "话锋一转",
+        "只是淡淡一笑",
+        "没有直接回答",
+        "却没有说下去",
+        "似乎另有所指",
+        "不可言说的",
+    ];
+    let riddle_hits = riddle_cues.iter().filter(|k| trimmed.contains(**k)).count();
+    ellipsis_count >= 5 || riddle_hits >= 2 || (ellipsis_count >= 3 && riddle_hits >= 1)
+}
+
+/// Local zero-dependency detector for bloated atmosphere-filler turns with zero plot progress.
+pub fn detect_plot_stall_slop(reply: &DmStructuredReply, room: &RoomState) -> bool {
+    let text = reply.narrative.trim();
+    if text.chars().count() < 150 {
+        return false;
+    }
+    let reply_loc = reply.location.as_deref().map(str::trim).unwrap_or("");
+    let location_unchanged = reply_loc.is_empty() || reply_loc == room.location.trim();
+    let zero_concrete_progress = reply.new_clues.is_empty()
+        && reply.state_patches.is_empty()
+        && reply.add_flags.is_empty()
+        && reply.clock_updates.is_empty()
+        && reply.npc_updates.is_empty()
+        && !reply.advance_act
+        && reply.trigger_ending_id.is_none()
+        && reply.private_whispers.is_empty()
+        && location_unchanged;
+    if !zero_concrete_progress {
+        return false;
+    }
+    let filler_cues = [
+        "空气仿佛凝固",
+        "沉默蔓延",
+        "摇曳的烛火",
+        "无人开口",
+        "静得可怕",
+        "压抑的寂静",
+        "一切都显得扑朔迷离",
+        "似乎隐藏着什么",
+        "深吸一口气",
+        "陷入了短暂的沉默",
+    ];
+    let filler_hits = filler_cues.iter().filter(|k| text.contains(**k)).count();
+    reply.turn_outcome.trim().is_empty() || filler_hits >= 2
 }
 
 /// Detects clear mismatches where DM narrative describes concrete state changes omitted from JSON.
@@ -134,6 +204,8 @@ pub fn detect_consistency_nudge_with_audit(
     let mut want_location = false;
     let mut want_bulletin = false;
     let mut want_narrative_redact = false;
+    let mut want_narrative_rewrite = false;
+    let mut want_clocks = false;
 
     let has_hp_or_san_patch = reply.state_patches.iter().any(|p| p.hp_delta != 0 || p.san_delta != 0);
     let has_add_item = reply.state_patches.iter().any(|p| !p.add_items.is_empty());
@@ -155,6 +227,18 @@ pub fn detect_consistency_nudge_with_audit(
             want_narrative_redact = true;
             issues.push("语义质检警告：公开 `narrative` 可能泄露了 `private_whispers` 私密情报！若确有泄密请在 `redacted_narrative` 输出完整重写后的干净公开正文；若核查无泄密请填 null（严禁输出'同原文'等说明）".into());
         }
+        if a.prob_cryptic_riddle >= thr || a.prob_plot_stall >= thr {
+            want_narrative_rewrite = true;
+            let why = match (a.prob_cryptic_riddle >= thr, a.prob_plot_stall >= thr) {
+                (true, true) => "既在故弄玄虚打哑谜，又在原地水剧情缺乏实质推进",
+                (true, false) => "存在故弄玄虚、打哑谜或说半截话的谜语人毛病",
+                (false, true) => "纯气氛灌水、原地踏步缺乏明确进展",
+                (false, false) => unreachable!(),
+            };
+            issues.push(format!(
+                "【反谜语/反水剧情拦截】语义质检判定正文{why}！请在 `redacted_narrative` 用**直白现代大白话**完整重写本轮正文：1）删掉打哑谜、半截话和多余省略号；2）把现场是谁、对方想要什么、刚发生的实质结果讲透；3）给出清晰的剧情推进或直白行动钩子"
+            ));
+        }
     } else {
         let damage_cues = [
             "受了伤", "鲜血渗出", "划开一道口子", "重重摔", "一阵剧痛", "灼伤",
@@ -170,6 +254,27 @@ pub fn detect_consistency_nudge_with_audit(
             want_items = true;
             issues.push("正文描写了角色拿到/获赠关键道具，但 `state_patches.add_items` 为空，请仅补全对应角色的 `add_items`（勿重复已扣过的 HP/SAN）".into());
         }
+    }
+
+    // Local zero-latency anti-riddle & anti-stall safety net (works even if System One is offline or missed clichés)
+    if !want_narrative_rewrite && (detect_cryptic_riddle_slop(text) || detect_plot_stall_slop(reply, room)) {
+        want_narrative_rewrite = true;
+        issues.push(
+            "【反谜语/反水剧情拦截】检测到正文堆砌省略号/打哑谜或篇幅冗长却零实质推进！请在 `redacted_narrative` 用**直白现代大白话**完整重写本轮正文：删去所有故弄玄虚和兜圈子，把人物身份、真实意图与明确推进结果直接说透".into(),
+        );
+    }
+
+    if want_narrative_rewrite && !room.clocks.is_empty() && reply.clock_updates.is_empty() {
+        want_clocks = true;
+        let ids: Vec<String> = room
+            .clocks
+            .iter()
+            .map(|c| format!("`{}`({})", c.id, c.name))
+            .collect();
+        issues.push(format!(
+            "重写推进剧情后，如有实质进展或风险升级，请顺便在 `clock_updates` 推进对应时钟（可用时钟：{}）",
+            ids.join("、")
+        ));
     }
 
     if !scenario.map_nodes.is_empty() {
@@ -205,13 +310,13 @@ pub fn detect_consistency_nudge_with_audit(
     }
 
     let player_names = players.iter().map(|p| p.character_name.as_str()).collect::<Vec<_>>().join("、");
-    let schema = if want_narrative_redact {
-        "{\"state_patches\":[],\"location\":null,\"world_bulletin\":null,\"redacted_narrative\":\"删去私密剧透后的公开正文\"}"
+    let schema = if want_narrative_redact || want_narrative_rewrite {
+        "{\"state_patches\":[],\"location\":null,\"world_bulletin\":null,\"redacted_narrative\":\"重写后的清晰大白话公开正文\",\"clock_updates\":[]}"
     } else {
-        "{\"state_patches\":[],\"location\":null,\"world_bulletin\":null,\"redacted_narrative\":null}"
+        "{\"state_patches\":[],\"location\":null,\"world_bulletin\":null,\"redacted_narrative\":null,\"clock_updates\":[]}"
     };
     let prompt = format!(
-        "【状态一致性补齐校验】检测到正文与结构化字段可能存在遗漏：\n- {}\n\n当前角色名单：[{}]。\n请**仅输出一个合法 JSON 补丁对象**（只填本次遗漏项，严禁重复首轮已扣过的 HP/SAN，严禁泄露任何私密纸条），结构严格限定为：\n{}\n无需改动的字段保持空数组或 null。",
+        "【状态与叙事质量拦截补齐】检测到本轮回复存在以下问题：\n- {}\n\n当前角色名单：[{}]。\n请**仅输出一个合法 JSON 补丁对象**（只填本次需修正项，严禁重复首轮已扣过的 HP/SAN，严禁泄露任何私密纸条），结构严格限定为：\n{}\n无需改动的字段保持空数组或 null。",
         issues.join("\n- "),
         player_names,
         schema
@@ -223,6 +328,8 @@ pub fn detect_consistency_nudge_with_audit(
         want_location,
         want_bulletin,
         want_narrative_redact,
+        want_narrative_rewrite,
+        want_clocks,
     })
 }
 
@@ -254,17 +361,26 @@ pub fn merge_patch_delta(
     if plan.want_bulletin && reply.world_bulletin.is_none() && delta.world_bulletin.is_some() {
         reply.world_bulletin = delta.world_bulletin;
     }
-    if plan.want_narrative_redact
+    if (plan.want_narrative_redact || plan.want_narrative_rewrite)
         && let Some(redacted) = delta.redacted_narrative.map(|s| s.trim().to_string())
         && !redacted.starts_with('{')
         && !redacted.contains("```")
     {
         let orig_len = reply.narrative.chars().count();
         let new_len = redacted.chars().count();
-        let min_len = if orig_len >= 80 { (orig_len / 3).max(30) } else { 20 };
+        let min_len = if plan.want_narrative_redact {
+            if orig_len >= 80 { (orig_len / 3).max(30) } else { 20 }
+        } else if orig_len >= 80 {
+            (orig_len / 4).max(36)
+        } else {
+            20
+        };
         if new_len >= min_len {
             reply.narrative = redacted;
         }
+    }
+    if plan.want_clocks && reply.clock_updates.is_empty() && !delta.clock_updates.is_empty() {
+        reply.clock_updates = delta.clock_updates;
     }
 }
 
@@ -310,7 +426,7 @@ mod tests {
                 ScenarioMapNode { id: "hall".into(), name: "酒馆大厅".into(), x: 20.0, y: 50.0, aliases: vec!["大厅".into()], kind: "hub".into() },
                 ScenarioMapNode { id: "cellar".into(), name: "地下酒窖".into(), x: 40.0, y: 80.0, aliases: vec!["酒窖".into()], kind: "mystery".into() },
             ],
-            map_edges: vec![], rules: Default::default(),
+            map_edges: vec![], rules: Default::default(), clocks: vec![],
         };
         let room = RoomState {
             channel_id: "c1".into(), guild_id: "g1".into(), scenario_id: "s1".into(),
@@ -319,12 +435,13 @@ mod tests {
             chat_mode: ChatMode::Strict, narrative_style: NarrativeStyle::Prose,
             gm_user_id: "u1".into(), web_token: "tok".into(), clues: vec![], npc_states: vec![],
             suggested_actions: vec![], current_act: 1, world_flags: vec![],
-            ended_id: None, ended_title: None, bulletins: vec![], check_system: Default::default(),
+            ended_id: None, ended_title: None, bulletins: vec![], clocks: vec![], check_system: Default::default(),
             last_rest_turn: 0, summary: String::new(), summary_upto_turn: 0, active: true,
             created_at: now, updated_at: now,
         };
         let mut reply = DmStructuredReply {
             scene_title: "深入地窖".into(),
+            turn_outcome: "拿到铜钥匙并进入地下酒窖".into(),
             narrative: "老雷恩把铜钥匙递给你，一阵恶寒让你的SAN值剧震，你走下地下酒窖。".into(),
             private_whispers: vec![],
             state_patches: vec![StatePatch { player_name: "阿明".into(), hp_delta: -3, ..Default::default() }],
@@ -332,7 +449,7 @@ mod tests {
             location: Some("酒馆大厅".into()), suggested_actions: vec![],
             suggested_check: None, add_flags: vec![], advance_act: false,
             trigger_ending_id: None, world_bulletin: None, reincarnation_echo: None,
-            grant_inspiration: vec![],
+            grant_inspiration: vec![], clock_updates: vec![],
         };
         let plan = detect_consistency_nudge(&sc, &room, &players, &reply, true).unwrap();
         assert!(!plan.want_vitals && plan.want_items && plan.want_location && plan.want_bulletin);
@@ -340,6 +457,7 @@ mod tests {
         merge_patch_delta(&mut reply, &plan, DmPatchDelta {
             state_patches: vec![StatePatch { player_name: "阿明".into(), hp_delta: -3, add_items: vec!["铜钥匙".into()], ..Default::default() }],
             location: Some("地下酒窖".into()), world_bulletin: None, redacted_narrative: None,
+            clock_updates: vec![],
         });
         assert_eq!(reply.state_patches.iter().map(|p| p.hp_delta).sum::<i32>(), -3);
         assert_eq!(reply.location.as_deref(), Some("地下酒窖"));

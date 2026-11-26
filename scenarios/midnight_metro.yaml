@@ -266,3 +266,17 @@ rules:
       by_turn: 10
       flag: "旧槐树站假停靠危机"
       prompt_hint: "列车减速滑入漆黑站台、血红LED亮起「旧槐树站」，门外黑伞攒动，绿色逃生灯即将闪现。"
+
+clocks:
+  - id: locust_arrival
+    name: "驶向旧槐树终点"
+    kind: threat
+    segments: 6
+    auto_tick_every: 2
+    on_full: "列车刺耳减速冲入漆黑的旧槐树站台，车门发出泄压轰鸣强行弹开，门外黑伞人影齐刷刷转头逼近，查票员举起滴黑水的打孔钳，必须立刻做出最终逃生抉择！"
+  - id: escape_truth
+    name: "查明制动时机"
+    kind: progress
+    segments: 4
+    auto_tick_every: 0
+    on_full: "四条守则真伪、1号驾驶室调度录音与5号车厢制动拉手真相全部查明，隧道壁亮起刺眼绿色应急逃生灯，立刻进入终局拉闸脱险！"

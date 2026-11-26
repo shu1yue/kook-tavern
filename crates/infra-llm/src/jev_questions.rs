@@ -171,6 +171,27 @@ pub(crate) fn build_audit_state_and_questions(
             }),
         );
     }
+    // v2.0 Quality Gate: ride along in the exact same single SystemOne HTTP call!
+    // Left optional in `req_keys` whenever legacy keys exist so existing JEV mocks stay 100% compatible.
+    q_map.insert(
+        "is_cryptic_riddle".into(),
+        json!({
+            "type": "choice",
+            "instructions": "判断上面这段文字跑团 DM 剧情正文是否存在严重的【谜语人/故弄玄虚】毛病：例如 NPC 故意打哑谜说半截话、大量堆砌省略号装深沉、使用晦涩怪词绕弯子，导致读者一头雾水？（正常推进对话、自然悬念但把眼前事实说清楚的必须判 no）",
+            "criteria": { "yes": "明显在故弄玄虚、说半截话打哑谜、晦涩难懂让玩家不知所云", "no": "叙事直白清楚，人物对话正常说人话，玩家能明白发生了什么" }
+        }),
+    );
+    q_map.insert(
+        "is_plot_stall".into(),
+        json!({
+            "type": "choice",
+            "instructions": "判断上面这段 DM 剧情正文是不是【纯水剧情/原地踏步】：整段只写了气氛描写、人物叹气发呆、互相试探兜圈子，完全没有任何新信息、新进展、新物品、场景移动或局势升级？（只要给出了具体线索、明确回答、冲突爆发或状态推进就判 no）",
+            "criteria": { "yes": "纯灌水拖时间，几乎零实质推进，读完不知道下一步该干嘛", "no": "有明确的剧情进展、具体线索、NPC 实质表态或局势变化" }
+        }),
+    );
+    if req_keys.is_empty() {
+        req_keys.push("is_cryptic_riddle");
+    }
     let state = if check_whisper {
         format!(
             "【公开发布的剧情正文】\n{}\n\n【本应仅私聊保密的秘密纸条】\n{}",

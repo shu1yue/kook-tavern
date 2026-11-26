@@ -137,6 +137,7 @@ fn workshop_forged_scenario_auto_wires_enter_nodes_boss_keywords_and_climax_beat
             ScenarioMapEdge { from: "pier".into(), to: "bell_top".into(), label: "铁梯".into(), locked: false },
         ],
         rules: tavern_domain::ScenarioRules { bulletin_interval: 3, ..Default::default() },
+        clocks: vec![],
     };
 
     let sc = finalize_forged_scenario(raw_sc, &req, None).expect("finalize forged scenario");

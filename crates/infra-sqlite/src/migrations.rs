@@ -256,6 +256,11 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
         Ok(())
     })?;
 
+    apply_if_needed(conn, 13, "0013_v20_pacing_clocks", |tx| {
+        add_column_if_missing(tx, "rooms", "clocks_json", "TEXT NOT NULL DEFAULT '[]'")?;
+        Ok(())
+    })?;
+
     Ok(())
 }
 
