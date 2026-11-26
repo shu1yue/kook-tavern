@@ -8,6 +8,16 @@
 >
 > *A lightweight, single-binary Rust multiplayer AI TRPG & Group Tavern DM engine for KOOK — featuring cohesive live story cards, a spoiler-safe floating player HUD (with Picture-in-Picture & HMAC whisper isolation), a 4-layer long-campaign memory engine, deterministic dice/act progression, and SillyTavern card/lorebook import. Licensed under **GNU AGPL-3.0**.*
 
+## 🖼️ 界面与交互一览
+
+<p align="center">
+  <img src="./docs/screenshots/kook_live_story_card.jpg" alt="KOOK 原生连贯剧情卡与私密纸条/半路空降前情包" width="100%" />
+</p>
+
+<p align="center">
+  <img src="./docs/screenshots/floating_hud_showcase.jpg" alt="5 子页个人实时悬浮 HUD（角色卡、SVG 人物关系星图、节点地图与封卷回忆录）" width="100%" />
+</p>
+
 ---
 
 ## ✨ 核心亮点
