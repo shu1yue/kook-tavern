@@ -235,7 +235,20 @@ pub fn apply_story_progression(
     }
 
     let total_acts = scenario.acts.len() as u32;
-    if reply.advance_act && total_acts > 1 && room.current_act < total_acts {
+    let mut target_act = room.current_act.max(1);
+    if reply.advance_act && total_acts > 1 && target_act < total_acts {
+        target_act += 1;
+    }
+    if total_acts > 1
+        && target_act < total_acts
+        && let Some(node_id) = crate::world::resolve_map_node_id(&scenario.map_nodes, &room.location)
+        && let Some((idx, _)) = scenario.acts.iter().enumerate().find(|(i, a)| {
+            (*i as u32 + 1) > target_act && a.enter_nodes.iter().any(|n| n == &node_id)
+        })
+    {
+        target_act = (idx as u32) + 1;
+    }
+    while room.current_act < target_act && room.current_act < total_acts {
         room.current_act += 1;
         if let Some(act) = scenario.acts.get((room.current_act - 1) as usize) {
             effects.state_changes.push(format!(
@@ -254,27 +267,18 @@ pub fn apply_story_progression(
             let b = WorldBulletin {
                 turn_number: resolving_turn,
                 masthead: scenario.rules.effective_masthead(&scenario.name),
-                headline,
-                body,
-                faction,
+                headline, body, faction,
             };
-            if room.bulletins.len() >= 12 {
-                room.bulletins.remove(0);
-            }
+            if room.bulletins.len() >= 12 { room.bulletins.remove(0); }
             room.bulletins.push(b.clone());
             effects.world_bulletin = Some(b);
         }
     }
 
     let raw_end = reply.trigger_ending_id.as_deref().map(str::trim).unwrap_or("");
-    if raw_end.is_empty() || room.ended_id.is_some() {
-        return None;
-    }
-    let matched = scenario
-        .endings
-        .iter()
-        .find(|e| e.id == raw_end || e.id.eq_ignore_ascii_case(raw_end))?
-        .clone();
+    if raw_end.is_empty() || room.ended_id.is_some() { return None; }
+    let matched = scenario.endings.iter()
+        .find(|e| e.id == raw_end || e.id.eq_ignore_ascii_case(raw_end))?.clone();
 
     let active_players: Vec<&Player> = players.iter().filter(|p| !p.is_afk).collect();
     let party_down =

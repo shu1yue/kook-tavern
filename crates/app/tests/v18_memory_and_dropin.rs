@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tavern_core::{AppConfig, GameEngine, JevConfig, RoomStore};
+use tavern_core::{AppConfig, GameEngine, JevConfig, RoomStore, ScenarioCatalog};
 use tavern_domain::{EngineResponse, IncomingMessage};
 use tavern_infra_llm::MockLlmProvider;
 use tavern_infra_sqlite::{FsScenarioCatalog, SqliteRoomStore};
@@ -154,4 +154,48 @@ async fn v18_midgame_dropin_briefing_whisper_ledger_and_persisted_live_cards() {
     assert!(restarted.rebuild_story_turn_for_archive("ch_18", 1).unwrap().is_none());
     restarted.set_persisted_story_card("ch_18", None).unwrap();
     assert_eq!(restarted.get_persisted_story_card("ch_18").unwrap(), None);
+}
+
+#[test]
+fn v182_map_node_entry_deterministically_advances_act_and_awards_levelup() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("scenarios");
+    let catalog = FsScenarioCatalog::load_from_dir(&dir).unwrap();
+    let sc = catalog.get("ember_tavern").unwrap();
+    let store = SqliteRoomStore::open_in_memory().unwrap();
+    let now = chrono::Utc::now();
+    let mut room = tavern_domain::RoomState {
+        channel_id: "ch_act".into(), guild_id: "g".into(), scenario_id: "ember_tavern".into(),
+        title: sc.name.clone(), location: "旧钟楼一二层".into(), world_time: "23:10".into(),
+        turn_number: 32, state_version: 1, turn_phase: tavern_domain::TurnPhase::Collecting,
+        chat_mode: tavern_domain::ChatMode::Roleplay, narrative_style: tavern_domain::NarrativeStyle::Prose,
+        gm_user_id: "u1".into(), web_token: "tok".into(), clues: vec![], npc_states: vec![],
+        suggested_actions: vec![], current_act: 1, world_flags: vec![], ended_id: None, ended_title: None,
+        bulletins: vec![], check_system: tavern_domain::CheckSystem::TwoD6, last_rest_turn: 0,
+        summary: String::new(), summary_upto_turn: 0, active: true, created_at: now, updated_at: now,
+    };
+    let mut players = vec![tavern_domain::Player {
+        channel_id: "ch_act".into(), user_id: "u1".into(), character_name: "魂芳白".into(),
+        role_desc: "星象神秘学者".into(), traits: vec![], hp: 11, max_hp: 12, san: 2, max_san: 10,
+        inventory: vec![], status_note: String::new(), is_afk: false, stats: Default::default(),
+        location: "旧钟楼一二层".into(), dnd: Default::default(),
+    }];
+    let reply = tavern_domain::DmStructuredReply {
+        scene_title: "爬梯".into(), narrative: "抵达二层。".into(), state_patches: vec![],
+        private_whispers: vec![], new_clues: vec![], npc_updates: vec![],
+        world_time: Some("23:12".into()), location: Some("旧钟楼一二层".into()), suggested_actions: vec![],
+        suggested_check: None, add_flags: vec![], advance_act: false, trigger_ending_id: None,
+        world_bulletin: None, reincarnation_echo: None, grant_inspiration: vec![],
+    };
+    let mut effects = tavern_domain::AppliedTurnEffects::default();
+    let _ = tavern_domain::apply_story_progression(&mut room, &mut players, &sc, &reply, 33, &mut effects);
+    assert_eq!(room.current_act, 2, "entering clocktower_low MUST deterministically advance to Act 2 even when LLM says advance_act: false");
+    assert_eq!(players[0].dnd.level, 2);
+    assert_eq!(players[0].dnd.pending_levelups, 1);
+    assert!(effects.state_changes.iter().any(|s| s.contains("第 2/3 幕")));
+    let _ = store;
 }

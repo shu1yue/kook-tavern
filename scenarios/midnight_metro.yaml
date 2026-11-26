@@ -55,10 +55,12 @@ acts:
     title: "车厢穿梭与真假广播"
     goal: "智斗 2 号车厢蓝衣查票员，进入 1 号驾驶室或 5 号空车厢查清停车时机"
     advance_flags: ["击退蓝衣查票员", "查明绿色逃生灯与制动时机"]
+    enter_nodes: ["car2_inspector", "car1_cab", "car5_hidden"]
   - id: act3_brake
     title: "00:30 现实交界急刹"
     goal: "挺过旧槐树站假停靠诱惑，在隧道绿色应急逃生灯闪过瞬间拉下制动拉手"
     advance_flags: ["越过旧槐树站并拉下紧急制动"]
+    enter_nodes: ["old_locust"]
 
 endings:
   - id: ending_return_track

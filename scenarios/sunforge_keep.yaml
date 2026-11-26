@@ -107,18 +107,22 @@ acts:
     title: "焦岩古道伏击与营火夜话"
     goal: "突破灰烬议会暗哨与被驱赶的地精骑兵，抵达失落铸炉峡谷前哨"
     advance_flags: ["突破焦岩哨卡", "抵达废堡山门"]
+    enter_nodes: ["cinder_road", "old_watchtower"]
   - id: act3_outer_bailey
     title: "矮人废堡外庭与三方角力"
     goal: "穿越机关重重的石像外庭，决定与猩红鸦爪盗贼团或晨光巡查队合作还是对抗"
     advance_flags: ["打开铸炉内门", "找到大匠师失踪线索"]
+    enter_nodes: ["dwarf_gate", "outer_bailey", "crow_hideout"]
   - id: act4_rune_forge
     title: "符文熔炉深厅与沉睡大匠师"
     goal: "关闭至少两道失控镇压闸，找到被囚禁的大匠师巴林并揭开灰烬议会真图谋"
     advance_flags: ["营救大匠师巴林", "掌握晨日核心停机口令"]
+    enter_nodes: ["rune_forge", "vault_prison"]
   - id: act5_eclipse_altar
     title: "日蚀圣坛终决"
     goal: "在日蚀高悬前迎战执政官维克多与熔岩构装体，最终裁定晨日核心与剑湾山谷的命运"
     advance_flags: ["完成日蚀圣坛最终抉择"]
+    enter_nodes: ["eclipse_altar"]
 
 endings:
   - id: ending_sun_rekindled

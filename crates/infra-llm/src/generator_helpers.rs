@@ -125,6 +125,7 @@ pub(crate) fn build_mock_forged_scenario(req: &ForgeScenarioRequest) -> Scenario
             title: act_titles[i].into(),
             goal: format!("围绕「{short_name}」完成第 {} 幕关键突破", i + 1),
             advance_flags: vec![format!("第{}幕突破", i + 1)],
+            enter_nodes: Vec::new(),
         })
         .collect();
     let genre = req

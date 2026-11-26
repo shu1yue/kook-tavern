@@ -54,10 +54,12 @@ acts:
     title: "画廊倒影与温室秘闻"
     goal: "探索二楼长画廊与地下玻璃温室，查清黑曜双生镜的破解之法"
     advance_flags: ["得知呼唤真名或银器碎镜之法", "获得纯银破镜器物"]
+    enter_nodes: ["gallery", "greenhouse"]
   - id: act3_study
     title: "午夜三楼书房对峙"
     goal: "在午夜十二点钟声敲响前揭穿镜像替身，营救镜中真爵士或逃出生天"
     advance_flags: ["揭穿镜像爵士", "破除黑曜镜置换"]
+    enter_nodes: ["study", "attic"]
 
 endings:
   - id: ending_mirror_dawn

@@ -55,10 +55,12 @@ acts:
     title: "星雾码头与旧钟楼攀行"
     goal: "顶着星雾潜入或强闯旧钟楼，避开教会暗哨与迷雾回响"
     advance_flags: ["抵达旧钟楼三层", "识破星雾回响"]
+    enter_nodes: ["harbor_wharf", "cliff_path", "clocktower_low"]
   - id: act3_star_orb
     title: "午夜潮汐星仪终局"
     goal: "在午夜钟声前面对白鸦与潮汐星仪，做出决定灰烬港命运的抉择"
     advance_flags: ["停机或摧毁潮汐星仪"]
+    enter_nodes: ["clocktower_core"]
 
 endings:
   - id: ending_dawn

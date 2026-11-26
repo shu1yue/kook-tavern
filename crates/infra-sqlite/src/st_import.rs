@@ -172,15 +172,15 @@ fn convert_st_json(
         acts: vec![
             ScenarioAct {
                 id: "act1".into(), title: "初入异境".into(),
-                goal: "结识关键人物，摸清当前局势与隐藏规则".into(), advance_flags: vec![],
+                goal: "结识关键人物，摸清当前局势与隐藏规则".into(), advance_flags: vec![], enter_nodes: vec![],
             },
             ScenarioAct {
                 id: "act2".into(), title: "深入迷局".into(),
-                goal: "追查世界书中的核心秘密并建立同盟".into(), advance_flags: vec![],
+                goal: "追查世界书中的核心秘密并建立同盟".into(), advance_flags: vec![], enter_nodes: vec![],
             },
             ScenarioAct {
                 id: "act3".into(), title: "命运收束".into(),
-                goal: "直面核心冲突并迎来最终结局".into(), advance_flags: vec![],
+                goal: "直面核心冲突并迎来最终结局".into(), advance_flags: vec![], enter_nodes: vec![],
             },
         ],
         endings: vec![

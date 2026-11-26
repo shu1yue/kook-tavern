@@ -2,6 +2,11 @@
 
 > 每次版本上线前，用大白话记录“这次改了什么”以及“万一线上出状况怎么 10 秒回滚”。
 
+## [1.8.2] - 后端地图节点确定性自动转幕（彻底摆脱 LLM 漏写 `advance_act`）+ 防普通探索机械扣 SAN
+### 本次改动
+- **Rust 引擎确定性自动转幕与过幕升级**（`crates/domain/src/stats.rs`、`patch.rs` 与 4 套内置 `scenarios/*.yaml`）：为 `ScenarioAct` 新增 `enter_nodes` 地图节点映射，只要队伍实际踏入属于后续幕次的地图节点（如《余烬酒馆》的 `峭壁栈道`/`旧钟楼一二层`→第 2 幕、`钟楼三层星仪机房`→第 3 幕），即便 LLM 忘记把 `advance_act` 设为 `true`，后端也会 100% 确定性触发转幕横幅与全队过幕升级（`/levelup`），跨幕直达还会补齐跳过的每一幕成长点。
+- **防日常探索机械掉 SAN**（`prompts/dm_system.md`）：禁止 DM 在普通赶路、爬楼梯等常规探索中每回合机械扣除 HP/SAN，仅在真实受创、高危失败、中陷阱或直面超自然异象时扣减。
+
 ## [1.8.1] - 修复幕次卡死不推进与 `world_flags` 30 条上限 + `/短休` 兼顾少量回 SAN
 ### 本次改动
 - **修复“打 30 轮卡在第 1 幕不升级”根因**（`crates/infra-llm/src/prompt_ext.rs`、`prompts/dm_system.md`）：在 DM Prompt 幕次进度栏完整注入当前幕 `advance_flags` 过幕条件与下一幕预告，明确指示 DM 达成目标或跨出前幕场景时将 `advance_act` 设为 `true`，正常推进幕次并触发全队过幕升级（`/levelup`）。

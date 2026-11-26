@@ -266,8 +266,10 @@ pub struct ScenarioAct {
     pub id: String,
     pub title: String,
     pub goal: String,
-    #[serde(default)]
-    pub advance_flags: Vec<String>,
+    #[serde(default)] pub advance_flags: Vec<String>,
+    /// Optional map node IDs whose entry deterministically advances the campaign to this Act
+    /// even if the LLM omits `"advance_act": true`.
+    #[serde(default)] pub enter_nodes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
