@@ -4,9 +4,9 @@
 [![Rust](https://img.shields.io/badge/Rust-2024_Edition-orange.svg)](https://www.rust-lang.org/)
 [![CI](https://github.com/shu1yue/kook-tavern/actions/workflows/ci.yml/badge.svg)](https://github.com/shu1yue/kook-tavern/actions)
 
-> 面向 **1~6 人亲友实时团** 的原生群聊 AI TRPG / 群酒馆 DM 引擎：纯 Rust 单二进制零外部依赖（常驻仅 **~16 MB 内存**），内置 **KOOK 卡片原地刷新故事流**、**5 子页置顶悬浮角色卡 HUD**、**4 层多人长剧本抗失忆引擎**、**多规则确定性检定（`2d6` / `D&D d20` / `CoC d100`）**、**SillyTavern 角色卡与世界书导入** 及 **内置 AI 剧本工坊**。
+> 面向 **1~6 人亲友实时团** 的原生群聊 AI TRPG / 群酒馆 DM 引擎：纯 Rust 单二进制零外部依赖（常驻仅 **~16 MB 内存**），内置 **KOOK 卡片原地刷新故事流**、**暗夜之刃式进度钟与反谜语/反水剧情四重铁闸**、**5 子页置顶悬浮角色卡 HUD（含 SVG 圆形钟盘）**、**4 层多人长剧本抗失忆引擎**、**多规则确定性检定（`2d6` / `D&D d20` / `CoC d100`）**、**SillyTavern 角色卡与世界书导入** 及 **内置 AI 剧本工坊**。
 >
-> *A lightweight, single-binary Rust multiplayer AI TRPG & Group Tavern DM engine for KOOK — featuring cohesive live story cards, a spoiler-safe floating player HUD (with Picture-in-Picture & HMAC whisper isolation), a 4-layer long-campaign memory engine, deterministic dice/act progression, and SillyTavern card/lorebook import. Licensed under **GNU AGPL-3.0**.*
+> *A lightweight, single-binary Rust multiplayer AI TRPG & Group Tavern DM engine for KOOK — featuring cohesive live story cards, Blades-in-the-Dark pacing clocks & real-time anti-riddle/anti-stall rewrite gates, a spoiler-safe floating player HUD (with Picture-in-Picture, SVG clock wheels & HMAC whisper isolation), a 4-layer long-campaign memory engine, deterministic dice/act progression, and SillyTavern card/lorebook import. Licensed under **GNU AGPL-3.0**.*
 
 ## 🖼️ 界面与交互一览
 
@@ -22,13 +22,19 @@
 
 ## ✨ 核心亮点
 
-- **📖 像翻小说一样的 KOOK 原生故事流**
-  - 剧情卡内嵌实时小队栏、行动进度与快捷按钮，支持“点 ①②③ 按钮”或“直接说人话”（括号 `(...)` / `//` 自动视为场外 OOC 吹水）；
+- **📖 像翻小说一样的 KOOK 原生故事流 & 防迷路简报**
+  - 剧情卡内嵌实时小队栏、`🎯 当前目标`、`⏳ 局势进度钟`、行动进度与快捷按钮，支持“点 ①②③ 按钮”或“直接说人话”（括号 `(...)` / `//` 自动视为场外 OOC 吹水）；
+  - 新增 **`/story`（`/案情` / 面板一键 `📖 案情简报`）**，分三段大白话直白列出「这是个什么故事 / 目前登场了哪些人 / 现在要去干什么」，长团也不迷路；
   - 推进新回合时自动通过 `message/update` 收起旧卡片按钮（且活跃卡片 `msg_id` 持久化在 SQLite，**重启不丢追踪**）；
   - 内置 KOOK `40011` 审核词自愈柔化与保底交互卡机制，拒绝吞回合、不断档。
+- **⏳ 反水剧情 & 反谜语人四重铁闸（`v2.0.0` 新增）**
+  - **暗夜之刃式威胁钟 & 进度钟**：每套剧本自动配置红/绿双钟（内置本、工坊本与导入本全生效），威胁钟支持后端确定性定时自动走格，满格立即触发爆发横幅与下轮 DM 强制爆发指令，AI 想拖戏也拖不动；
+  - **先定干货再写正文 + 防 AI 顺从症**：前置 `turn_outcome` 逼迫模型先敲定实质推进再展开描写，同时锁死剧本既定真相与凶手设定，不因讨好玩家脑洞而篡改案情；
+  - **实时质检拦截与大白话重写**：在百炼 System One 单次语义质检中顺路检测“谜语人 / 水剧情”（叠加本地零延迟启发式兜底），一旦拦到打哑谜或原地灌水，发到 KOOK 前自动一键重写成现代大白话；
+  - **终幕 Boss 防失踪**：进入最终幕自动注入终幕核心人物与结局世界书并静默无关街边号外，痛快收束结局。
 - **🪟 5 子页个人实时悬浮 HUD（支持真·置顶画中画）**
   - 基于纯 Rust **HMAC-SHA256** 的个人只读凭证（结团 `/reset` 或离桌 `/leave` 自动失效），队友无法伪造偷看私密纸条；
-  - 底部 5 格原生 App 导航：`🪪 角色`（血量/理智/五维/绝活/背包）、`🤫 纸条`（仅本人可见暗线密语 + 新纸条角标）、`🤝 人物`（交互式 SVG 人物关系星图，点头像交叉检索关联线索与密语）、`🎯 目标`（当前幕次主线 + 推荐行动 + 线索墙）、`📖 百科`（全局秒搜 + 互动节点地图 + 严格零剧透 `player_visible` 常识词典 + 历史前情总览）；
+  - 底部 5 格原生 App 导航：`🪪 角色`（血量/理智/五维/绝活/背包）、`🤫 纸条`（仅本人可见暗线密语 + 新纸条角标）、`🤝 人物`（交互式 SVG 人物关系星图，点头像交叉检索关联线索与密语）、`🎯 目标`（当前幕次主线 + **防剧透 SVG 圆形切片进度钟盘** + 推荐行动 + 线索墙）、`📖 百科`（全局秒搜 + 互动节点地图 + 严格零剧透 `player_visible` 常识词典 + 历史前情总览）；
   - HTTPS 下支持 Chrome/Edge **Document Picture-in-Picture 真·永远置顶浮窗**，边开麦边挂在 KOOK 旁边。
 - **🧠 4 层多人长剧本抗失忆引擎**
   1. **动态章节回忆录（Append-Only 永不覆写）**：借鉴 SillyTavern Memory Books，每满 6 轮封存 1 张带关键词的不可变章节卷，杜绝“传话筒式越压越糊”；
@@ -39,7 +45,7 @@
   - 朋友在开打后（`turn >= 1`）随时点选职业 / `/join` / `/char load` 空降进桌，系统会自动私发一份 **「🎬 欢迎半路空降 · 前情速递」**（含当前未解伏笔、近期封卷、刚刚发生的剧情、队友与一键悬浮 HUD 链接），同时 DM 会在下一轮自然把新队友写进镜头里。
 - **🎲 后端确定性规则、自动转幕与成长体系**
   - 原生支持 **`2d6`（轻量三档）**、**`D&D d20`（优势/劣势、熟练加值、激励点、队友 `/assist` 协助、短休/长休、充能招牌技）** 与 **`d100`（克苏鲁风）**；
-  - 后端按地图节点（`enter_nodes`）确定性兜底转幕，彻底告别大模型忘记转幕的问题，过幕自动触发全队 **Lv.+1 与 `/levelup` 成长点**；
+  - 后端按地图节点（`enter_nodes`）确定性兜底转幕，彻底告别大模型忘记转幕的问题：`2d6`/`d20` 过幕自动触发全队 **Lv.+1 与 `/levelup` 成长点**，`d100` 调查模式则改为符合克系基调的 **「阶段领悟 / SAN 喘息」**；
   - 跨团个人角色库（`/char`）支持公平购点车卡与换本复用。
 - **🛠️ 开源世界书商店 + AI 剧本工坊 + SillyTavern 导入**
   - 内置 6 套可复用的开放世界观底座（`worldbooks/`），支持群内 `/workshop` 引导式锻造新剧本，以及通过 `/gm import` 直接导入 **SillyTavern PNG 角色卡 / JSON 世界书**（内置 HTTPS 白名单 SSRF 防护与防 Zip Bomb 校验）。
@@ -86,14 +92,16 @@ docker compose up -d --build
 服务启动后访问 `http://127.0.0.1:8787/healthz` 看到 `"status":"ok"` 即成功！
 如需启用**浏览器原生置顶画中画悬浮 HUD**，建议在前面套一层 **Cloudflare Tunnel** 或 Nginx/Caddy HTTPS 反向代理，并将公网 HTTPS 地址填入 `.env` 的 `WEB_PUBLIC_BASE_URL`。
 
-### 方式 3：单二进制部署到 Linux 服务器（2C2G 小鸡友好）
-要求 `rustc >= 1.88`（支持 Rust 2024 Edition 与 let-chains）：
+### 方式 3：预编译单二进制直跑（Linux x86_64，免装 Rust · 2C2G 小鸡友好）
+直接从 **[GitHub Releases](https://github.com/shu1yue/kook-tavern/releases/latest)** 下载最新版 `kook-tavern-dm-vX.Y.Z-linux-x86_64.tar.gz` 解压即用：
 ```bash
+tar -xzf kook-tavern-dm-v2.0.0-linux-x86_64.tar.gz
+cd kook-tavern-dm-v2.0.0-linux-x86_64
 cp .env.example .env
 # 编辑 .env 填入 KOOK_BOT_TOKEN、LLM_API_KEY、ALLOWED_GUILD_IDS、ADMIN_USER_IDS
-CARGO_BUILD_JOBS=1 cargo build --release --locked -p kook-tavern-dm
-./target/release/kook-tavern-dm kook
+./kook-tavern-dm kook
 ```
+如需从源码自行编译（要求 `rustc >= 1.88`）：`CARGO_BUILD_JOBS=1 cargo build --release --locked -p kook-tavern-dm`。
 完整 `systemd` 托管、防断档原子更新与 SQLite 每日自动热备模板详见 [DEPLOY_ECS.example.md](./DEPLOY_ECS.example.md)。
 
 ---
@@ -106,7 +114,7 @@ CARGO_BUILD_JOBS=1 cargo build --release --locked -p kook-tavern-dm
 | **推进与扮演** | 直接打字 / `/act <行动>` / `/go` / `/undo` | 提交行动、手动立刻结算、回档上一轮 |
 | **检定与战斗** | `/check <属性>` `/roll 1d20` `/skill` `/assist <队友>` | 属性检定、自由掷骰、放招牌技、协助队友享优势 |
 | **休整与成长** | `/短休`（`/rest short`） `/长休`（`/rest long`） `/levelup` | 恢复 HP/SAN/技能充能、分配过幕成长点 |
-| **面板与浮窗** | `/me` `/hud` `/web` `/status` `/summary` | 私密角色卡、个人悬浮 HUD、全队实况大屏、前情摘要 |
+| **面板与浮窗** | `/story` `/me` `/hud` `/web` `/status` `/summary` | 大白话案情简报、私密角色卡、个人悬浮 HUD、全队实况大屏 |
 | **创作与管理** | `/store` `/workshop` `/char` `/gm` `/export` `/reset` | 世界书商店、AI 工坊、跨团角色库、战报导出与结团 |
 
 ---
@@ -116,10 +124,10 @@ CARGO_BUILD_JOBS=1 cargo build --release --locked -p kook-tavern-dm
 ```text
 kook-tavern/
 ├── crates/
-│   ├── domain/          # 纯领域模型、骰子 RNG、世界书匹配、确定性数值/转幕 Patch（零 IO、零 unsafe）
-│   ├── core/            # 抽象端口 Trait、显式 Collecting⇄Resolving 状态机、HMAC 浮窗令牌与命令编排
-│   ├── infra-sqlite/    # SQLite WAL 存储、12 步版本号增量迁移、CAS 事务回档与 SillyTavern PNG/JSON 导入
-│   ├── infra-llm/       # OpenAI 兼容传输层、4 层记忆本引擎、3 阶段 JSON 自愈解析、可选 Jev 决策门
+│   ├── domain/          # 纯领域模型、进度钟引擎、反谜语/水剧情检测、骰子 RNG 与确定性 Patch（零 IO、零 unsafe）
+│   ├── core/            # 抽象端口 Trait、显式 Collecting⇄Resolving 状态机、HMAC 浮窗令牌与命令/简报编排
+│   ├── infra-sqlite/    # SQLite WAL 存储、13 步版本号增量迁移、CAS 事务回档与 SillyTavern PNG/JSON 导入
+│   ├── infra-llm/       # OpenAI 兼容传输层、4 层记忆本引擎、3 阶段 JSON 自愈解析、可选 Jev 决策与重写门
 │   ├── adapter-kook/    # KOOK v3 WebSocket、原地刷新活卡、频道级串行锁、40011 审核柔化与私密降级
 │   ├── adapter-web/     # Axum 嵌入式只读大屏 + 5 子页个人悬浮 HUD + SSE 实时推送 + 代理感知限流
 │   ├── adapter-cli/     # 本地多人终端模拟器
@@ -131,6 +139,16 @@ kook-tavern/
 ├── docker-compose.yml   # 一键自部署编排
 └── DEPLOY_ECS.example.md
 ```
+
+---
+
+## 💡 关于开发方式
+
+本项目是**个人独立企划 + AI 辅助开发（Vibe Coding）**的实践产物：
+- **人负责的部分**：全部产品构思、跑团玩法取舍、真实群聊数十轮实战测试、踩坑排障与质量验收；
+- **AI 负责的部分**：在明确架构约束下辅助完成 Rust 代码编写、重构与自动化测试补全。
+
+虽然不是传统意义上的“纯手敲”，但项目坚持**真机实战驱动**（含 71 项自动化回归测试、CI 严格 Clippy 零告警及单文件 ≤ 350 行门禁），已稳定运行在个人服务器上。非常欢迎懂 Rust 或爱跑团的朋友随时提 Issue、Code Review 或发 PR 一起玩！
 
 ---
 
