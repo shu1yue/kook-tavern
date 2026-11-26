@@ -248,6 +248,7 @@ impl LlmProvider for OpenAiLlmProvider {
 
             // One-shot `civ-atlas`-style consistency nudge: strictly budgeted (`allow_nudge`),
             // enhanced with optional System One semantic audit, scoped to omitted fields only.
+            let mut did_whisper_redact = false;
             let bulletin_due = should_trigger_bulletin(scenario, room, room.turn_number + 1);
             if allow_nudge && was_json {
                 let audit = if self.decision_gate.is_enabled()
@@ -282,6 +283,9 @@ impl LlmProvider for OpenAiLlmProvider {
                                     redact = plan.want_narrative_redact,
                                     "一次性状态一致性补齐生效"
                                 );
+                                if plan.want_narrative_redact {
+                                    did_whisper_redact = true;
+                                }
                                 merge_patch_delta(&mut reply, &plan, delta);
                             }
                         }
@@ -289,6 +293,26 @@ impl LlmProvider for OpenAiLlmProvider {
                     }
                 }
             }
+
+            // Solo-player clarity guard: strictly when total enrolled players `<= 1` (never when an
+            // AFK teammate exists!) and no whisper redaction was explicitly triggered, fold any stray
+            // LLM `private_whispers` cleanly into `narrative` so solo play stays in ONE cohesive card.
+            if players.len() <= 1 && !did_whisper_redact && !reply.private_whispers.is_empty() {
+                let mut extras = Vec::new();
+                for w in reply.private_whispers.drain(..) {
+                    let s = w.secret.trim();
+                    if !s.is_empty() && !reply.narrative.contains(s) {
+                        extras.push(s.to_string());
+                    }
+                }
+                if !extras.is_empty() {
+                    if !reply.narrative.trim().is_empty() {
+                        reply.narrative.push_str("\n\n");
+                    }
+                    reply.narrative.push_str(&extras.join("\n"));
+                }
+            }
+
             Ok(DmTurnOutput { reply, usage, extra_usages })
         })
     }

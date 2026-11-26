@@ -144,12 +144,19 @@ pub fn apply_dm_reply(
         }
     }
 
-    for clue in reply.new_clues.iter().take(10) {
-        let clue = clue.trim();
-        if !clue.is_empty() && !room.clues.iter().any(|c| c == clue) {
-            room.clues.push(clue.to_string());
-            effects.state_changes.push(format!("🔎 新线索：{clue}"));
+    for raw_clue in reply.new_clues.iter().take(3) {
+        let clue: String = raw_clue.trim().chars().take(72).collect();
+        if clue.is_empty()
+            || room.clues.iter().any(|c| c == &clue || c.contains(&clue) || clue.contains(c.as_str()))
+        {
+            continue;
         }
+        // Keep clue board concise across mega-campaigns (preserve 12 early foundational clues + latest 36)
+        if room.clues.len() >= 48 {
+            room.clues.remove(12);
+        }
+        room.clues.push(clue.clone());
+        effects.state_changes.push(format!("🔎 新线索：{clue}"));
     }
 
     let trim_opt = |opt: &Option<String>, lim: usize| -> String {

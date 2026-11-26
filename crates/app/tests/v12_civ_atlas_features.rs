@@ -90,45 +90,51 @@ async fn undercurrent_bulletin_triggers_renders_and_rolls_back_on_undo() {
         .await
         .unwrap();
 
-    // Turns 1 & 2: interval=3 so no scheduled bulletin yet
-    for step in ["检查柜台线索", "顺着活板门走下地下酒窖"] {
+    // Turns 1..=5: interval=6 so no scheduled bulletin yet
+    for step in [
+        "检查柜台线索",
+        "顺着活板门走下地下酒窖",
+        "打量酒窖四周环境",
+        "核对酒桶编号",
+        "聆听楼上动静",
+    ] {
         let _ = engine
             .handle_message(guild_msg("g_bul", "ch_bul", "u1", "阿明", step))
             .await
             .unwrap();
     }
-    let room_t2 = store.get_room("ch_bul").unwrap().unwrap();
-    assert_eq!(room_t2.turn_number, 2);
-    assert!(room_t2.bulletins.is_empty());
+    let room_t5 = store.get_room("ch_bul").unwrap().unwrap();
+    assert_eq!(room_t5.turn_number, 5);
+    assert!(room_t5.bulletins.is_empty());
     // Player location followed move into cellar
-    let p_t2 = store.get_player("ch_bul", "u1").unwrap().unwrap();
-    assert!(p_t2.location.contains("酒窖"), "got {}", p_t2.location);
+    let p_t5 = store.get_player("ch_bul", "u1").unwrap().unwrap();
+    assert!(p_t5.location.contains("酒窖"), "got {}", p_t5.location);
 
-    // Turn 3: hits bulletin_interval=3 -> emits world_bulletin & renders inside KOOK Card
-    let t3 = engine
+    // Turn 6: hits bulletin_interval=6 -> emits world_bulletin & renders inside KOOK Card
+    let t6 = engine
         .handle_message(guild_msg("g_bul", "ch_bul", "u1", "阿明", "细查17号酒桶"))
         .await
         .unwrap();
-    match &t3 {
+    match &t6 {
         EngineResponse::StoryTurn { world_bulletin, .. } => {
-            let b = world_bulletin.as_ref().expect("expected Turn 3 bulletin");
+            let b = world_bulletin.as_ref().expect("expected Turn 6 bulletin");
             assert!(b.masthead.contains("余烬流言板"));
             assert!(!b.headline.is_empty());
         }
         other => panic!("expected StoryTurn, got {other:?}"),
     }
-    let card_json = render_kook_card_json("ch_bul", &t3);
+    let card_json = render_kook_card_json("ch_bul", &t6);
     assert!(card_json.contains("📰"));
     assert!(card_json.contains("余烬流言板"));
     assert_eq!(store.get_room("ch_bul").unwrap().unwrap().bulletins.len(), 1);
 
-    // /undo cleanly rolls back the Turn 3 bulletin!
+    // /undo cleanly rolls back the Turn 6 bulletin!
     let _ = engine
         .handle_message(guild_msg("g_bul", "ch_bul", "u1", "阿明", "/undo"))
         .await
         .unwrap();
     let after_undo = store.get_room("ch_bul").unwrap().unwrap();
-    assert_eq!(after_undo.turn_number, 2);
+    assert_eq!(after_undo.turn_number, 5);
     assert!(after_undo.bulletins.is_empty());
 }
 
@@ -269,7 +275,7 @@ async fn director_beats_spotlight_and_consistency_nudge_work_end_to_end() {
     let mut room = tavern_domain::RoomState {
         channel_id: "c_dir".into(), guild_id: "g1".into(), scenario_id: "ember_tavern".into(),
         title: sc.name.clone(), location: "余烬酒馆大厅".into(), world_time: "21:30".into(),
-        turn_number: 3, state_version: 4, turn_phase: tavern_domain::TurnPhase::Collecting,
+        turn_number: 5, state_version: 6, turn_phase: tavern_domain::TurnPhase::Collecting,
         chat_mode: tavern_domain::ChatMode::Roleplay, narrative_style: tavern_domain::NarrativeStyle::Prose,
         gm_user_id: "u1".into(), web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![], ended_id: None,

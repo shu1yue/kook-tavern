@@ -242,9 +242,22 @@ impl GameEngine {
             }
         }
 
+        let scenario = self.scenarios.get(&room.scenario_id);
+        let current_goal = scenario
+            .as_ref()
+            .and_then(|s| {
+                if s.acts.is_empty() {
+                    None
+                } else {
+                    let idx = (room.current_act.max(1) as usize)
+                        .saturating_sub(1)
+                        .min(s.acts.len() - 1);
+                    Some(s.acts[idx].goal.trim().to_string())
+                }
+            })
+            .unwrap_or_default();
         let opening_roles = if room.turn_number == 0 {
-            self.scenarios
-                .get(&room.scenario_id)
+            scenario
                 .map(|s| s.preset_roles.into_iter().take(4).collect())
                 .unwrap_or_default()
         } else {
@@ -254,6 +267,7 @@ impl GameEngine {
         Ok(Some(LiveStoryHud {
             turn_number: room.turn_number,
             rule_badge: room.check_system.short_badge().to_string(),
+            current_goal,
             party_lines,
             turn_progress,
             opening_roles,

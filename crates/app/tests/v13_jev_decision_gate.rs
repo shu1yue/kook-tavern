@@ -533,12 +533,20 @@ async fn openai_provider_wires_jev_lore_recall_and_whisper_redaction_end_to_end(
         last_rest_turn: 0, summary: String::new(), summary_upto_turn: 0, active: true,
         created_at: now, updated_at: now,
     };
-    let players = vec![Player {
-        channel_id: "c_e2e".into(), user_id: "u1".into(), character_name: "阿明".into(),
-        role_desc: "侦探".into(), traits: vec![], hp: 10, max_hp: 10, san: 10, max_san: 10,
-        inventory: vec![], status_note: String::new(), is_afk: false,
-        stats: Default::default(), location: String::new(), dnd: Default::default(),
-    }];
+    let players = vec![
+        Player {
+            channel_id: "c_e2e".into(), user_id: "u1".into(), character_name: "阿明".into(),
+            role_desc: "侦探".into(), traits: vec![], hp: 10, max_hp: 10, san: 10, max_san: 10,
+            inventory: vec![], status_note: String::new(), is_afk: false,
+            stats: Default::default(), location: String::new(), dnd: Default::default(),
+        },
+        Player {
+            channel_id: "c_e2e".into(), user_id: "u2".into(), character_name: "小红".into(),
+            role_desc: "学者".into(), traits: vec![], hp: 10, max_hp: 10, san: 10, max_san: 10,
+            inventory: vec![], status_note: String::new(), is_afk: false,
+            stats: Default::default(), location: String::new(), dnd: Default::default(),
+        },
+    ];
     let actions = vec![PendingAction {
         channel_id: "c_e2e".into(), target_turn: 2, user_id: "u1".into(),
         character_name: "阿明".into(), action_text: "我安静观察吧台动静".into(),

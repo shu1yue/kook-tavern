@@ -23,11 +23,11 @@ const FORGE_SYSTEM_PROMPT: &str = r#"你是专业的线上多人 TRPG / 群酒�
   "tagline": "一句话悬念卖点（15~40字）",
   "genre": "题材标签（如 古典奇幻 / D&D 城邦调查）",
   "theme": "ember / fog / metro 三选一",
-  "dm_style": "给 AI DM 的主持文风与秘密纸条运用指导（80~160字）",
+  "dm_style": "给 AI DM 的主持文风指导（80~160字：必须要求用清晰现代大白话讲故事与写对话，严禁谜语人或故弄玄虚，严禁编造剧本外新路人，节奏明快）",
   "initial_location": "开局具体地点（须与首个 map_nodes.name 一致）",
   "initial_time": "开局时间氛围",
-  "opening_scene": "画面感极强的开场白（140~260字，分3~4段，结尾留出清晰悬念钩子）",
-  "opening_actions": ["6~14字开场建议动作1", "6~14字动作2", "6~14字动作3"],
+  "opening_scene": "清晰好懂的开场白（160~260字，分3~4段：开篇就用大白话讲清这是什么地方、发生了什么事、面前有哪些关键人物、眼下第一件要查的事）",
+  "opening_actions": ["6~14字推进主线开场按钮1", "6~14字按钮2", "6~14字按钮3"],
   "player_defaults": {
     "max_hp": 14,
     "max_san": 12,
@@ -47,7 +47,7 @@ const FORGE_SYSTEM_PROMPT: &str = r#"你是专业的线上多人 TRPG / 群酒�
     }
   ],
   "acts": [
-    {"id": "act1", "title": "第一幕标题", "goal": "本幕清晰目标", "advance_flags": ["节点1"]}
+    {"id": "act1", "title": "第一幕标题", "goal": "本幕大白话明确目标（写清要去哪/找谁/解决什么）", "advance_flags": ["节点1"], "enter_nodes": []}
   ],
   "endings": [
     {"id": "ending_true", "title": "真结局名", "kind": "true", "summary": "触发条件与结局基调"},
@@ -61,14 +61,16 @@ const FORGE_SYSTEM_PROMPT: &str = r#"你是专业的线上多人 TRPG / 群酒�
     {"from": "start_hub", "to": "second_node", "label": "通道"}
   ],
   "worldbook": [
-    {"id": "wb_plot_1", "title": "本局专属关键秘密/NPC真相（生成4~6条）", "keywords": ["关键词1", "关键词2"], "always_active": false, "priority": 92, "content": "具体真相、可给 private_whispers 的暗线、NPC态度转变条件"}
+    {"id": "wb_public_intro", "title": "公开背景与登场人物简介（1条，无剧透）", "keywords": ["背景", "人物"], "always_active": true, "player_visible": true, "priority": 100, "content": "用大白话介绍故事背景与 3~4 位核心 NPC 的公开身份（绝不剧透真凶）"},
+    {"id": "wb_plot_1", "title": "本局专属关键NPC/Boss真相（生成4~6条）", "keywords": ["人物名", "所在地图节点名", "关键道具"], "always_active": false, "player_visible": false, "priority": 92, "content": "具体直白真相、NPC 动机、正面摊牌触发方式与破解条件"}
   ]
 }
 要求：
 1. preset_roles 严格 4 个，五维单项在 -1..=3 且总和 ≤ 3，每个职业带 2 项熟练技能与 1~2 项充能招牌技（max_uses 仅 1 或 2）；
-2. acts 严格等于用户要求的幕数（3、5 或 6 幕），层层递进；endings 为 3~4 个（含 true 与 bad）；
+2. acts 严格等于用户要求的幕数（3、5 或 6 幕），层层递进，第 2 幕起的 `enter_nodes` 填对应阶段 `map_nodes.id` 以便玩家走到该地点自动转幕；endings 为 3~4 个（含 true 与 bad）；
 3. map_nodes 提供 5~8 个合理坐标（0~100）的地点并用 map_edges 连通，node id 仅含小写英文数字下划线；
-4. 若用户已提供基础世界书，worldbook 只需补写本局专属的暗线秘密、关键 NPC 真相与Boss机制（不要重复照抄基础世界书）。"#;
+4. 核心 NPC 控制在 3~5 位，每位都有清晰身份与明确动机；终幕 Boss/核心真相世界书的 `keywords` 必须包含终幕所在 `map_nodes.name`，防止玩家进场后 Boss 失踪；
+5. 若用户已提供基础世界书，worldbook 只需补写本局专属的公开背景、关键 NPC 真相与 Boss 机制（不要重复照抄基础世界书）。"#;
 
 pub fn build_forge_messages(req: &ForgeScenarioRequest) -> Vec<ChatMessage> {
     let d = &req.draft;

@@ -48,6 +48,7 @@ pub fn soften_live_hud(hud: &LiveStoryHud) -> LiveStoryHud {
     LiveStoryHud {
         turn_number: hud.turn_number,
         rule_badge: hud.rule_badge.clone(),
+        current_goal: soften_kook_text(&hud.current_goal),
         party_lines: hud.party_lines.iter().map(|s| soften_kook_text(s)).collect(),
         turn_progress: hud.turn_progress.iter().map(|s| soften_kook_text(s)).collect(),
         opening_roles: hud.opening_roles.clone(),

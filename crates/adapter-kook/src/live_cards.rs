@@ -214,6 +214,9 @@ pub fn render_story_turn_card(
 
 fn push_live_hud_modules(modules: &mut Vec<Value>, channel_id: &str, hud: &LiveStoryHud) {
     let mut hud_lines = Vec::new();
+    if !hud.current_goal.trim().is_empty() {
+        hud_lines.push(format!("🎯 **当前目标**：{}", truncate_chars(hud.current_goal.trim(), 120)));
+    }
     if !hud.party_lines.is_empty() {
         hud_lines.push(format!("👥 **当前小队**：{}", hud.party_lines.join(" ｜ ")));
     } else if !hud.opening_roles.is_empty() {
@@ -305,6 +308,7 @@ mod tests {
         let hud = LiveStoryHud {
             turn_number: 0,
             rule_badge: "经典 D&D (d20)".into(),
+            current_goal: "查清蓝血信使与断钥匙真相".into(),
             party_lines: vec!["**沐涵**（齿轮机械师 · ❤️12/12 🧠10/10）".into()],
             turn_progress: vec!["🎲 **沐涵**：🔍 侦查 16（✨成功）（待行动）".into()],
             opening_roles: vec![PresetRole {

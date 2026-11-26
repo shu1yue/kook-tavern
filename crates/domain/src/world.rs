@@ -74,7 +74,7 @@ fn default_balanced() -> String {
     "balanced".to_string()
 }
 fn default_bulletin_interval() -> u32 {
-    3
+    6
 }
 
 impl Default for ScenarioRules {
@@ -185,9 +185,14 @@ pub fn resolve_map_node_id(nodes: &[ScenarioMapNode], location_text: &str) -> Op
 }
 
 /// Decides whether the upcoming turn should trigger an undercurrent faction bulletin.
+/// Automatically silences street bulletins during the final climax act so boss showdowns
+/// are never distracted by unrelated background rumors.
 pub fn should_trigger_bulletin(scenario: &Scenario, room: &RoomState, next_turn: u32) -> bool {
     let interval = scenario.rules.bulletin_interval;
     if interval == 0 || scenario.rules.factions.is_empty() || next_turn < 2 {
+        return false;
+    }
+    if !scenario.acts.is_empty() && room.current_act >= scenario.acts.len() as u32 {
         return false;
     }
     let last_turn = room.bulletins.last().map(|b| b.turn_number).unwrap_or(0);

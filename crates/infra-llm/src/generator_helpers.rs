@@ -85,10 +85,66 @@ pub(crate) fn sanitize_map_and_beats(sc: &mut Scenario) {
     if !matches!(sc.rules.clue_generosity.as_str(), "" | "strict" | "balanced" | "generous") {
         sc.rules.clue_generosity = "balanced".into();
     }
-    sc.rules.bulletin_interval = sc.rules.bulletin_interval.min(20);
+    sc.rules.bulletin_interval = if sc.rules.bulletin_interval == 0 {
+        0
+    } else {
+        sc.rules.bulletin_interval.clamp(5, 20)
+    };
     sc.rules.factions.retain(|f| !f.name.trim().is_empty() && !f.goal.trim().is_empty());
     sc.rules.factions.truncate(8);
 
+    // 1. Validate act.enter_nodes against valid map_nodes and auto-wire fallback progression nodes
+    //    for Acts 2..=N so forged scenarios NEVER get permanently stuck on Act 1!
+    for act in &mut sc.acts {
+        act.enter_nodes.retain(|nid| valid_nodes.contains(nid));
+    }
+    let act_count = sc.acts.len();
+    if act_count >= 2 && sc.map_nodes.len() >= 2 {
+        let non_hub_ids: Vec<String> = sc
+            .map_nodes
+            .iter()
+            .skip(1)
+            .map(|n| n.id.clone())
+            .collect();
+        if !non_hub_ids.is_empty() {
+            let later_acts = act_count - 1;
+            for (offset, act) in sc.acts.iter_mut().skip(1).enumerate() {
+                if !act.enter_nodes.is_empty() {
+                    continue;
+                }
+                let start = (offset * non_hub_ids.len()) / later_acts;
+                let end = (((offset + 1) * non_hub_ids.len()) / later_acts).max(start + 1);
+                for nid in &non_hub_ids[start..end.min(non_hub_ids.len())] {
+                    if !act.enter_nodes.contains(nid) {
+                        act.enter_nodes.push(nid.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Ensure at least one always-active entry is player_visible for spoiler-safe story briefings,
+    //    and attach the final map node's name to the top hidden climax entry so the Boss NEVER vanishes!
+    if !sc.worldbook.iter().any(|w| w.player_visible)
+        && let Some(first_always) = sc.worldbook.iter_mut().find(|w| w.always_active)
+    {
+        first_always.player_visible = true;
+    }
+    if let Some(last_node) = sc.map_nodes.last() {
+        let final_loc = last_node.name.trim().to_string();
+        if !final_loc.is_empty()
+            && let Some(top_hidden) = sc
+                .worldbook
+                .iter_mut()
+                .filter(|w| !w.always_active)
+                .max_by_key(|w| w.priority)
+            && !top_hidden.keywords.iter().any(|k| k.trim() == final_loc)
+        {
+            top_hidden.keywords.push(final_loc);
+        }
+    }
+
+    // 3. Ensure `must_hit_beats` includes a final-act showdown beat so climax never drags forever
     let max_act = sc.acts.len().max(1) as u32;
     sc.rules.must_hit_beats.retain(|b| {
         b.act >= 1
@@ -97,6 +153,22 @@ pub(crate) fn sanitize_map_and_beats(sc: &mut Scenario) {
             && !b.flag.trim().is_empty()
             && !b.prompt_hint.trim().is_empty()
     });
+    if max_act >= 2 && !sc.rules.must_hit_beats.iter().any(|b| b.act == max_act) {
+        let final_goal = sc
+            .acts
+            .last()
+            .map(|a| a.goal.trim())
+            .filter(|g| !g.is_empty())
+            .unwrap_or("面对终幕核心人物并做出最终抉择");
+        sc.rules.must_hit_beats.push(tavern_domain::DirectorBeat {
+            act: max_act,
+            by_turn: max_act.saturating_mul(4),
+            flag: "终幕核心摊牌".into(),
+            prompt_hint: format!(
+                "终幕核心人物必须正面现身与玩家摊牌，用大白话说清真相并围绕「{final_goal}」推进最终结局收束。"
+            ),
+        });
+    }
     sc.rules.must_hit_beats.truncate(12);
 }
 

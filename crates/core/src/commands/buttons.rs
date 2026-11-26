@@ -60,6 +60,7 @@ pub async fn dispatch_button(
     match action {
         "resolve" => turn::resolve_turn(engine, channel_id).await,
         "status" => room::cmd_status(engine, channel_id),
+        "story" | "summary" | "recap" => room::cmd_summary(engine, channel_id),
         "undo" => turn::cmd_undo(engine, channel_id),
         "cost" => m1::cmd_cost(engine, channel_id),
         "web" => m1::cmd_web(engine, channel_id),

@@ -14,7 +14,8 @@ use crate::memory::{
 };
 use crate::prompt_ext::{
     build_lore_corpus, format_act_progress, format_dynamic_director_sections,
-    format_player_dnd_tail, format_static_rules_and_map, merge_dynamic_worldbook,
+    format_player_dnd_tail, format_static_rules_and_map, inject_climax_worldbook,
+    merge_dynamic_worldbook,
 };
 
 const DEFAULT_DM_SYSTEM: &str = include_str!("../../../prompts/dm_system.md");
@@ -113,7 +114,8 @@ pub fn build_dm_messages_full(
 
     let batched_input = format_batched_actions(actions);
     let lore_corpus = build_lore_corpus(room, recent_turns, actions);
-    let dynamic_lore = merge_dynamic_worldbook(scenario, &lore_corpus, extra_lore_ids, 7);
+    let mut dynamic_lore = merge_dynamic_worldbook(scenario, &lore_corpus, extra_lore_ids, 7);
+    inject_climax_worldbook(scenario, room, &mut dynamic_lore, 9);
     info!(
         channel_id = %room.channel_id,
         matched_dynamic_lore = dynamic_lore.len(),

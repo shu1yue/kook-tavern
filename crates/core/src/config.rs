@@ -75,7 +75,7 @@ impl AppConfig {
         let llm_summary_model =
             env_non_empty("LLM_SUMMARY_MODEL").unwrap_or_else(|| llm_model.clone());
 
-        let llm_temperature = env_f32("LLM_TEMPERATURE", 0.85).clamp(0.0, 2.0);
+        let llm_temperature = env_f32("LLM_TEMPERATURE", 0.75).clamp(0.0, 2.0);
         let llm_max_tokens = env_u32("LLM_MAX_TOKENS", 2048).clamp(256, 8192);
 
         let db_path =

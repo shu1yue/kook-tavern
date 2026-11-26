@@ -156,6 +156,7 @@ pub struct EndingBanner {
 pub struct LiveStoryHud {
     pub turn_number: u32,
     pub rule_badge: String,
+    pub current_goal: String,
     pub party_lines: Vec<String>,
     pub turn_progress: Vec<String>,
     pub opening_roles: Vec<PresetRole>,

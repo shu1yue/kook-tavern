@@ -140,17 +140,29 @@ pub fn render_kook_card_json(channel_id: &str, resp: &EngineResponse) -> String 
 
             if !room.clues.is_empty() {
                 modules.push(json!({ "type": "divider" }));
-                let clues = room
-                    .clues
+                let start = room.clues.len().saturating_sub(12);
+                let clues = room.clues[start..]
                     .iter()
                     .enumerate()
-                    .map(|(i, c)| format!("{}. {}", i + 1, c))
+                    .map(|(i, c)| format!("{}. {}", start + i + 1, c))
                     .collect::<Vec<_>>()
                     .join("\n");
-                push_chunked_sections(&mut modules, &format!("🔎 **已掌握线索**\n{clues}"), 3200);
+                let hdr = if start > 0 {
+                    format!("🔎 **最新线索**（展示最新 {} 条 / 共 {} 条，发 `/story` 看案情简报）", room.clues.len() - start, room.clues.len())
+                } else {
+                    "🔎 **已掌握线索**".to_string()
+                };
+                push_chunked_sections(&mut modules, &format!("{hdr}\n{clues}"), 3200);
             }
 
             modules.push(json!({ "type": "divider" }));
+            modules.push(crate::card_widgets::action_group(vec![
+                crate::card_widgets::btn(
+                    "primary",
+                    format!("tavern:story:{board_chan}"),
+                    "📖 案情简报（人物/目标）",
+                ),
+            ]));
             let [row1, row2, row3] = status_console_rows(board_chan, room);
             modules.extend([row1, row2, row3]);
             json!([{ "type": "card", "theme": "info", "size": "lg", "modules": modules }]).to_string()

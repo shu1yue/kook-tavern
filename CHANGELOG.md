@@ -2,6 +2,22 @@
 
 > 每次版本上线前，用大白话记录“这次改了什么”以及“万一线上出状况怎么 10 秒回滚”。
 
+## [1.9.0] - 彻底根治“AI 谜语人 / 拖戏不结团 / 玩迷糊”大升级（内置本 + 工坊本 + 导入本全生效）
+### 本次改动
+- **说现代大白话 + 反故弄玄虚 + 降温**（`prompts/dm_system.md`、`style_prose.md`、`style_voice.md`、`summarizer.md`、`config.rs`、`.env.example`）：
+  - 将默认 `LLM_TEMPERATURE` 从 `1.15` 回调至 `0.75`，消除高温度导致的造词与病句；
+  - 写死「说人话与禁套娃铁律」：NPC 回答必须直白具体、严禁打哑谜或说半截话、严禁凭空编造剧本外新路人/伪机关/无限刷怪；移除“每轮结尾强行留异响悬念”的旧指令，要求每轮实质推进主线并给出大步行动按钮。
+- **引擎底层通用兜底（内置 / `/workshop` 工坊 / 酒馆导入 100% 自动生效）**（`crates/infra-llm/src/prompt_ext.rs`、`prompts.rs`、`transport.rs`、`crates/domain/src/world.rs`、`patch.rs`）：
+  - **终幕 Boss / 结局世界书自动注入**（`inject_climax_worldbook`）：一旦进入最终幕，即便玩家当前发言没提 Boss 名字或剧本漏写地点关键词，引擎也会自动注入终幕核心人物与结局世界书，杜绝 Boss 失踪数十轮；
+  - **终幕导演强收束与防卡关提醒**：进入终幕且轮次偏长时自动触发硬收束指令，要求立刻正面摊牌并在玩家做出决定性选择后 1~2 轮内填写 `trigger_ending_id` 痛快结团；
+  - **单人独行防分心**：房间总人数 `<= 1` 时禁止发无意义小纸条（并将漏网细节自然合并进正文，多人团或有暂离队友时继续严格保密隔离）；
+  - **号外降频与线索瘦身**：默认号外间隔调整为 `6` 轮且终幕自动静默，每轮新线索限精简 0~3 条并自动去重限容（保留 12 条早期基石 + 最新 36 条）。
+- **工坊 `/workshop` 生成器与自动补全加固**（`crates/infra-llm/src/generator.rs`、`generator_helpers.rs`）：
+  - `FORGE_SYSTEM_PROMPT` 强制要求大白话开场、清晰公开人物简介、带地点关键词的 Boss 世界书与 `enter_nodes`；
+  - 后处理 `sanitize_map_and_beats` 自动补全缺失的 `enter_nodes`、`player_visible` 公开背景、终幕地图节点关键词绑定、合理 `bulletin_interval` 及终幕必达摊牌节拍。
+- **内置 4 套剧本升级**（`scenarios/*.yaml`）：为《余烬酒馆》《雨夜黑杉庄园》《午夜四号线》《剑湾晨钟》补全终幕 Boss/核心机制的地点触发关键词、白鸦终幕必达摊牌节拍与公开登场人物清单。
+- **防迷路 UI：活卡常驻 `🎯 当前目标` + `/story` 大白话案情简报**（`protocol.rs`、`engine.rs`、`live_cards.rs`、`room.rs`、`cards.rs`、`buttons.rs`）：每张 KOOK 剧情活卡顶部小队栏新增 `🎯 当前目标`；新增 `/story`（及面板一键 `📖 案情简报` 按钮），分三段直白列出「这是个什么故事 / 目前登场了哪些人 / 现在要去干什么」。
+
 ## [1.8.2] - 后端地图节点确定性自动转幕（彻底摆脱 LLM 漏写 `advance_act`）+ 防普通探索机械扣 SAN
 ### 本次改动
 - **Rust 引擎确定性自动转幕与过幕升级**（`crates/domain/src/stats.rs`、`patch.rs` 与 4 套内置 `scenarios/*.yaml`）：为 `ScenarioAct` 新增 `enter_nodes` 地图节点映射，只要队伍实际踏入属于后续幕次的地图节点（如《余烬酒馆》的 `峭壁栈道`/`旧钟楼一二层`→第 2 幕、`钟楼三层星仪机房`→第 3 幕），即便 LLM 忘记把 `advance_act` 设为 `true`，后端也会 100% 确定性触发转幕横幅与全队过幕升级（`/levelup`），跨幕直达还会补齐跳过的每一幕成长点。
