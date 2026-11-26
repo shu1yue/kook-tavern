@@ -13,9 +13,9 @@ use crate::memory::{
     render_memory_book_for_prompt, split_memory_book,
 };
 use crate::prompt_ext::{
-    build_lore_corpus, format_act_progress, format_dynamic_director_sections,
-    format_player_dnd_tail, format_static_rules_and_map, inject_climax_worldbook,
-    merge_dynamic_worldbook,
+    build_lore_corpus, format_act_progress, format_clocks_snapshot,
+    format_dynamic_director_sections, format_player_dnd_tail, format_static_rules_and_map,
+    inject_climax_worldbook, merge_dynamic_worldbook,
 };
 
 const DEFAULT_DM_SYSTEM: &str = include_str!("../../../prompts/dm_system.md");
@@ -256,33 +256,7 @@ fn format_dynamic_turn_prompt(
     };
 
     let act_block = format_act_progress(scenario, room);
-    let clocks_block = if room.clocks.is_empty() {
-        "（暂未启用进度钟）".to_string()
-    } else {
-        room.clocks
-            .iter()
-            .map(|c| {
-                let auto_hint = if c.auto_tick_every > 0 {
-                    format!("，每{}轮自动+1", c.auto_tick_every)
-                } else {
-                    String::new()
-                };
-                let full_tag = if c.filled >= c.segments { "【已满·必须兑现！】" } else { "" };
-                format!(
-                    "- `{}`（{} · {}）：{}/{}{}{} ｜ 满格后果：{}",
-                    c.id,
-                    c.name,
-                    c.kind.label(),
-                    c.filled,
-                    c.segments,
-                    auto_hint,
-                    full_tag,
-                    c.on_full
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
+    let clocks_block = format_clocks_snapshot(room);
     let endings_block = if scenario.endings.is_empty() {
         "（自由探索模组，无需触发预设结局）".to_string()
     } else {

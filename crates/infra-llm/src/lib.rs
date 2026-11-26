@@ -6,6 +6,7 @@ pub mod memory;
 pub mod mock;
 pub mod parser;
 pub mod prompt_ext;
+pub mod prompt_lore;
 pub mod prompts;
 pub mod remote_fetch;
 pub mod transport;

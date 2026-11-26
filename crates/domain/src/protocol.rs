@@ -275,3 +275,38 @@ impl CardTheme {
         }
     }
 }
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UsageSummary {
+    pub total_calls: u64,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub cache_hit_tokens: u64,
+    pub cache_miss_tokens: u64,
+    pub estimated_cny: f64,
+}
+
+impl UsageSummary {
+    pub fn cache_hit_ratio_pct(&self) -> f64 {
+        let total = self.cache_hit_tokens + self.cache_miss_tokens;
+        let denom = if total > 0 { total } else { self.prompt_tokens };
+        if denom == 0 { 0.0 } else { (self.cache_hit_tokens as f64 / denom as f64) * 100.0 }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DailyUsage { pub day_utc: String, pub calls: u64, pub estimated_cny: f64 }
+
+pub fn format_batched_actions(actions: &[PendingAction]) -> String {
+    actions
+        .iter()
+        .map(|a| {
+            let mut e = format!("【{}】行动：{}", a.character_name, a.action_text.trim());
+            if !a.roll_notes.is_empty() {
+                e.push_str(&format!("\n  ↳ 已验证后端掷骰：{}", a.roll_notes.join("；")));
+            }
+            e
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}

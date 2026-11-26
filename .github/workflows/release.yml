@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v2.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: Build Linux x86_64 Binary & Publish GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          TAG="${INPUT_TAG:-$REF_NAME}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Production Rust file-size hygiene (<= 350 lines)
+        run: |
+          wc -l crates/*/src/*.rs crates/*/src/*/*.rs | awk '
+            $2 != "total" && $1 > 350 { print "ERROR: >350 lines:", $0; err=1 }
+            END { if (err) exit 1; print "All production .rs files <= 350 lines." }
+          '
+
+      - name: Clippy (-D warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Workspace Tests
+        run: cargo test --workspace
+
+      - name: Build release binary (Linux x86_64)
+        run: cargo build --release --locked
+
+      - name: Package release archive & SHA256 checksum
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          PKG="kook-tavern-dm-${TAG}-linux-x86_64"
+          mkdir -p "dist/${PKG}"
+          install -m 755 target/release/kook-tavern-dm "dist/${PKG}/kook-tavern-dm"
+          cp -r prompts scenarios worldbooks .env.example README.md CHANGELOG.md LICENSE "dist/${PKG}/"
+          tar -C dist -czf "dist/${PKG}.tar.gz" "${PKG}"
+          (cd dist && sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256")
+          ls -lh dist/
+
+      - name: Extract Release Notes from CHANGELOG.md
+        id: notes
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os, re, pathlib
+
+          tag = os.environ["TAG"]
+          ver = os.environ["VERSION"]
+          changelog = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+
+          pattern = re.compile(
+              rf"^## \[{re.escape(ver)}\](?:\s*-\s*(.*))?$", re.MULTILINE
+          )
+          m = pattern.search(changelog)
+          title = f"{tag}"
+          body = ""
+          if m:
+              subtitle = (m.group(1) or "").strip()
+              if subtitle:
+                  title = f"{tag} {subtitle}"
+              start = m.end()
+              next_h = re.search(r"^## \[", changelog[start:], re.MULTILINE)
+              section = changelog[start : start + next_h.start()] if next_h else changelog[start:]
+              body = section.strip()
+
+          pkg = f"kook-tavern-dm-{tag}-linux-x86_64.tar.gz"
+          footer = (
+              "\n\n---\n"
+              "### 📦 预编译二进制快速部署（Linux x86_64）\n"
+              f"1. 下载下方附件 `{pkg}` 并解压：`tar -xzf {pkg}`\n"
+              "2. 复制 `.env.example` 为 `.env`，填入 `KOOK_BOT_TOKEN` 与 `LLM_API_KEY`\n"
+              "3. 直接运行 `./kook-tavern-dm kook` 启动机器人（启动时自动完成 SQLite 迁移，不丢历史存档）\n"
+              f"4. 校验文件完整性：`sha256sum -c {pkg}.sha256`\n"
+          )
+
+          out_path = pathlib.Path("dist/release_notes.md")
+          out_path.write_text((body if body else f"Release {tag}") + footer, encoding="utf-8")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"title={title}\n")
+              fh.write(f"has_body={'true' if body else 'false'}\n")
+          PY
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          TITLE: ${{ steps.notes.outputs.title }}
+          HAS_BODY: ${{ steps.notes.outputs.has_body }}
+        run: |
+          PKG="kook-tavern-dm-${TAG}-linux-x86_64"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes-file dist/release_notes.md --latest
+            gh release upload "$TAG" "dist/${PKG}.tar.gz" "dist/${PKG}.tar.gz.sha256" --clobber
+          else
+            if [ "$HAS_BODY" = "true" ]; then
+              gh release create "$TAG" "dist/${PKG}.tar.gz" "dist/${PKG}.tar.gz.sha256" \
+                --title "$TITLE" --notes-file dist/release_notes.md --latest
+            else
+              gh release create "$TAG" "dist/${PKG}.tar.gz" "dist/${PKG}.tar.gz.sha256" \
+                --title "$TITLE" --generate-notes --latest
+            fi
+          fi

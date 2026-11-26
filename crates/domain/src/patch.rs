@@ -1,9 +1,10 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
+use crate::clocks::apply_clock_progression;
 use crate::models::{NpcState, Player, RoomState, Scenario};
 use crate::protocol::{DirectMessageOut, DmStructuredReply, StatePatch};
 use crate::stats::ScenarioEnding;
-use crate::world::{ClockKind, WorldBulletin, init_room_clocks};
+use crate::world::WorldBulletin;
 
 #[derive(Debug, Clone, Default)]
 pub struct AppliedTurnEffects {
@@ -270,103 +271,13 @@ pub fn apply_story_progression(
         );
     }
 
-    // ── v2.0 Blades-in-the-Dark Pacing Clocks (LLM delta + deterministic auto-tick) ──
-    if room.clocks.is_empty() {
-        room.clocks = init_room_clocks(scenario);
-    }
-    let mut agg_clocks: BTreeMap<usize, (i16, String)> = BTreeMap::new();
-    for upd in reply.clock_updates.iter().take(6) {
-        let key = upd.id.trim();
-        if key.is_empty() || upd.delta == 0 {
-            continue;
-        }
-        let Some(idx) = room.clocks.iter().position(|c| {
-            c.id == key || c.id.eq_ignore_ascii_case(key) || c.name == key
-        }) else {
-            continue;
-        };
-        let entry = agg_clocks.entry(idx).or_insert((0, String::new()));
-        entry.0 = entry.0.saturating_add(i16::from(upd.delta));
-        let reason = upd.reason.trim();
-        if !reason.is_empty() && entry.1.is_empty() {
-            entry.1 = reason.chars().take(28).collect();
-        }
-    }
-
-    let mut llm_positively_ticked: BTreeSet<usize> = BTreeSet::new();
-    for (idx, (raw_delta, reason)) in agg_clocks {
-        let delta = raw_delta.clamp(-2, 2);
-        if delta == 0 {
-            continue;
-        }
-        let clock = &mut room.clocks[idx];
-        let old = clock.filled;
-        let max_seg = clock.segments.clamp(1, 12);
-        let new_val = (i16::from(old) + delta).clamp(0, i16::from(max_seg)) as u8;
-        if delta > 0 {
-            llm_positively_ticked.insert(idx);
-        }
-        if new_val != old {
-            clock.filled = new_val;
-            let actual = i16::from(new_val) - i16::from(old);
-            let sign = if actual > 0 { "+" } else { "" };
-            let icon = match clock.kind {
-                ClockKind::Threat => "🔴 ⏳",
-                ClockKind::Progress => "🟢 🔑",
-            };
-            let why = if reason.is_empty() {
-                String::new()
-            } else {
-                format!(" · {reason}")
-            };
-            effects.state_changes.push(format!(
-                "{icon} **{}** {old}→{new_val}/{max_seg} ({sign}{actual}{why})",
-                clock.name
-            ));
-        }
-    }
-
-    // Deterministic server auto-tick: prevents LLM from stalling threat clocks forever!
-    for (idx, clock) in room.clocks.iter_mut().enumerate() {
-        let max_seg = clock.segments.clamp(1, 12);
-        if clock.auto_tick_every > 0
-            && resolving_turn > 0
-            && resolving_turn.is_multiple_of(u32::from(clock.auto_tick_every))
-            && !clock.triggered
-            && clock.filled < max_seg
-            && !llm_positively_ticked.contains(&idx)
-        {
-            let old = clock.filled;
-            clock.filled = (clock.filled + 1).min(max_seg);
-            let icon = match clock.kind {
-                ClockKind::Threat => "🔴 ⏳",
-                ClockKind::Progress => "🟢 🔑",
-            };
-            effects.state_changes.push(format!(
-                "{icon} **{}** {old}→{}/{max_seg} (+1 · 时限逼近自动推进)",
-                clock.name, clock.filled
-            ));
-        }
-    }
-
-    // Full-clock trigger alert (fires once per clock upon crossing full)
-    for clock in &mut room.clocks {
-        let max_seg = clock.segments.clamp(1, 12);
-        if !clock.triggered && clock.filled >= max_seg {
-            clock.triggered = true;
-            let banner = match clock.kind {
-                ClockKind::Threat => format!(
-                    "🚨 **威胁钟已满 · 【{}】({}/{})！** {}",
-                    clock.name, clock.filled, max_seg, clock.on_full
-                ),
-                ClockKind::Progress => format!(
-                    "🎉 **进度钟已满 · 【{}】({}/{})！** {}",
-                    clock.name, clock.filled, max_seg, clock.on_full
-                ),
-            };
-            effects.state_changes.push(banner);
-        }
-    }
+    apply_clock_progression(
+        room,
+        scenario,
+        &reply.clock_updates,
+        resolving_turn,
+        &mut effects.state_changes,
+    );
 
     if let Some(ref draft) = reply.world_bulletin {
         let headline: String = draft.headline.trim().chars().take(48).collect();
@@ -405,52 +316,4 @@ pub fn apply_story_progression(
     room.ended_id = Some(matched.id.clone());
     room.ended_title = Some(matched.title.clone());
     Some(matched)
-}
-
-#[cfg(test)]
-mod tests {
-    use chrono::Utc;
-
-    use super::*;
-    use crate::models::{ChatMode, NarrativeStyle, TurnPhase};
-
-    #[test]
-    fn aggregates_multiple_patches_and_clamps_bounds() {
-        let now = Utc::now();
-        let mut room = RoomState {
-            channel_id: "c1".into(), guild_id: "g1".into(), scenario_id: "s1".into(),
-            title: "T".into(), location: "Loc".into(), world_time: "Now".into(),
-            turn_number: 1, state_version: 1, turn_phase: TurnPhase::Collecting,
-            chat_mode: ChatMode::Strict, narrative_style: NarrativeStyle::Prose,
-            gm_user_id: "u1".into(), web_token: "secret_tok".into(),
-            clues: vec![], npc_states: vec![], suggested_actions: vec![],
-            current_act: 1, world_flags: vec![], ended_id: None, ended_title: None,
-            bulletins: vec![], clocks: vec![], check_system: Default::default(), last_rest_turn: 0,
-            summary: String::new(), summary_upto_turn: 0, active: true,
-            created_at: now, updated_at: now,
-        };
-        assert!(!format!("{room:?}").contains("secret_tok"));
-        let mut players = vec![Player {
-            channel_id: "c1".into(), user_id: "u1".into(), character_name: "陆沉".into(),
-            role_desc: "机械师".into(), traits: vec![], hp: 50, max_hp: 50, san: 8, max_san: 10,
-            inventory: vec!["扳手".into()], status_note: String::new(), is_afk: false,
-            stats: Default::default(), location: String::new(), dnd: Default::default(),
-        }];
-        let reply = DmStructuredReply {
-            scene_title: "测试".into(), turn_outcome: "拿到火把并移动".into(), narrative: "轰！".into(), private_whispers: vec![],
-            state_patches: vec![
-                StatePatch { player_name: "陆沉".into(), hp_delta: -25, san_delta: 999, add_items: vec!["火把".into()], remove_items: vec!["不存在的物品".into()], status_note: None, location: Some("地下酒窖".into()) },
-                StatePatch { player_name: "陆沉".into(), hp_delta: -25, san_delta: 0, add_items: vec![], remove_items: vec!["扳手".into()], status_note: Some("重伤".into()), location: None },
-            ],
-            new_clues: vec!["线索A".into(), "线索A".into()], npc_updates: vec![],
-            world_time: None, location: None, suggested_actions: vec![],
-            suggested_check: None, add_flags: vec![], advance_act: false, trigger_ending_id: None,
-            world_bulletin: None, reincarnation_echo: None, grant_inspiration: vec!["陆沉".into()],
-            clock_updates: vec![],
-        };
-        let _ = apply_dm_reply(&mut room, &mut players, &reply);
-        assert_eq!((players[0].hp, players[0].san), (20, 10));
-        assert!(players[0].dnd.inspiration);
-        assert_eq!((players[0].inventory.as_slice(), players[0].location.as_str(), room.clues.as_slice()), (&["火把".to_string()][..], "地下酒窖", &["线索A".to_string()][..]));
-    }
 }

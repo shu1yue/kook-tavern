@@ -1,4 +1,5 @@
 pub mod chronicle;
+pub mod clocks;
 pub mod decision;
 pub mod dice;
 pub mod dnd;
@@ -9,6 +10,7 @@ pub mod lorebook;
 pub mod models;
 pub mod patch;
 pub mod protocol;
+pub mod riddle_guard;
 pub mod stats;
 pub mod validate;
 pub mod workshop;

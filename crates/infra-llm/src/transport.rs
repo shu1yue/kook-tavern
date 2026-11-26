@@ -296,24 +296,7 @@ impl LlmProvider for OpenAiLlmProvider {
                 }
             }
 
-            // Solo-player clarity guard: strictly when total enrolled players `<= 1` (never when an
-            // AFK teammate exists!) and no whisper redaction was explicitly triggered, fold any stray
-            // LLM `private_whispers` cleanly into `narrative` so solo play stays in ONE cohesive card.
-            if players.len() <= 1 && !did_whisper_redact && !reply.private_whispers.is_empty() {
-                let mut extras = Vec::new();
-                for w in reply.private_whispers.drain(..) {
-                    let s = w.secret.trim();
-                    if !s.is_empty() && !reply.narrative.contains(s) {
-                        extras.push(s.to_string());
-                    }
-                }
-                if !extras.is_empty() {
-                    if !reply.narrative.trim().is_empty() {
-                        reply.narrative.push_str("\n\n");
-                    }
-                    reply.narrative.push_str(&extras.join("\n"));
-                }
-            }
+            crate::prompt_lore::fold_solo_whispers(players, did_whisper_redact, &mut reply);
 
             Ok(DmTurnOutput { reply, usage, extra_usages })
         })
