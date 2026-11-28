@@ -159,9 +159,9 @@ fn convert_st_json(
         initial_time: "序幕开启".into(),
         opening_scene,
         opening_actions: vec![
-            "仔细观察四周环境细节".into(),
-            "主动向核心人物试探搭话".into(),
-            "翻找附近可疑的线索物件".into(),
+            "周围环境细节：透着反常线索，可观察、摸排或试探".into(),
+            "面前核心人物：握着关键信息，可攀谈、交易或套话".into(),
+            "可疑随身物与出入口：可搜查、标记或提前规划退路".into(),
         ],
         player_defaults: StarterCharacterDefaults {
             max_hp: 10,
@@ -202,6 +202,7 @@ fn convert_st_json(
         map_edges: Vec::new(),
         rules: Default::default(),
         clocks: Vec::new(),
+        player_brief: Default::default(),
     };
 
     if let Err(errs) = validate_scenario(&sc) {

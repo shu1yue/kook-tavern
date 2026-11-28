@@ -7,7 +7,10 @@ use tracing::{error, warn};
 
 use crate::api::KookClient;
 use crate::card_menus::render_wall_report_card;
-use crate::cards::{chunk_kmarkdown, render_kook_card_json, render_private_card_json};
+use crate::cards::{
+    chunk_kmarkdown, render_kook_card_json, render_kook_card_json_with_system,
+    render_private_card_json,
+};
 use crate::live_sync::SyncOutcome;
 use crate::plain::render_plain_fallback;
 use crate::sanitize::{is_kook_moderation_error, soften_response};
@@ -85,6 +88,42 @@ impl KookClient {
         }
         let is_dm_chan = channel_id.starts_with("dm:");
 
+        // 0. Dynamic isolated table lifecycle requests (bot-managed text channels)
+        if let EngineResponse::CreateTableRequest {
+            lobby_channel_id,
+            guild_id,
+            scenario_id,
+            scenario_name,
+            creator_user_id,
+            creator_user_name,
+        } = resp
+        {
+            if let Some(eng) = engine {
+                self.handle_create_table_request(
+                    eng,
+                    &lobby_channel_id,
+                    &guild_id,
+                    &scenario_id,
+                    &scenario_name,
+                    &creator_user_id,
+                    &creator_user_name,
+                )
+                .await;
+            }
+            return;
+        }
+        if let EngineResponse::CloseTableRequest {
+            channel_id: target_ch,
+            lobby_channel_id,
+            title,
+            closed_by_name,
+        } = resp
+        {
+            self.handle_close_table_request(&target_ch, &lobby_channel_id, &title, &closed_by_name)
+                .await;
+            return;
+        }
+
         // 1. PrivateNotice MUST NEVER be sent to the public channel!
         //    Also refresh teammates' live StoryTurn HUD if the private notice came from a state
         //    mutation (e.g. mid-game drop-in briefing); read-only `/me` / `/hud` skip HTTP updates.
@@ -153,7 +192,7 @@ impl KookClient {
                 )
                 .await;
             } else {
-                self.send_public_card_with_fallback(channel_id, &resp).await;
+                self.send_public_card_with_fallback(channel_id, &resp, tavern_domain::CheckSystem::default()).await;
             }
             if !dms.is_empty() { self.spawn_whisper_delivery(channel_id.to_string(), dms); }
             return;
@@ -195,7 +234,10 @@ impl KookClient {
         }
 
         // 6. Standard public card delivery (menu, store, export, public notices, etc.)
-        self.send_public_card_with_fallback(channel_id, &resp).await;
+        let sys = engine
+            .map(|e| e.get_room_check_system(channel_id))
+            .unwrap_or_default();
+        self.send_public_card_with_fallback(channel_id, &resp, sys).await;
 
         if let EngineResponse::ExportReport { wall_report: Some(ref wall), .. } = resp {
             let wall_card = render_wall_report_card(wall);
@@ -205,12 +247,17 @@ impl KookClient {
         }
     }
 
-    async fn send_public_card_with_fallback(&self, channel_id: &str, resp: &EngineResponse) {
-        let card_json = render_kook_card_json(channel_id, resp);
+    async fn send_public_card_with_fallback(
+        &self,
+        channel_id: &str,
+        resp: &EngineResponse,
+        sys: tavern_domain::CheckSystem,
+    ) {
+        let card_json = render_kook_card_json_with_system(channel_id, resp, sys);
         if let Err(err) = self.send_channel_card(channel_id, &card_json).await {
             if is_kook_moderation_error(&err) {
                 let soft = soften_response(resp);
-                let soft_json = render_kook_card_json(channel_id, &soft);
+                let soft_json = render_kook_card_json_with_system(channel_id, &soft, sys);
                 if self.send_channel_card(channel_id, &soft_json).await.is_ok() {
                     return;
                 }

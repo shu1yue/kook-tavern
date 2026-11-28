@@ -190,5 +190,11 @@ pub fn render_plain_fallback(resp: &EngineResponse, include_whispers: bool) -> S
             }
             out
         }
+        EngineResponse::CreateTableRequest { scenario_name, .. } => {
+            format!("**🚪 正在创建独立跑团包间：《{scenario_name}》**（仅 KOOK 服务器频道支持自动建频）")
+        }
+        EngineResponse::CloseTableRequest { title, closed_by_name, .. } => {
+            format!("**🗑️ 已拆掉《{title}》独立包间**（操作人：{closed_by_name}）")
+        }
     }
 }

@@ -261,6 +261,29 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
         Ok(())
     })?;
 
+    apply_if_needed(conn, 14, "0014_v21_tables_and_manual_resolve", |tx| {
+        add_column_if_missing(tx, "rooms", "manual_resolve", "INTEGER NOT NULL DEFAULT 0")?;
+        tx.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS managed_tables (
+                channel_id TEXT PRIMARY KEY,
+                guild_id TEXT NOT NULL,
+                lobby_channel_id TEXT NOT NULL DEFAULT '',
+                scenario_id TEXT NOT NULL,
+                scenario_name TEXT NOT NULL,
+                creator_user_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                closed_at TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_managed_tables_guild
+                ON managed_tables (guild_id, closed_at, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_managed_tables_creator
+                ON managed_tables (creator_user_id, created_at DESC);
+            "#,
+        )?;
+        Ok(())
+    })?;
+
     Ok(())
 }
 

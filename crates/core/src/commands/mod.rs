@@ -10,6 +10,7 @@ pub mod ooc;
 pub mod party;
 pub mod party_helpers;
 pub mod room;
+pub mod table;
 pub mod turn;
 pub mod turn_support;
 pub mod workshop;
@@ -34,15 +35,8 @@ pub async fn dispatch_message(
         }
     } else {
         let eff_guild = resolve_authoritative_guild(engine, msg.guild_id.as_deref(), &msg.channel_id)?;
-        if !engine
-            .cfg
-            .is_scope_allowed(eff_guild.as_deref(), &msg.channel_id)
-        {
-            debug!(
-                guild_id = ?eff_guild,
-                channel_id = %msg.channel_id,
-                "白名单拦截：忽略非授权服务器/频道消息"
-            );
+        if !table::is_channel_allowed_or_managed(engine, eff_guild.as_deref(), &msg.channel_id) {
+            debug!(guild_id = ?eff_guild, channel_id = %msg.channel_id, "白名单拦截：忽略非授权服务器/频道消息");
             return Ok(EngineResponse::Ignore);
         }
     }
@@ -114,9 +108,11 @@ async fn match_known_command(
 ) -> Result<Option<EngineResponse>> {
     let resp = match cmd {
         "help" | "h" | "帮助" => room::cmd_help(),
-        "scenarios" | "list" | "menu" | "大厅" | "剧本" => {
-            room::cmd_list_scenarios(engine, &msg.channel_id)
-        }
+        "scenarios" | "list" | "menu" | "大厅" | "剧本" => room::cmd_list_scenarios(engine, &msg.channel_id),
+        "table" | "开桌" | "包间" => table::cmd_table(engine, msg, arg)?,
+        "tables" | "包间列表" => table::cmd_tables(engine, msg)?,
+        "closetable" | "拆桌" | "拆包间" => table::handle_close_table_ask(engine, msg)?,
+        "pause" | "等人" | "飙戏" => table::cmd_pause(engine, &msg.channel_id, arg)?,
         "roles" | "职业" => button_roles::cmd_role_menu(engine, &msg.channel_id)?,
         "start" | "open" | "开团" => room::cmd_start(engine, msg, arg)?,
         "join" | "card" | "车卡" | "入团" => party::cmd_join(engine, msg, arg)?,
@@ -151,12 +147,11 @@ async fn match_known_command(
         "gm" | "房主" => gm::cmd_gm(engine, msg, arg)?,
         "undo" | "回档" => turn::cmd_undo(engine, &msg.channel_id)?,
         "summary" | "recap" | "story" | "前情" | "案情" | "简报" | "剧情" => {
-            room::cmd_summary(engine, &msg.channel_id)?
+            let caller = (!msg.is_direct).then_some(msg.user_id.as_str());
+            room::cmd_summary(engine, &msg.channel_id, caller)?
         }
         "resend" | "补发" | "重发" => turn_support::cmd_resend(engine, &msg.channel_id)?,
-        "export" | "log" | "导出" | "战报" => {
-            export::cmd_export(engine, &msg.channel_id, msg.is_direct)?
-        }
+        "export" | "log" | "导出" | "战报" => export::cmd_export(engine, &msg.channel_id, msg.is_direct)?,
         "reset" | "end" | "结团" => room::cmd_reset(engine, msg)?,
         _ => return Ok(None),
     };
@@ -171,11 +166,10 @@ pub(crate) fn resolve_authoritative_guild(
     if let Some(g) = provided_guild.filter(|s| !s.is_empty()) {
         return Ok(Some(g.to_string()));
     }
-    Ok(engine
-        .store
-        .get_room(channel_id)?
-        .map(|r| r.guild_id)
-        .filter(|s| !s.is_empty()))
+    if let Some(g) = engine.store.get_room(channel_id)?.map(|r| r.guild_id).filter(|s| !s.is_empty()) {
+        return Ok(Some(g));
+    }
+    Ok(engine.store.get_managed_table(channel_id)?.map(|t| t.guild_id).filter(|s| !s.is_empty()))
 }
 
 pub fn will_likely_resolve_turn(
@@ -187,17 +181,10 @@ pub fn will_likely_resolve_turn(
     is_direct: bool,
 ) -> bool {
     if is_direct {
-        if !engine.cfg.is_dm_allowed(user_id) {
-            return false;
-        }
+        if !engine.cfg.is_dm_allowed(user_id) { return false; }
     } else {
-        let eff_guild = resolve_authoritative_guild(engine, guild_id, channel_id)
-            .ok()
-            .flatten();
-        if !engine
-            .cfg
-            .is_scope_allowed(eff_guild.as_deref(), channel_id)
-        {
+        let eff_guild = resolve_authoritative_guild(engine, guild_id, channel_id).ok().flatten();
+        if !table::is_channel_allowed_or_managed(engine, eff_guild.as_deref(), channel_id) {
             return false;
         }
     }
@@ -256,7 +243,7 @@ pub fn will_likely_resolve_turn(
         return false;
     }
 
-    if !engine.cfg.auto_resolve_all_ready {
+    if !engine.cfg.auto_resolve_all_ready || room.manual_resolve {
         return false;
     }
     let Ok(players) = engine.store.list_players(channel_id) else {
@@ -307,6 +294,7 @@ pub(crate) fn is_known_command_name(cmd: &str) -> bool {
             | "whisper" | "纸条" | "秘密" | "cost" | "账单" | "费用" | "web" | "看板" | "大屏" | "hud" | "浮窗" | "悬浮窗"
             | "reload" | "重载" | "重载剧本" | "gm" | "房主" | "undo" | "回档"
             | "summary" | "recap" | "story" | "前情" | "案情" | "简报" | "剧情" | "resend" | "补发" | "重发" | "export" | "log" | "导出" | "战报"
+            | "table" | "开桌" | "包间" | "tables" | "包间列表" | "closetable" | "拆桌" | "拆包间" | "pause" | "等人" | "飙戏"
             | "reset" | "end" | "结团"
     )
 }

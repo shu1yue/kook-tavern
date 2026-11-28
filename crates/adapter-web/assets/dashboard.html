@@ -186,6 +186,19 @@
       display: none; background: rgba(248, 81, 73, 0.14); border: 1px solid rgba(248, 81, 73, 0.45);
       color: #ffa198; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px;
     }
+    .clocks-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .clock-tile {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 10px;
+      background: var(--surface-2); border: 1px solid var(--border);
+    }
+    .clock-tile.threat.hot { border-color: rgba(248, 81, 73, 0.65); background: rgba(248, 81, 73, 0.09); }
+    .clock-tile.progress.hot { border-color: rgba(63, 185, 80, 0.65); background: rgba(63, 185, 80, 0.09); }
+    .clock-svg { width: 46px; height: 46px; flex-shrink: 0; }
+    .clock-name { font-size: 13px; font-weight: 700; color: var(--text); }
+    .clock-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .brief-line { font-size: 12.5px; line-height: 1.6; color: var(--text); margin-bottom: 7px; }
+    .brief-sub { font-size: 12px; line-height: 1.55; color: var(--muted); margin-bottom: 4px; }
   </style>
 </head>
 <body>
@@ -212,6 +225,14 @@
 
     <div class="grid">
       <aside>
+        <section class="panel" id="clock-panel" style="display:none">
+          <h2><span>⏳ 局势进度钟</span><span class="pill">🔴威胁 🟢破局</span></h2>
+          <div id="clock-list" class="clocks-grid"></div>
+        </section>
+        <section class="panel" id="brief-panel" style="display:none">
+          <h2><span>📜 桌前无剧透任务书</span><span class="pill accent">剧透隔离</span></h2>
+          <div id="brief-body"></div>
+        </section>
         <section class="panel">
           <h2><span>⚔️ 冒险小队</span><span id="party-count" class="pill">0 人</span></h2>
           <div id="party-list"></div>
@@ -654,7 +675,7 @@
         }
 
         ctx.fillStyle = pal.muted; ctx.font = "12px PingFang SC, sans-serif";
-        ctx.fillText("🍺 KOOK AI 群酒馆 · 实况纪念长图（v1.8）", pad, H - 30, colW);
+        ctx.fillText("🍺 KOOK AI 群酒馆 · 实况纪念长图（v2.1）", pad, H - 30, colW);
 
         const a = document.createElement("a");
         a.download = "tavern_" + (d.scenario_id || "story") + "_turn" + d.turn_number + ".png";
@@ -681,12 +702,63 @@
 
         const meta = document.getElementById("room-meta");
         clear(meta);
-        const phaseTxt = data.ended_title ? "🏆 剧终收束" : (data.turn_phase === "resolving" ? "⏳ DM 推演中…" : "🟢 等待行动");
+        const phaseTxt = data.ended_title ? "🏆 剧终收束" : (data.turn_phase === "resolving" ? "⏳ DM 推演中…" : (data.manual_resolve ? "⏸️ 手动结算/飙戏中" : "🟢 等待行动"));
         const modeTxt = data.chat_mode === "roleplay" ? "💬 直接说话" : "⌨️ 指令前缀";
         const styleTxt = data.narrative_style === "voice" ? "🎙️ 语音极简" : "📖 文字沉浸";
         const ruleTxt = data.check_system || "🎲 2d6 三档";
         ["📍 " + data.location, "🕒 " + data.world_time, "🎲 第 " + data.turn_number + " 回合", ruleTxt, phaseTxt, modeTxt, styleTxt]
           .forEach(t => meta.appendChild(el("span", "pill", t)));
+
+        // Pacing Clocks (SVG wheels)
+        const ckPanel = document.getElementById("clock-panel");
+        const ckList = document.getElementById("clock-list");
+        clear(ckList);
+        const clocks = data.clocks || [];
+        if (clocks.length) {
+          ckPanel.style.display = "block";
+          clocks.forEach(c => {
+            const segs = Math.max(3, Math.min(12, Number(c.segments) || 6));
+            const filled = Math.max(0, Math.min(segs, Number(c.filled) || 0));
+            const isThreat = c.kind === "threat";
+            const col = isThreat ? "#f85149" : "#3fb950";
+            const hot = filled >= segs || filled + 1 >= segs;
+            const tile = el("div", "clock-tile " + (isThreat ? "threat" : "progress") + (hot ? " hot" : ""));
+            const svg = svgEl("svg", { class: "clock-svg", viewBox: "0 0 52 52" });
+            const cx = 26, cy = 26, r = 21;
+            svg.appendChild(svgEl("circle", { cx, cy, r: r + 1.2, fill: "none", stroke: hot ? col : "#382c22", "stroke-width": 1.4 }));
+            for (let i = 0; i < segs; i++) {
+              const a0 = -Math.PI / 2 + (i * 2 * Math.PI) / segs;
+              const a1 = -Math.PI / 2 + ((i + 1) * 2 * Math.PI) / segs;
+              const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
+              const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+              const large = (a1 - a0) > Math.PI ? 1 : 0;
+              const d = "M " + cx + " " + cy + " L " + x0.toFixed(2) + " " + y0.toFixed(2) + " A " + r + " " + r + " 0 " + large + " 1 " + x1.toFixed(2) + " " + y1.toFixed(2) + " Z";
+              svg.appendChild(svgEl("path", { d, fill: i < filled ? col : "rgba(255,255,255,0.08)", stroke: "#161210", "stroke-width": 1.6 }));
+            }
+            svg.appendChild(svgEl("circle", { cx, cy, r: 9, fill: "#161210" }));
+            svg.appendChild(svgEl("text", { x: cx, y: cy + 3.2, "text-anchor": "middle", fill: hot ? col : "#f3ece4", "font-size": 8.5, "font-weight": 800 }, filled + "/" + segs));
+            tile.appendChild(svg);
+            const info = el("div");
+            info.appendChild(el("div", "clock-name", c.name));
+            const sub = filled >= segs ? (isThreat ? "🚨 已满·危机爆发" : "🎉 已满·破局就绪")
+              : ((isThreat ? "威胁钟" : "进度钟") + " " + filled + "/" + segs + (c.auto_tick_every ? " · 每" + c.auto_tick_every + "轮+1" : ""));
+            info.appendChild(el("div", "clock-sub", sub));
+            tile.appendChild(info);
+            ckList.appendChild(tile);
+          });
+        } else { ckPanel.style.display = "none"; }
+
+        // Spoiler-free Player Brief
+        const brPanel = document.getElementById("brief-panel");
+        const brBody = document.getElementById("brief-body");
+        clear(brBody);
+        const pb = data.player_brief || {};
+        if (pb.world_stage || pb.mission || (pb.ending_paths && pb.ending_paths.length)) {
+          brPanel.style.display = "block";
+          if (pb.world_stage) brBody.appendChild(el("div", "brief-line", "🌍 " + pb.world_stage));
+          if (pb.mission) brBody.appendChild(el("div", "brief-line", "🎯 " + pb.mission));
+          (pb.ending_paths || []).forEach(p => brBody.appendChild(el("div", "brief-sub", "🔀 " + p)));
+        } else { brPanel.style.display = "none"; }
 
         // Act stepper & world flags
         const strip = document.getElementById("act-strip");
@@ -722,7 +794,7 @@
             const card = el("div", "player-card");
             const head = el("div", "player-head");
             const left = el("div");
-            const lvTag = " Lv." + (p.level || 1) + (p.inspiration ? " 🌟" : "");
+            const lvTag = (data.hide_level ? "" : " Lv." + (p.level || 1)) + (p.inspiration ? " 🌟" : "");
             left.appendChild(el("div", "player-name", p.character_name + lvTag));
             const alignTag = p.alignment ? " · " + p.alignment : "";
             left.appendChild(el("div", "player-role", p.role_desc + alignTag + (p.status_note ? " · " + p.status_note : "")));

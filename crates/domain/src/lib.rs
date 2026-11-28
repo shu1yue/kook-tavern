@@ -1,3 +1,4 @@
+pub mod brief;
 pub mod chronicle;
 pub mod clocks;
 pub mod decision;
@@ -16,6 +17,10 @@ pub mod validate;
 pub mod workshop;
 pub mod world;
 
+pub use brief::{
+    ManagedTable, PlayerBrief, effective_player_brief, format_full_brief_markdown,
+    format_opening_brief_note,
+};
 pub use chronicle::{ChronicleEntry, WorldEcho, build_chronicle, distill_echo_text};
 pub use decision::{LoreCandidate, OocVerdict, ReplyAuditVerdict};
 pub use dice::{DiceRollResult, roll_dice, roll_dice_with_rng};

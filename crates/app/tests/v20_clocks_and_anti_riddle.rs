@@ -87,8 +87,8 @@ async fn v20_clocks_auto_tick_clamp_full_trigger_and_undo_rollback() {
         .handle_message(mk_msg("ch_clk", "u1", "阿明", "/story"))
         .await
         .unwrap();
-    let EngineResponse::Notice { body: story_body, .. } = story_resp else {
-        panic!("expected /story notice");
+    let EngineResponse::PrivateNotice { body: story_body, .. } = story_resp else {
+        panic!("expected /story PrivateNotice in guild channel");
     };
     assert!(story_body.contains("局势进度钟") && story_body.contains("午夜星仪过载"));
 
@@ -205,6 +205,7 @@ fn v20_d100_act_milestone_awards_investigator_breather_not_levelup() {
         turn_phase: tavern_domain::TurnPhase::Collecting,
         chat_mode: tavern_domain::ChatMode::Roleplay,
         narrative_style: tavern_domain::NarrativeStyle::Prose,
+        manual_resolve: false,
         gm_user_id: "u1".into(),
         web_token: "tok".into(),
         clues: vec![],
@@ -326,6 +327,7 @@ async fn v20_anti_riddle_and_anti_stall_gate_rewrites_cleanly() {
         turn_phase: tavern_domain::TurnPhase::Collecting,
         chat_mode: tavern_domain::ChatMode::Roleplay,
         narrative_style: tavern_domain::NarrativeStyle::Prose,
+        manual_resolve: false,
         gm_user_id: "u1".into(),
         web_token: "tok".into(),
         clues: vec![],
@@ -537,6 +539,7 @@ async fn v20_builtin_workshop_clocks_and_hud_spoiler_safety() {
         map_edges: vec![ScenarioMapEdge { from: "dock".into(), to: "tower".into(), label: "石堤".into(), locked: false }],
         rules: Default::default(),
         clocks: vec![],
+        player_brief: Default::default(),
     };
     let forged = finalize_forged_scenario(raw_sc, &req, None).unwrap();
     assert_eq!(forged.clocks.len(), 2);
@@ -553,7 +556,7 @@ async fn v20_builtin_workshop_clocks_and_hud_spoiler_safety() {
         channel_id: "ch_hud_v20".into(), guild_id: "g1".into(), scenario_id: sc.id.clone(),
         title: sc.name.clone(), location: sc.initial_location.clone(), world_time: sc.initial_time.clone(),
         turn_number: 1, state_version: 2, turn_phase: tavern_domain::TurnPhase::Collecting,
-        chat_mode: tavern_domain::ChatMode::Roleplay, narrative_style: tavern_domain::NarrativeStyle::Prose,
+        chat_mode: tavern_domain::ChatMode::Roleplay, narrative_style: tavern_domain::NarrativeStyle::Prose, manual_resolve: false,
         gm_user_id: "u1".into(), web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![], ended_id: None, ended_title: None,
         bulletins: vec![], clocks: init_room_clocks(&sc), check_system: CheckSystem::TwoD6,

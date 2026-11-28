@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
 use anyhow::Result;
-use tavern_domain::{EngineResponse, IncomingMessage, LiveStoryHud, RoomEvent};
+use tavern_domain::{CheckSystem, EngineResponse, IncomingMessage, LiveStoryHud, ManagedTable, RoomEvent};
 
 use crate::commands;
 use crate::config::AppConfig;
@@ -276,8 +276,17 @@ impl GameEngine {
             Vec::new()
         };
 
+        let is_managed_table = self
+            .store
+            .get_managed_table(channel_id)
+            .ok()
+            .flatten()
+            .is_some();
         Ok(Some(LiveStoryHud {
             turn_number: room.turn_number,
+            check_system: room.check_system,
+            manual_resolve: room.manual_resolve,
+            is_managed_table,
             rule_badge: room.check_system.short_badge().to_string(),
             current_goal,
             clock_lines,
@@ -285,6 +294,27 @@ impl GameEngine {
             turn_progress,
             opening_roles,
         }))
+    }
+
+    pub fn is_managed_table(&self, channel_id: &str) -> bool {
+        self.store
+            .get_managed_table(channel_id)
+            .ok()
+            .flatten()
+            .is_some()
+    }
+
+    pub fn register_managed_table(&self, table: &ManagedTable) -> Result<()> {
+        self.store.register_managed_table(table)
+    }
+
+    pub fn get_room_check_system(&self, channel_id: &str) -> CheckSystem {
+        self.store
+            .get_room(channel_id)
+            .ok()
+            .flatten()
+            .map(|r| r.check_system)
+            .unwrap_or_default()
     }
 
     pub fn get_persisted_story_card(&self, channel_id: &str) -> Result<Option<(String, u32)>> {

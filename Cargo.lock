@@ -824,7 +824,7 @@ dependencies = [
 
 [[package]]
 name = "kook-tavern-dm"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1522,7 +1522,7 @@ dependencies = [
 
 [[package]]
 name = "tavern-adapter-cli"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "tavern-core",
@@ -1532,9 +1532,10 @@ dependencies = [
 
 [[package]]
 name = "tavern-adapter-kook"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "flate2",
  "futures-util",
  "regex",
@@ -1550,7 +1551,7 @@ dependencies = [
 
 [[package]]
 name = "tavern-adapter-web"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -1568,7 +1569,7 @@ dependencies = [
 
 [[package]]
 name = "tavern-core"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1579,7 +1580,7 @@ dependencies = [
 
 [[package]]
 name = "tavern-domain"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "chrono",
  "rand 0.8.8",
@@ -1590,7 +1591,7 @@ dependencies = [
 
 [[package]]
 name = "tavern-infra-llm"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1605,7 +1606,7 @@ dependencies = [
 
 [[package]]
 name = "tavern-infra-sqlite"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "chrono",

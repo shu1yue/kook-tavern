@@ -208,7 +208,7 @@ async fn m3_five_dim_stats_three_tier_check_acts_multi_ending_and_undo() {
         }
     }
     for btn in [
-        "tavern:pick:ch_m3:2:0",
+        "tavern:check:ch_m3:investigate",
         "tavern:pickrole:ch_m3:1",
         "tavern:quickjoin:ch_m3",
         "tavern:afk:ch_m3",

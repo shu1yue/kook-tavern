@@ -308,13 +308,13 @@ mod tests {
                 ScenarioMapNode { id: "hall".into(), name: "酒馆大厅".into(), x: 20.0, y: 50.0, aliases: vec!["大厅".into()], kind: "hub".into() },
                 ScenarioMapNode { id: "cellar".into(), name: "地下酒窖".into(), x: 40.0, y: 80.0, aliases: vec!["酒窖".into()], kind: "mystery".into() },
             ],
-            map_edges: vec![], rules: Default::default(), clocks: vec![],
+            map_edges: vec![], rules: Default::default(), clocks: vec![], player_brief: Default::default(),
         };
         let room = RoomState {
             channel_id: "c1".into(), guild_id: "g1".into(), scenario_id: "s1".into(),
             title: "S".into(), location: "酒馆大厅".into(), world_time: "21:00".into(),
             turn_number: 1, state_version: 1, turn_phase: TurnPhase::Collecting,
-            chat_mode: ChatMode::Strict, narrative_style: NarrativeStyle::Prose,
+            chat_mode: ChatMode::Strict, narrative_style: NarrativeStyle::Prose, manual_resolve: false,
             gm_user_id: "u1".into(), web_token: "tok".into(), clues: vec![], npc_states: vec![],
             suggested_actions: vec![], current_act: 1, world_flags: vec![],
             ended_id: None, ended_title: None, bulletins: vec![], clocks: vec![], check_system: Default::default(),

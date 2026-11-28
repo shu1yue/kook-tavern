@@ -29,24 +29,25 @@ pub fn render_private_card_json(title: &str, body: &str, actions: &[PrivateButto
     }
     if !actions.is_empty() {
         modules.push(json!({ "type": "divider" }));
-        let btns: Vec<Value> = actions
-            .iter()
-            .take(4)
-            .map(|a| {
-                if a.value.starts_with("https://") || a.value.starts_with("http://") {
-                    json!({
-                        "type": "button",
-                        "theme": a.theme.kook_str(),
-                        "value": a.value,
-                        "click": "link",
-                        "text": { "type": "plain-text", "content": truncate_chars(&a.label, 32) }
-                    })
-                } else {
-                    btn(a.theme.kook_str(), a.value.clone(), &a.label)
-                }
-            })
-            .collect();
-        modules.push(action_group(btns));
+        for chunk in actions.chunks(4).take(2) {
+            let btns: Vec<Value> = chunk
+                .iter()
+                .map(|a| {
+                    if a.value.starts_with("https://") || a.value.starts_with("http://") {
+                        json!({
+                            "type": "button",
+                            "theme": a.theme.kook_str(),
+                            "value": a.value,
+                            "click": "link",
+                            "text": { "type": "plain-text", "content": truncate_chars(&a.label, 32) }
+                        })
+                    } else {
+                        btn(a.theme.kook_str(), a.value.clone(), &a.label)
+                    }
+                })
+                .collect();
+            modules.push(action_group(btns));
+        }
     }
     json!([{ "type": "card", "theme": "info", "size": "lg", "modules": modules }]).to_string()
 }
@@ -61,7 +62,7 @@ pub fn render_scenario_menu_card(channel_id: &str, scenarios: &[ScenarioSummary]
             "type": "context",
             "elements": [{
                 "type": "kmarkdown",
-                "content": "✨ **零代码开玩**：点下方绿色按钮直接在本频道开桌，支持语音开黑快扫与全按钮操作喵！"
+                "content": "✨ **推荐点「🚪 开独立包间」**：秒建全新干净子频道自动开桌，绝不串旧记录、跑完一键拆桌！也可直接点绿色按钮在本频道开桌喵！"
             }]
         }),
     ];
@@ -83,11 +84,18 @@ pub fn render_scenario_menu_card(channel_id: &str, scenarios: &[ScenarioSummary]
                 )
             }
         }));
-        modules.push(action_group(vec![btn(
-            "success",
-            format!("tavern:start:{channel_id}:{}", s.id),
-            &format!("▶️ 开启《{}》", truncate_chars(&s.name, 12)),
-        )]));
+        modules.push(action_group(vec![
+            btn(
+                "primary",
+                format!("tavern:table:{channel_id}:{}", s.id),
+                "🚪 开独立包间",
+            ),
+            btn(
+                "success",
+                format!("tavern:start:{channel_id}:{}", s.id),
+                &format!("▶️ 本频道开《{}》", truncate_chars(&s.name, 8)),
+            ),
+        ]));
     }
 
     if scenarios.len() > shown {
@@ -95,7 +103,7 @@ pub fn render_scenario_menu_card(channel_id: &str, scenarios: &[ScenarioSummary]
             "type": "context",
             "elements": [{
                 "type": "kmarkdown",
-                "content": format!("ℹ️ 当前展示前 {shown} / {} 个剧本，其余社区剧本可直接发 `/start <剧本ID>` 开启。", scenarios.len())
+                "content": format!("ℹ️ 当前展示前 {shown} / {} 个剧本，其余社区剧本可直接发 `/table <剧本ID>` 或 `/start <剧本ID>` 开启。", scenarios.len())
             }]
         }));
     }
@@ -104,7 +112,7 @@ pub fn render_scenario_menu_card(channel_id: &str, scenarios: &[ScenarioSummary]
     modules.push(action_group(vec![
         btn("info", format!("tavern:store:{channel_id}"), "📦 世界书商店"),
         btn("primary", format!("tavern:ws:{channel_id}:desk"), "✍️ 创作新剧本"),
-        btn("secondary", format!("tavern:status:{channel_id}"), "📊 当前战局"),
+        btn("secondary", format!("tavern:tables:{channel_id}"), "🚪 包间列表"),
         btn("secondary", format!("tavern:help:{channel_id}"), "📖 玩法指南"),
     ]));
 

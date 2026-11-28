@@ -106,6 +106,7 @@ mod tests {
             map_edges: vec![],
             rules: Default::default(),
             clocks: vec![],
+            player_brief: Default::default(),
         }
     }
 

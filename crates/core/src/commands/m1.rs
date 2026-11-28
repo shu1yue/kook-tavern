@@ -97,6 +97,7 @@ pub async fn cmd_afk(engine: &GameEngine, msg: &IncomingMessage) -> Result<Engin
         // ONLY auto-resolve if room is currently Collecting; during Resolving, return clean AFK confirmation!
         if room.turn_phase == tavern_domain::TurnPhase::Collecting
             && engine.cfg.auto_resolve_all_ready
+            && !room.manual_resolve
         {
             let all_players = engine.store.list_players(&msg.channel_id)?;
             let active_players: Vec<_> = all_players.iter().filter(|p| !p.is_afk).collect();

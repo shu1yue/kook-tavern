@@ -14,12 +14,12 @@ use tracing::warn;
 use crate::cards::thinking_placeholder_card_json;
 use crate::live_cards::LiveCardRegistry;
 
-const KOOK_API_BASE: &str = "https://www.kookapp.cn/api/v3";
+pub(crate) const KOOK_API_BASE: &str = "https://www.kookapp.cn/api/v3";
 const MAX_CHANNEL_GUILD_CACHE: usize = 1024;
 
 #[derive(Clone)]
 pub struct KookClient {
-    http: Client,
+    pub(crate) http: Client,
     token: String,
     whisper_permits: Arc<Semaphore>,
     channel_guild_cache: Arc<RwLock<HashMap<String, String>>>,
@@ -81,7 +81,7 @@ impl KookClient {
         self.whisper_permits.clone()
     }
 
-    fn auth_header(&self) -> String {
+    pub(crate) fn auth_header(&self) -> String {
         format!("Bot {}", self.token)
     }
 
@@ -298,7 +298,7 @@ impl KookClient {
         Ok(())
     }
 
-    async fn post_checked(&self, url: &str, payload: &Value, op: &str) -> Result<Value> {
+    pub(crate) async fn post_checked(&self, url: &str, payload: &Value, op: &str) -> Result<Value> {
         for attempt in 0..=1 {
             let http_resp = self
                 .http

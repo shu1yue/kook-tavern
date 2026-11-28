@@ -305,23 +305,16 @@ pub fn cmd_me(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineRespon
             }
         }
         if p.dnd.pending_levelups > 0 {
-            actions.push(PrivateButton {
-                label: "⬆️ 升级 +2血/理智".into(),
-                value: format!("tavern:lv:{}:hp", msg.channel_id),
-                theme: CardTheme::Success,
-            });
-            if !p.dnd.abilities.is_empty() && actions.len() < 4 {
-                actions.push(PrivateButton {
-                    label: "⬆️ 招牌技+1充能".into(),
-                    value: format!("tavern:lv:{}:charge", msg.channel_id),
-                    theme: CardTheme::Warning,
-                });
+            actions.push(PrivateButton { label: "⬆️ 选属性升级".into(), value: format!("tavern:lv_menu:{}", msg.channel_id), theme: CardTheme::Success });
+            actions.push(PrivateButton { label: "❤️ +2血/理智".into(), value: format!("tavern:lv:{}:hp", msg.channel_id), theme: CardTheme::Success });
+            if !p.dnd.abilities.is_empty() {
+                actions.push(PrivateButton { label: "🔋 招牌技+1充能".into(), value: format!("tavern:lv:{}:charge", msg.channel_id), theme: CardTheme::Warning });
             }
         }
     }
 
     if let Some(hud_url) = crate::hud_token::build_player_hud_url(&engine.cfg, &room, &msg.user_id) {
-        if actions.len() < 4 {
+        if actions.len() < 8 {
             actions.push(PrivateButton { label: "🪟 悬浮角色卡 HUD".into(), value: hud_url.clone(), theme: CardTheme::Info });
         }
         sections.push(format!("🪟 **个人实时悬浮 HUD**（含角色、人物关系图、线索与仅你可见的密语，1 秒自动同步）：\n{hud_url}"));

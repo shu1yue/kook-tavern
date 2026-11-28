@@ -2,7 +2,7 @@ mod handlers;
 pub mod hud_views;
 mod map_view;
 mod security;
-mod views;
+pub mod views;
 
 use std::future::Future;
 use std::net::SocketAddr;

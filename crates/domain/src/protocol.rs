@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::dnd::CheckSystem;
 use crate::models::{PendingAction, Player, PresetRole, RoomState};
 use crate::stats::SuggestedCheck;
 use crate::workshop::{PrivateButton, WorldbookPack, WorldbookPackSummary, WorkshopDraft};
@@ -170,6 +171,9 @@ pub struct EndingBanner {
 #[derive(Debug, Clone, Default)]
 pub struct LiveStoryHud {
     pub turn_number: u32,
+    pub check_system: CheckSystem,
+    pub manual_resolve: bool,
+    pub is_managed_table: bool,
     pub rule_badge: String,
     pub current_goal: String,
     pub clock_lines: Vec<String>,
@@ -250,6 +254,23 @@ pub enum EngineResponse {
         act_label: Option<String>,
         players: Vec<Player>,
         pending_actions: Vec<PendingAction>,
+        is_managed_table: bool,
+    },
+    /// Ask the platform adapter (KOOK) to create an isolated text channel for a fresh table.
+    CreateTableRequest {
+        lobby_channel_id: String,
+        guild_id: String,
+        scenario_id: String,
+        scenario_name: String,
+        creator_user_id: String,
+        creator_user_name: String,
+    },
+    /// Ask the platform adapter (KOOK) to delete a bot-managed table channel after teardown.
+    CloseTableRequest {
+        channel_id: String,
+        lobby_channel_id: String,
+        title: String,
+        closed_by_name: String,
     },
 }
 

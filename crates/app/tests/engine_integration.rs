@@ -275,6 +275,7 @@ fn external_prompts_hot_load_from_disk() {
         turn_phase: tavern_domain::TurnPhase::Collecting,
         chat_mode: tavern_domain::ChatMode::Strict,
         narrative_style: tavern_domain::NarrativeStyle::Voice,
+        manual_resolve: false,
         gm_user_id: "u1".into(),
         web_token: "t".into(),
         clues: vec![],

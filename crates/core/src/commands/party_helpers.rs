@@ -250,7 +250,7 @@ pub fn build_drop_in_briefing(
     }
 
     blocks.push(
-        "💡 **如何自然切入**：直接在频道里打人话描述你的登场或行动，或点最新剧情卡上的 ①②③ 按钮！下一轮结算时 DM 会自然把你写进当前镜头里喵～"
+        "💡 **如何自然切入**：参考最新剧情卡里的切入焦点，直接在频道打人话描述你的登场或行动（任何脑洞/掀桌都行），下一轮结算时 DM 会自然把你写进镜头里喵～"
             .to_string(),
     );
 
@@ -274,6 +274,52 @@ pub fn build_drop_in_briefing(
         user_id: user_id.to_string(),
         title: format!("🎬 欢迎半路空降 · 《{}》（第 {} 回合）", room.title, room.turn_number),
         body: blocks.join("\n\n"),
+        actions,
+    }
+}
+
+/// Renders an interactive `/levelup` menu (5 stats + HP/SAN + skill charge) as clickable buttons.
+pub fn build_levelup_menu(
+    channel_id: &str,
+    user_id: &str,
+    player: &Player,
+    is_direct: bool,
+) -> EngineResponse {
+    let title = format!(
+        "⬆️ {} · Lv.{}（剩余升级点：{}）",
+        player.character_name, player.dnd.level, player.dnd.pending_levelups
+    );
+    let body = format!(
+        "当前五维：{}\n\n每次剧情推进到新一幕，全队自动获得 **+1 成长点**！直接点下方按钮（或发命令）分配：\n- `/levelup hp` — HP 与 SAN 上限各 +2 并回复 2 点\n- `/levelup 体魄|敏捷|侦查|交涉|灵感` — 对应属性 +1（上限 +4）\n- `/levelup skill <技能名>` — 习得新熟练技能（最多 4 项）\n- `/levelup charge` — 首个招牌技充能上限 +1 并回满",
+        player.stats.format_inline()
+    );
+    if is_direct || player.dnd.pending_levelups == 0 {
+        return EngineResponse::Notice {
+            title,
+            body,
+            theme: CardTheme::Info,
+            show_actions: false,
+        };
+    }
+    let mut actions = vec![
+        PrivateButton { label: "❤️ +2血/理智".into(), value: format!("tavern:lv:{channel_id}:hp"), theme: CardTheme::Success },
+        PrivateButton { label: "💪 体魄+1".into(), value: format!("tavern:lv:{channel_id}:body"), theme: CardTheme::Primary },
+        PrivateButton { label: "⚡ 敏捷+1".into(), value: format!("tavern:lv:{channel_id}:agility"), theme: CardTheme::Primary },
+        PrivateButton { label: "🔍 侦查+1".into(), value: format!("tavern:lv:{channel_id}:investigate"), theme: CardTheme::Primary },
+        PrivateButton { label: "🗣️ 交涉+1".into(), value: format!("tavern:lv:{channel_id}:social"), theme: CardTheme::Primary },
+        PrivateButton { label: "👁️ 灵感+1".into(), value: format!("tavern:lv:{channel_id}:insight"), theme: CardTheme::Primary },
+    ];
+    if !player.dnd.abilities.is_empty() {
+        actions.push(PrivateButton {
+            label: "🔋 招牌技+1充能".into(),
+            value: format!("tavern:lv:{channel_id}:charge"),
+            theme: CardTheme::Warning,
+        });
+    }
+    EngineResponse::PrivateNotice {
+        user_id: user_id.to_string(),
+        title,
+        body,
         actions,
     }
 }

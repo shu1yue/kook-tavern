@@ -138,6 +138,7 @@ fn workshop_forged_scenario_auto_wires_enter_nodes_boss_keywords_and_climax_beat
         ],
         rules: tavern_domain::ScenarioRules { bulletin_interval: 3, ..Default::default() },
         clocks: vec![],
+        player_brief: Default::default(),
     };
 
     let sc = finalize_forged_scenario(raw_sc, &req, None).expect("finalize forged scenario");
@@ -161,14 +162,14 @@ async fn story_briefing_command_and_live_hud_goal_render_clearly() {
 
     let story_resp = engine.handle_message(msg("ch_s", "u1", "阿明", "/story")).await.unwrap();
     match &story_resp {
-        EngineResponse::Notice { title, body, .. } => {
-            assert!(title.contains("大白话案情简报"));
-            assert!(body.contains("这是个什么故事"));
-            assert!(body.contains("目前登场了哪些人"));
-            assert!(body.contains("现在要去干什么"));
+        EngineResponse::PrivateNotice { user_id, title, body, .. } => {
+            assert_eq!(user_id, "u1");
+            assert!(title.contains("桌前任务书与案情简报"));
+            assert!(body.contains("桌前无剧透任务书"));
+            assert!(body.contains("已接触关键人物动态"));
             assert!(body.contains("当前主线"));
         }
-        other => panic!("expected Notice for /story, got {other:?}"),
+        other => panic!("expected PrivateNotice for channel /story, got {other:?}"),
     }
 
     let status_resp = engine.handle_message(msg("ch_s", "u1", "阿明", "/status")).await.unwrap();

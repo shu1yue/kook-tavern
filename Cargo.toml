@@ -13,7 +13,7 @@ members = [
 default-members = ["crates/app"]
 
 [workspace.package]
-version = "2.0.0"
+version = "2.1.0"
 edition = "2024"
 license = "AGPL-3.0-only"
 repository = "https://github.com/shu1yue/kook-tavern"

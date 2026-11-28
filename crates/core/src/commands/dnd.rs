@@ -70,7 +70,11 @@ pub(crate) fn parse_check_args(arg: &str) -> Option<ParsedCheckArgs> {
 
 pub(crate) fn format_dnd_me_sections(p: &Player, sys: CheckSystem) -> Vec<String> {
     let mut out = Vec::new();
-    let mut badges = vec![format!("Lv.**{}**", p.dnd.level), format!("规则：`{}`", sys.short_badge())];
+    let mut badges = Vec::new();
+    if sys != CheckSystem::D100 {
+        badges.push(format!("Lv.**{}**", p.dnd.level));
+    }
+    badges.push(format!("规则：`{}`", sys.short_badge()));
     if !p.dnd.alignment.trim().is_empty() {
         badges.push(format!("阵营：{}", p.dnd.alignment.trim()));
     }
@@ -301,11 +305,12 @@ pub fn cmd_levelup(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Res
     };
     let trimmed = arg.trim();
     if trimmed.is_empty() {
-        return Ok(EngineResponse::Notice {
-            title: format!("⬆️ {} · Lv.{}（剩余升级点：{}）", player.character_name, player.dnd.level, player.dnd.pending_levelups),
-            body: "每次剧情推进到新一幕，全队自动升级并获得 **+1 成长点**！四选一输入：\n- `/levelup hp` — HP 与 SAN 上限各 +2 并回复 2 点\n- `/levelup 侦查`（或体魄/敏捷/交涉/灵感）— 该项属性 +1（上限 +4）\n- `/levelup skill 潜行` — 习得一项新熟练技能（最多 4 项）\n- `/levelup charge` — 首个招牌技充能上限 +1 并回满".into(),
-            theme: CardTheme::Info, show_actions: false,
-        });
+        return Ok(crate::commands::party_helpers::build_levelup_menu(
+            &msg.channel_id,
+            &msg.user_id,
+            &player,
+            msg.is_direct,
+        ));
     }
     let mut parts = trimmed.splitn(2, char::is_whitespace);
     let head = parts.next().unwrap_or("").to_ascii_lowercase();
@@ -337,10 +342,5 @@ pub fn cmd_levelup(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Res
 }
 
 fn notice_warn(title: &str, body: &str) -> EngineResponse {
-    EngineResponse::Notice {
-        title: title.to_string(),
-        body: body.to_string(),
-        theme: CardTheme::Warning,
-        show_actions: false,
-    }
+    EngineResponse::Notice { title: title.to_string(), body: body.to_string(), theme: CardTheme::Warning, show_actions: false }
 }

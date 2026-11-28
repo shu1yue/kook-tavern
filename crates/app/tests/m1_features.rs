@@ -420,32 +420,33 @@ async fn zero_code_full_button_gameplay_and_stale_pick_guard() {
         .unwrap();
     assert!(matches!(roll_bad, EngineResponse::Ignore));
 
-    // 5. Player 1 clicks suggestion button ①, Player 2 speaks plain text (zero slash commands!)
-    //    -> auto-resolves Turn 1!
+    // 5. Legacy `tavern:pick` button degrades cleanly to a friendly PrivateNotice (v2.1 free-text hints),
+    //    while both players speaking plain text (zero slash commands!) auto-resolves Turn 1!
     assert!(!engine.will_button_likely_resolve_turn(None, "m1_chan", "u1", "tavern:pick:m1_chan:0:0"));
-    let pick1 = engine
+    let legacy_pick = engine
         .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:pick:m1_chan:0:0")
         .await
         .unwrap();
-    assert!(matches!(pick1, EngineResponse::Notice { .. }));
+    assert!(matches!(legacy_pick, EngineResponse::PrivateNotice { .. }));
 
-    // Player 2 clicking pick button now WOULD trigger auto-resolve!
-    assert!(engine.will_button_likely_resolve_turn(None, "m1_chan", "u2", "tavern:pick:m1_chan:0:1"));
+    let act1 = engine
+        .handle_message(gmsg("friend_guild", "u1", "小明", "我先凑过去查探倒地信使手里攥的断钥匙"))
+        .await
+        .unwrap();
+    assert!(matches!(act1, EngineResponse::Notice { .. }));
+
     let plain_act = engine
         .handle_message(gmsg("friend_guild", "u2", "小明", "我也凑过去检查信使的钥匙"))
         .await
         .unwrap();
     assert!(matches!(plain_act, EngineResponse::StoryTurn { turn_number: 1, .. }));
 
-    // 6. Stale Turn 0 pick button is rejected cleanly!
+    // 6. Legacy pick button on later turns STILL stays non-mutating PrivateNotice!
     let stale_pick = engine
         .handle_button_in_guild(None, "m1_chan", "u1", "小明", "tavern:pick:m1_chan:0:0")
         .await
         .unwrap();
-    assert!(matches!(
-        stale_pick,
-        EngineResponse::Notice { theme: CardTheme::Info, .. }
-    ));
+    assert!(matches!(stale_pick, EngineResponse::PrivateNotice { .. }));
 
     // 7. Whisper button returns PrivateNotice ONLY for caller; toggle mode & style buttons flip state
     let wb = engine

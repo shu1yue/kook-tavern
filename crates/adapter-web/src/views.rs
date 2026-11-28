@@ -1,11 +1,12 @@
 use anyhow::Result;
 use serde::Serialize;
 use tavern_domain::{
-    CharacterStats, ChronicleEntry, NpcState, RoomState, TurnPhase, WorldBulletin,
-    build_chronicle, ending_scope_key,
+    CharacterStats, CheckSystem, ChronicleEntry, NpcState, PlayerBrief, RoomState, TurnPhase,
+    WorldBulletin, build_chronicle, effective_player_brief, ending_scope_key,
 };
 
 use crate::WebState;
+use crate::hud_views::{ClockPublicView, build_public_clocks};
 use crate::map_view::{ScenarioMapView, build_scenario_map_view};
 
 /// Strictly sanitized public read-only room view (NEVER exposes `web_token`, `gm_user_id`,
@@ -22,9 +23,13 @@ pub struct RoomPublicView {
     pub chat_mode: &'static str,
     pub narrative_style: &'static str,
     pub check_system: &'static str,
+    pub hide_level: bool,
+    pub manual_resolve: bool,
     pub active: bool,
     pub current_act: u32,
     pub acts: Vec<ActPublicView>,
+    pub clocks: Vec<ClockPublicView>,
+    pub player_brief: PlayerBrief,
     pub world_flags: Vec<String>,
     pub ended_id: Option<String>,
     pub ended_title: Option<String>,
@@ -283,6 +288,12 @@ pub fn build_room_public_view(state: &WebState, channel_id: &str, room: RoomStat
         })
         .collect();
 
+    let clocks = build_public_clocks(&room, scenario.as_ref());
+    let player_brief = scenario
+        .as_ref()
+        .map(effective_player_brief)
+        .unwrap_or_default();
+
     Ok(RoomPublicView {
         title: room.title,
         scenario_id: room.scenario_id,
@@ -294,9 +305,13 @@ pub fn build_room_public_view(state: &WebState, channel_id: &str, room: RoomStat
         chat_mode: room.chat_mode.as_str(),
         narrative_style: room.narrative_style.as_str(),
         check_system: room.check_system.short_badge(),
+        hide_level: room.check_system == CheckSystem::D100,
+        manual_resolve: room.manual_resolve,
         active: room.active,
         current_act: room.current_act,
         acts,
+        clocks,
+        player_brief,
         world_flags: room.world_flags,
         ended_id: room.ended_id,
         ended_title: room.ended_title,

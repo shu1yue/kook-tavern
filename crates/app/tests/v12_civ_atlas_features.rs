@@ -276,7 +276,7 @@ async fn director_beats_spotlight_and_consistency_nudge_work_end_to_end() {
         channel_id: "c_dir".into(), guild_id: "g1".into(), scenario_id: "ember_tavern".into(),
         title: sc.name.clone(), location: "余烬酒馆大厅".into(), world_time: "21:30".into(),
         turn_number: 5, state_version: 6, turn_phase: tavern_domain::TurnPhase::Collecting,
-        chat_mode: tavern_domain::ChatMode::Roleplay, narrative_style: tavern_domain::NarrativeStyle::Prose,
+        chat_mode: tavern_domain::ChatMode::Roleplay, narrative_style: tavern_domain::NarrativeStyle::Prose, manual_resolve: false,
         gm_user_id: "u1".into(), web_token: "tok".into(), clues: vec![], npc_states: vec![],
         suggested_actions: vec![], current_act: 1, world_flags: vec![], ended_id: None,
         ended_title: None, bulletins: vec![], clocks: vec![], check_system: Default::default(), last_rest_turn: 0,

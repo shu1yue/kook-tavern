@@ -267,7 +267,7 @@ mod tests {
             channel_id: "c1".into(), guild_id: "g1".into(), scenario_id: "s1".into(),
             title: "T".into(), location: "Loc".into(), world_time: "Now".into(),
             turn_number: 1, state_version: 1, turn_phase: TurnPhase::Collecting,
-            chat_mode: ChatMode::Strict, narrative_style: NarrativeStyle::Prose,
+            chat_mode: ChatMode::Strict, narrative_style: NarrativeStyle::Prose, manual_resolve: false,
             gm_user_id: "u1".into(), web_token: "secret_tok".into(),
             clues: vec![], npc_states: vec![], suggested_actions: vec![],
             current_act: 1, world_flags: vec![], ended_id: None, ended_title: None,

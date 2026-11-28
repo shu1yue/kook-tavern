@@ -1,13 +1,19 @@
 use anyhow::Result;
-use tavern_domain::{CardTheme, EngineResponse, format_clock_bar, init_room_clocks};
+use tavern_domain::{
+    CardTheme, EngineResponse, format_clock_bar, format_full_brief_markdown, init_room_clocks,
+};
 
 use crate::engine::GameEngine;
 
-pub fn cmd_summary(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {
+pub fn cmd_summary(
+    engine: &GameEngine,
+    channel_id: &str,
+    caller_user_id: Option<&str>,
+) -> Result<EngineResponse> {
     let Some(room) = engine.store.get_room(channel_id)? else {
         return Ok(EngineResponse::Notice {
             title: "ℹ️ 当前频道尚未开团".to_string(),
-            body: "先 `/start` 开团吧！".to_string(),
+            body: "先 `/start` 或在 `/menu` 点「🚪 开独立包间」开桌吧！".to_string(),
             theme: CardTheme::Info,
             show_actions: false,
         });
@@ -16,29 +22,20 @@ pub fn cmd_summary(engine: &GameEngine, channel_id: &str) -> Result<EngineRespon
     let scenario = engine.scenarios.get(&room.scenario_id);
     let mut sections = Vec::new();
 
-    // 1. What is this story about? (100% spoiler-safe public overview + unlocked acts)
-    let mut story_lines = Vec::new();
+    // 1. Complete spoiler-free Player Brief (world stage + mission + cast + ending paths)
     if let Some(sc) = &scenario {
-        if !sc.tagline.trim().is_empty() {
-            story_lines.push(format!("**一句话定位**：{}", sc.tagline.trim()));
-        }
-        let public_intro: Vec<String> = sc
-            .worldbook
-            .iter()
-            .filter(|w| w.player_visible)
-            .take(2)
-            .map(|w| w.content.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-        if !public_intro.is_empty() {
-            story_lines.push(public_intro.join("\n"));
+        let brief_md = format_full_brief_markdown(sc);
+        if !brief_md.is_empty() {
+            sections.push(format!("### 📜 桌前无剧透任务书\n{brief_md}"));
         }
     }
-    story_lines.push(format!(
-        "📍 当前位于 **{}**（{} · 第 {} 回合）",
-        room.location, room.world_time, room.turn_number
+    sections.push(format!(
+        "📍 **当前坐标**：**{}**（{} · 第 {} 回合{}）",
+        room.location,
+        room.world_time,
+        room.turn_number,
+        if room.manual_resolve { " · ⏸️ 手动结算/自由飙戏中" } else { "" }
     ));
-    sections.push(format!("### 1️⃣ 这是个什么故事\n{}", story_lines.join("\n")));
 
     // 2. Who are the key people we've met?
     let npc_block = if room.npc_states.is_empty() {
@@ -58,9 +55,9 @@ pub fn cmd_summary(engine: &GameEngine, channel_id: &str) -> Result<EngineRespon
             .collect::<Vec<_>>()
             .join("\n")
     };
-    sections.push(format!("### 2️⃣ 目前登场了哪些人\n{npc_block}"));
+    sections.push(format!("### 🗣️ 已接触关键人物动态\n{npc_block}"));
 
-    // 3. What should we do next? (Current act goal + active clocks + open threads + latest 6 clues)
+    // 3. Current act goal + pacing clocks + open threads + latest 6 clues
     let mut todo_lines = Vec::new();
     if let Some(sc) = &scenario
         && !sc.acts.is_empty()
@@ -123,9 +120,11 @@ pub fn cmd_summary(engine: &GameEngine, channel_id: &str) -> Result<EngineRespon
             recent_clues
         ));
     }
-    sections.push(format!("### 3️⃣ 现在要去干什么\n{}", todo_lines.join("\n\n")));
+    if !todo_lines.is_empty() {
+        sections.push(format!("### 🧭 当前战局与手头线索\n{}", todo_lines.join("\n\n")));
+    }
 
-    // 4. Compact latest chapter recap (only latest 2 chapters so it never becomes a wall of text)
+    // 4. Compact latest chapter recap
     if !trimmed_sum.is_empty() {
         let chapters_part = trimmed_sum
             .rsplit_once("【契约与未解伏笔便签】")
@@ -153,16 +152,27 @@ pub fn cmd_summary(engine: &GameEngine, channel_id: &str) -> Result<EngineRespon
                 .collect::<Vec<_>>()
                 .join("\n\n");
             sections.push(format!(
-                "### 📜 最近前情纪要（截至第 {} 轮）\n{digest}",
+                "### 📖 最近前情纪要（截至第 {} 轮）\n{digest}",
                 room.summary_upto_turn
             ));
         }
     }
 
-    Ok(EngineResponse::Notice {
-        title: format!("📖 《{}》大白话案情简报", room.title),
-        body: sections.join("\n\n"),
-        theme: CardTheme::Info,
-        show_actions: true,
-    })
+    let title = format!("📖 《{}》桌前任务书与案情简报", room.title);
+    let body = sections.join("\n\n");
+    if let Some(uid) = caller_user_id.filter(|s| !s.is_empty()) {
+        Ok(EngineResponse::PrivateNotice {
+            user_id: uid.to_string(),
+            title,
+            body,
+            actions: Vec::new(),
+        })
+    } else {
+        Ok(EngineResponse::Notice {
+            title,
+            body,
+            theme: CardTheme::Info,
+            show_actions: true,
+        })
+    }
 }

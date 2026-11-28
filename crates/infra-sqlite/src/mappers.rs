@@ -15,7 +15,7 @@ pub fn query_room(conn: &Connection, channel_id: &str) -> Result<Option<RoomStat
                    gm_user_id, web_token, clues_json, npc_states_json, suggested_actions_json,
                    current_act, world_flags_json, ended_id, ended_title, bulletins_json,
                    check_system, last_rest_turn, summary, summary_upto_turn, active, created_at, updated_at,
-                   clocks_json
+                   clocks_json, manual_resolve
             FROM rooms WHERE channel_id = ?1
             "#,
             params![channel_id],
@@ -35,6 +35,7 @@ pub fn query_room(conn: &Connection, channel_id: &str) -> Result<Option<RoomStat
                     chat_mode: ChatMode::parse(&r.get::<_, String>(9)?).unwrap_or(ChatMode::Strict),
                     narrative_style: NarrativeStyle::parse(&r.get::<_, String>(10)?)
                         .unwrap_or(NarrativeStyle::Prose),
+                    manual_resolve: r.get::<_, i32>(29)? != 0,
                     gm_user_id: r.get(11)?,
                     web_token: r.get(12)?,
                     clues: serde_json::from_str(&r.get::<_, String>(13)?).unwrap_or_default(),
@@ -78,8 +79,8 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
             gm_user_id, web_token, clues_json, npc_states_json, suggested_actions_json,
             current_act, world_flags_json, ended_id, ended_title, bulletins_json,
             check_system, last_rest_turn, summary, summary_upto_turn, active, created_at, updated_at,
-            clocks_json
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)
+            clocks_json, manual_resolve
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30)
         ON CONFLICT(channel_id) DO UPDATE SET
             guild_id = excluded.guild_id, scenario_id = excluded.scenario_id, title = excluded.title,
             location = excluded.location, world_time = excluded.world_time,
@@ -95,7 +96,7 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
             check_system = excluded.check_system, last_rest_turn = excluded.last_rest_turn,
             summary = excluded.summary, summary_upto_turn = excluded.summary_upto_turn,
             active = excluded.active, updated_at = excluded.updated_at,
-            clocks_json = excluded.clocks_json
+            clocks_json = excluded.clocks_json, manual_resolve = excluded.manual_resolve
         "#,
         params![
             room.channel_id, room.guild_id, room.scenario_id, room.title,
@@ -106,7 +107,7 @@ pub fn write_room(conn: &Connection, room: &RoomState) -> Result<()> {
             room.check_system.as_str(), room.last_rest_turn,
             room.summary, room.summary_upto_turn, if room.active { 1 } else { 0 },
             room.created_at.to_rfc3339(), room.updated_at.to_rfc3339(),
-            clocks_json,
+            clocks_json, if room.manual_resolve { 1 } else { 0 },
         ],
     )?;
     Ok(())

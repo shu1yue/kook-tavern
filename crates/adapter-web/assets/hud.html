@@ -425,7 +425,7 @@
         <div class="id-row">
           <div class="avatar">${esc(cut(m.character_name || '冒', 1))}</div>
           <div style="min-width:0;flex:1">
-            <div class="id-name">${esc(m.character_name)} <span class="chip sm accent">${esc(m.role_desc || '冒险者')} Lv.${m.level || 1}</span></div>
+            <div class="id-name">${esc(m.character_name)} <span class="chip sm accent">${esc(m.role_desc || '冒险者')}${state.hide_level ? '' : ` Lv.${m.level || 1}`}</span></div>
             <div class="id-meta">📍 ${esc(m.location)}</div>
           </div>
         </div>
@@ -613,7 +613,7 @@
     const acts = state.acts || [];
     const curAct = acts.find(a => a.index === state.current_act) || acts[0];
     const m = state.me;
-    let html = `<div class="page-hd"><h2 class="page-title">🎯 下一步目标</h2><span class="page-sub">🕒 ${esc(state.world_time)}</span></div>`;
+    let html = `<div class="page-hd"><h2 class="page-title">🎯 下一步目标</h2><span class="page-sub">${state.manual_resolve ? '⏸️ 飙戏暂停中 · ' : ''}🕒 ${esc(state.world_time)}</span></div>`;
 
     if (m.roll_notes.length || m.action_ready || m.is_afk) {
       const parts = [];
@@ -643,8 +643,18 @@
     const actsList = state.suggested_actions || [];
     if (actsList.length && !state.ended_title) {
       html += `<div class="card">
-        <div class="label"><span>✨ 当前参考行动方向</span><span>回 KOOK 点按钮或直接打字</span></div>
-        ${actsList.map((a, i) => `<div class="act-pill"><span class="act-num">${['①','②','③','④'][i] || (i+1)}</span><span>${esc(a)}</span></div>`).join('')}
+        <div class="label"><span>💡 眼下可切入焦点</span><span>回 KOOK 直接打人话自由行动</span></div>
+        ${actsList.map((a) => `<div class="act-pill"><span class="act-num">•</span><span>${esc(a)}</span></div>`).join('')}
+      </div>`;
+    }
+
+    const pb = state.player_brief || {};
+    if (pb.world_stage || pb.mission || (pb.ending_paths && pb.ending_paths.length)) {
+      html += `<div class="card">
+        <div class="label"><span>📜 桌前无剧透任务书</span><span>世界与命运分歧</span></div>
+        ${pb.world_stage ? `<div class="muted" style="color:var(--text);margin-bottom:6px">🌍 ${esc(pb.world_stage)}</div>` : ''}
+        ${pb.mission ? `<div class="muted" style="color:var(--accent);margin-bottom:6px">🎯 ${esc(pb.mission)}</div>` : ''}
+        ${(pb.ending_paths || []).length ? `<div style="margin-top:4px">${pb.ending_paths.map(p => `<div class="muted" style="margin-bottom:3px">🔀 ${esc(p)}</div>`).join('')}</div>` : ''}
       </div>`;
     }
 

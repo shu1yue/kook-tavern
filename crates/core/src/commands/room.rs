@@ -3,7 +3,7 @@ use chrono::Utc;
 use rand::Rng;
 use tavern_domain::{
     CardTheme, ChatMode, EngineResponse, IncomingMessage, NarrativeStyle, RoomEvent, RoomState,
-    ScenarioSummary, TurnPhase, ending_scope_key, init_room_clocks,
+    ScenarioSummary, TurnPhase, ending_scope_key, format_opening_brief_note, init_room_clocks,
 };
 
 use crate::commands::check::format_act_badge;
@@ -11,17 +11,17 @@ use crate::engine::GameEngine;
 
 pub fn cmd_help() -> EngineResponse {
     let body = [
-        "**✨ 零代码游玩方式（推荐！全程点按钮 + 说人话）**",
-        "1. 点卡片上的 **「▶️ 开启剧本」** 开桌，点 **「🎭 选职业入团」** 带五维属性与专属装备参战",
-        "2. 行动阶段：**直接点剧情卡上的 ①②③ 行动按钮**，或**直接打人话**提交行动（场外闲聊请加括号 `（）` 或 `//`）",
-        "3. 检定、掷骰、查私密纸条、看 Web 大屏、结局图鉴、暂离与回档——全在卡片底部一键点击！",
+        "**✨ 零代码游玩方式（推荐！点按钮开桌 + 直接说人话）**",
+        "1. 在 `/menu` 点 **「🚪 开独立包间」**（秒建干净独立子频道，跑完一键拆桌）或 **「▶️ 本频道开桌」**，点职业按钮上桌",
+        "2. 行动阶段：参考剧情卡上的**切入焦点**，**直接打人话自由发挥**（任何脑洞/掀桌都行！场外闲聊请加括号 `（）` 或 `//`）",
+        "3. 想先等队友或角色内自由飙戏？发 `/pause`（或在面板切手动结算），聊完再点 **「⚡ 立刻结算」**；随时发 `/story` 私密查无剧透任务书！",
         "",
-        "**⌨️ 进阶文字快捷键（想精细操作时再用）**",
-        "- `/menu` / `/store` / `/workshop` — 剧本大厅 / 开源世界书商店 / 引导剧本工坊",
-        "- `/me` / `/check 侦查 [adv|dc15|inspire] [原因]` — 个人角色卡 / 多规则检定",
-        "- `/skill` / `/rest short|long` / `/assist <队友>` / `/levelup` — 招牌技 / 营地休整 / 队友协助 / 过幕升级",
-        "- `/char` / `/rule d20|2d6|d100` / `/inspire <角色>` — 自由车卡库 / 切换 D&D 规则 / 颁激励点",
-        "- `/endings` / `/web` / `/export` / `/reset` — 结局图鉴 / 实况大屏 / 发战报墙 / 结团",
+        "**⌨️ 进阶文字快捷键**",
+        "- `/menu` / `/table <剧本ID>` / `/tables` / `/closetable` — 剧本大厅 / 开独立包间 / 包间列表 / 拆包间",
+        "- `/story` / `/pause` / `/me` / `/check 侦查 [adv|dc15|inspire]` — 私密任务书简报 / 等人飙戏暂停 / 角色卡 / 属性检定",
+        "- `/skill` / `/rest short|long` / `/assist <队友>` / `/levelup` — 招牌技 / 休整 / 队友协助 / 过幕升级",
+        "- `/store` / `/workshop` / `/char` / `/rule d20|2d6|d100` — 世界书商店 / 剧本工坊 / 车卡库 / 规则切换",
+        "- `/endings` / `/web` / `/hud` / `/export` / `/reset` — 结局图鉴 / 实况大屏 / 悬浮窗 / 战报墙 / 结团",
     ]
     .join("\n");
 
@@ -137,6 +137,7 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         turn_phase: TurnPhase::Collecting,
         chat_mode: ChatMode::Roleplay,
         narrative_style: NarrativeStyle::Prose,
+        manual_resolve: false,
         gm_user_id: msg.user_id.clone(),
         web_token: generate_web_token(),
         clues: Vec::new(),
@@ -160,9 +161,9 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
     engine.emit_event(RoomEvent::RoomUpdated { channel_id: msg.channel_id.clone(), turn_number: 0 });
 
     let mode_hint = if msg.is_direct {
-        "🕯️ 当前为私聊单人冒险模式（直接发消息或点按钮即可推进）".to_string()
+        "🕯️ 当前为私聊单人冒险模式（直接发消息即可推进）".to_string()
     } else {
-        "💬 已默认开启「直接说人话」模式：直接打字或点下方 ①②③ 按钮即行动！场外闲聊请加括号（）或 //，点「🎛️ 面板/设置」可随时切换。".to_string()
+        "💬 已开启「直接说人话」模式：直接打字自由行动（场外闲聊请加括号（）或 //）；若需先等人进桌或自由飙戏，发 `/pause` 或在面板切手动结算！".to_string()
     };
     let act_badge = format_act_badge(Some(&scenario), 1);
     let scope_key = ending_scope_key(
@@ -174,10 +175,11 @@ pub fn cmd_start(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Resul
         .store
         .list_world_echoes(&scope_key, &scenario.id, Some(&before_ts), 2)
         .unwrap_or_default();
-    let mut opening_changes = vec![
-        mode_hint,
-        "✨ 直接点下方职业按钮一键入团（原地亮名不刷屏），再点 ①②③ 或直接打人话即可开玩！".to_string(),
-    ];
+    let mut opening_changes = format_opening_brief_note(&scenario);
+    opening_changes.push(mode_hint);
+    opening_changes.push(
+        "✨ 点下方绿色职业按钮一键入团，再参考切入焦点直接打人话开玩（任何脑洞/掀桌都行）！".to_string(),
+    );
     if let Some(latest_echo) = echoes.first() {
         opening_changes.push(format!(
             "🌀 **世界线轮回残响**（《{}》）：{}",
@@ -218,6 +220,7 @@ pub fn cmd_status(engine: &GameEngine, channel_id: &str) -> Result<EngineRespons
         .list_pending_actions(channel_id, room.turn_number + 1)?;
     let scenario = engine.scenarios.get(&room.scenario_id);
     let act_label = format_act_badge(scenario.as_ref(), room.current_act);
+    let is_managed_table = engine.store.get_managed_table(channel_id)?.is_some();
 
     Ok(EngineResponse::StatusBoard {
         channel_id: channel_id.to_string(),
@@ -225,6 +228,7 @@ pub fn cmd_status(engine: &GameEngine, channel_id: &str) -> Result<EngineRespons
         act_label,
         players,
         pending_actions,
+        is_managed_table,
     })
 }
 
@@ -273,8 +277,12 @@ pub fn cmd_mode(engine: &GameEngine, channel_id: &str, arg: &str) -> Result<Engi
     })
 }
 
-pub fn cmd_summary(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {
-    crate::story_brief::cmd_summary(engine, channel_id)
+pub fn cmd_summary(
+    engine: &GameEngine,
+    channel_id: &str,
+    caller_user_id: Option<&str>,
+) -> Result<EngineResponse> {
+    crate::story_brief::cmd_summary(engine, channel_id, caller_user_id)
 }
 
 pub fn cmd_reset(engine: &GameEngine, msg: &IncomingMessage) -> Result<EngineResponse> {

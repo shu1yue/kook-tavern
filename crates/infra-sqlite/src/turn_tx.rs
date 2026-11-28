@@ -293,7 +293,7 @@ pub fn pop_and_restore_snapshot_tx(
             current_act = ?13, world_flags_json = ?14, ended_id = ?15, ended_title = ?16,
             bulletins_json = ?17, check_system = ?18, last_rest_turn = ?19,
             summary = ?20, summary_upto_turn = ?21,
-            active = ?22, updated_at = ?23, clocks_json = ?24
+            active = ?22, updated_at = ?23, clocks_json = ?24, manual_resolve = ?25
         WHERE channel_id = ?1
         "#,
         params![
@@ -305,6 +305,7 @@ pub fn pop_and_restore_snapshot_tx(
             bulletins_json, snapshot.room.check_system.as_str(), snapshot.room.last_rest_turn,
             snapshot.room.summary, snapshot.room.summary_upto_turn,
             if snapshot.room.active { 1 } else { 0 }, Utc::now().to_rfc3339(), clocks_json,
+            if snapshot.room.manual_resolve { 1 } else { 0 },
         ],
     )?;
 

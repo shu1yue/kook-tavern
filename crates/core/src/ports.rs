@@ -36,9 +36,10 @@ pub struct ResolvingLease {
 }
 
 use crate::dnd_ports::DndStore;
+use crate::table_ports::TableStore;
 use crate::workshop_ports::WorkshopStore;
 
-pub trait RoomStore: DndStore + WorkshopStore + Send + Sync {
+pub trait RoomStore: DndStore + WorkshopStore + TableStore + Send + Sync {
     fn reset_stuck_resolving_on_startup(&self) -> Result<usize>;
     fn upsert_room(&self, room: &RoomState) -> Result<()>;
     fn backfill_room_guild_id(&self, channel_id: &str, guild_id: &str) -> Result<bool>;

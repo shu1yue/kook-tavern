@@ -1,6 +1,9 @@
 use anyhow::Result;
 use serde::Serialize;
-use tavern_domain::{CharacterStats, ClockKind, RoomState, TurnPhase, WorldBulletin, init_room_clocks};
+use tavern_domain::{
+    CharacterStats, CheckSystem, ClockKind, PlayerBrief, RoomState, Scenario, TurnPhase,
+    WorldBulletin, effective_player_brief, init_room_clocks,
+};
 
 use crate::WebState;
 use crate::map_view::{ScenarioMapView, build_scenario_map_view};
@@ -22,11 +25,14 @@ pub struct PlayerHudView {
     pub turn_number: u32,
     pub turn_phase: &'static str,
     pub check_system: &'static str,
+    pub hide_level: bool,
+    pub manual_resolve: bool,
     pub active: bool,
     pub current_act: u32,
     pub acts: Vec<ActPublicView>,
     pub world_flags: Vec<String>,
     pub suggested_actions: Vec<String>,
+    pub player_brief: PlayerBrief,
     pub summary: String,
     pub summary_upto_turn: u32,
     pub ended_id: Option<String>,
@@ -259,40 +265,46 @@ pub fn build_player_hud_view(
     }).collect();
 
     let dashboard_path = format!("/room/{}?token={}", room.channel_id.replace(':', "%3A"), room.web_token);
-    let raw_clocks = if !room.clocks.is_empty() {
-        room.clocks
-    } else if let Some(sc) = &scenario {
-        init_room_clocks(sc)
-    } else {
-        Vec::new()
-    };
-    let clocks: Vec<ClockPublicView> = raw_clocks
-        .into_iter()
-        .take(4)
-        .map(|c| ClockPublicView {
-            id: c.id,
-            name: c.name,
-            kind: match c.kind {
-                ClockKind::Threat => "threat",
-                ClockKind::Progress => "progress",
-            },
-            filled: c.filled,
-            segments: c.segments,
-            auto_tick_every: c.auto_tick_every,
-            triggered: c.triggered,
-        })
-        .collect();
+    let clocks = build_public_clocks(&room, scenario.as_ref());
+    let player_brief = scenario
+        .as_ref()
+        .map(effective_player_brief)
+        .unwrap_or_default();
 
     Ok(Some(PlayerHudView {
         title: room.title, scenario_id: room.scenario_id, genre, tagline, theme,
         location: room.location, world_time: room.world_time, turn_number: room.turn_number,
         turn_phase: room.turn_phase.as_str(), check_system: room.check_system.short_badge(),
+        hide_level: room.check_system == CheckSystem::D100,
+        manual_resolve: room.manual_resolve,
         active: room.active, current_act: room.current_act, acts, world_flags: room.world_flags,
-        suggested_actions: room.suggested_actions,
+        suggested_actions: room.suggested_actions, player_brief,
         summary: room.summary, summary_upto_turn: room.summary_upto_turn,
         ended_id: room.ended_id, ended_title: room.ended_title, dashboard_path,
         me, party, npcs, clues: room.clues, glossary, bulletins: room.bulletins, clocks, map, recent_turns,
     }))
+}
+
+pub(crate) fn build_public_clocks(room: &RoomState, scenario: Option<&Scenario>) -> Vec<ClockPublicView> {
+    let raw = if !room.clocks.is_empty() {
+        room.clocks.clone()
+    } else if let Some(sc) = scenario {
+        init_room_clocks(sc)
+    } else {
+        Vec::new()
+    };
+    raw.into_iter()
+        .take(4)
+        .map(|c| ClockPublicView {
+            id: c.id,
+            name: c.name,
+            kind: match c.kind { ClockKind::Threat => "threat", ClockKind::Progress => "progress" },
+            filled: c.filled,
+            segments: c.segments,
+            auto_tick_every: c.auto_tick_every,
+            triggered: c.triggered,
+        })
+        .collect()
 }
 
 fn classify_attitude(att: &str) -> &'static str {

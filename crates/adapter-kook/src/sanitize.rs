@@ -47,6 +47,9 @@ pub fn soften_kook_text(input: &str) -> String {
 pub fn soften_live_hud(hud: &LiveStoryHud) -> LiveStoryHud {
     LiveStoryHud {
         turn_number: hud.turn_number,
+        check_system: hud.check_system,
+        manual_resolve: hud.manual_resolve,
+        is_managed_table: hud.is_managed_table,
         rule_badge: hud.rule_badge.clone(),
         current_goal: soften_kook_text(&hud.current_goal),
         clock_lines: hud.clock_lines.iter().map(|s| soften_kook_text(s)).collect(),

@@ -7,6 +7,7 @@ pub mod hud_token;
 pub mod jev_config;
 pub mod ports;
 mod story_brief;
+pub mod table_ports;
 pub mod workshop_ports;
 
 pub use commands::OocPrecheck;
@@ -22,6 +23,7 @@ pub use ports::{
     JoinPlayerOutcome, LlmProvider, NoopBackgroundRunner, NoopDecisionGate, NoopEventBus,
     NoopExportWriter, ResolvingLease, RoomStore, ScenarioCatalog,
 };
+pub use table_ports::TableStore;
 pub use workshop_ports::{
     EmptyWorldbookCatalog, ForgeSlotOutcome, NoopStImporter, StRemoteImporter, WorldbookCatalog,
     WorkshopStore,

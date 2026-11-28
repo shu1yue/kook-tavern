@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::brief::PlayerBrief;
 use crate::dnd::{CharacterAbility, CheckSystem, PlayerDndProfile};
 use crate::stats::{CharacterStats, ScenarioAct, ScenarioEnding};
 use crate::world::{
@@ -177,6 +178,8 @@ pub struct Scenario {
     pub rules: ScenarioRules,
     #[serde(default)]
     pub clocks: Vec<ScenarioClock>,
+    #[serde(default)]
+    pub player_brief: PlayerBrief,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -197,6 +200,8 @@ pub struct RoomState {
     pub chat_mode: ChatMode,
     #[serde(default)]
     pub narrative_style: NarrativeStyle,
+    #[serde(default)]
+    pub manual_resolve: bool,
     #[serde(default)]
     pub gm_user_id: String,
     #[serde(default)]

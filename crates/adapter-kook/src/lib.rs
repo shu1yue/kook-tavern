@@ -10,5 +10,7 @@ pub mod live_cards;
 mod live_sync;
 pub mod plain;
 pub mod sanitize;
+mod table_api;
+mod table_flow;
 
 pub use gateway::run_kook_bot;

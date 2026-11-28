@@ -91,7 +91,7 @@ pub fn cmd_join(engine: &GameEngine, msg: &IncomingMessage, arg: &str) -> Result
     Ok(EngineResponse::Notice {
         title: format!("🪪 角色卡已就绪：{}", player.character_name),
         body: format!(
-            "- **身份**：{}\n- **特质**：{}\n- **状态**：❤️ HP {}/{} ｜ 🧠 SAN {}/{}\n- **初始背包**：{}\n\n现在直接打人话，或点剧情卡上的 ①②③ 按钮即可行动（也支持 `/act` 与 `> 行动`）！",
+            "- **身份**：{}\n- **特质**：{}\n- **状态**：❤️ HP {}/{} ｜ 🧠 SAN {}/{}\n- **初始背包**：{}\n\n现在参考剧情卡上的方向提示，直接打人话自由行动即可（任何脑洞/掀桌都行，也支持 `/act` 与 `> 行动`）！",
             player.role_desc,
             traits_text,
             player.hp,
@@ -202,6 +202,7 @@ pub async fn cmd_act(
         .count();
 
     if engine.cfg.auto_resolve_all_ready
+        && !room.manual_resolve
         && !active_players.is_empty()
         && ready_active >= active_players.len()
     {
@@ -213,6 +214,11 @@ pub async fn cmd_act(
         turn_number: room.turn_number,
     });
 
+    let resolve_hint = if room.manual_resolve {
+        "⏸️ 当前处于手动结算（等人 / 自由飙戏）模式，可继续自由交流，聊完点 **「⚡ 立刻结算」** 或发 `/go` 一起推进！"
+    } else {
+        "人齐将自动结算；如有队友摸鱼，可随时发 `/go` 或点下方按钮立刻结算。"
+    };
     Ok(EngineResponse::Notice {
         title: format!(
             "📝 已收录【{}】的第 {} 轮行动 ({}/{})",
@@ -222,7 +228,7 @@ pub async fn cmd_act(
             active_players.len().max(1)
         ),
         body: format!(
-            "> {}\n\n**全队进度**：{}\n人齐将自动结算；如有队友摸鱼，可随时发 `/go` 或点下方按钮立刻结算。",
+            "> {}\n\n**全队进度**：{}\n{resolve_hint}",
             action_text,
             format_party_progress(&all_players, &all_pending)
         ),

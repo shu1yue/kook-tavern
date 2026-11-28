@@ -264,11 +264,7 @@ pub(crate) fn build_mock_forged_scenario(req: &ForgeScenarioRequest) -> Scenario
         .map(|p| format!("{} / 工坊共创", p.genre))
         .unwrap_or_else(|| "工坊原创 / 多幕冒险".into());
     let mk_ab = |name: &str, desc: &str| CharacterAbility {
-        name: name.into(),
-        max_uses: 1,
-        uses_left: 1,
-        recharge: AbilityRecharge::ShortRest,
-        desc: desc.into(),
+        name: name.into(), max_uses: 1, uses_left: 1, recharge: AbilityRecharge::ShortRest, desc: desc.into(),
     };
     Scenario {
         id: slug,
@@ -283,7 +279,11 @@ pub(crate) fn build_mock_forged_scenario(req: &ForgeScenarioRequest) -> Scenario
             "夜色低垂，关于「{}」的危机正在你们眼前铺开。\n线索就藏在近在咫尺的暗流之中，而各方势力已经开始落子，等待你们踏出第一步。",
             d.premise.trim()
         ),
-        opening_actions: vec!["查探现场最异常的线索".into(), "向在场关键人物套话".into(), "制定队伍分工策略".into()],
+        opening_actions: vec![
+            "异常现场：透着说不清的违和，可细查物证、拍照或寻找暗格".into(),
+            "在场关键人物：神色紧绷且知晓内情，可套话、交易或施压".into(),
+            "周边出入口与势力动向：暗流正在逼近，可先探路或分工戒备".into(),
+        ],
         player_defaults: StarterCharacterDefaults {
             max_hp: 14, max_san: 12, starter_items: vec!["随身行囊".into(), "火折/手电".into()],
         },
@@ -343,5 +343,6 @@ pub(crate) fn build_mock_forged_scenario(req: &ForgeScenarioRequest) -> Scenario
         ],
         rules: Default::default(),
         clocks: Vec::new(),
+        player_brief: Default::default(),
     }
 }

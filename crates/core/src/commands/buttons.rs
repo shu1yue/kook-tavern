@@ -1,11 +1,10 @@
 use anyhow::Result;
 use tavern_domain::{
     CardTheme, ChatMode, EngineResponse, IncomingMessage, NarrativeStyle, PrivateButton, StatKind,
-    TurnPhase,
 };
 
 use crate::commands::{
-    button_roles, check, dnd, export, m1, party, resolve_authoritative_guild, room, turn,
+    button_roles, check, dnd, export, m1, party, resolve_authoritative_guild, room, table, turn,
     will_likely_resolve_turn, workshop,
 };
 use crate::engine::GameEngine;
@@ -19,10 +18,7 @@ pub async fn dispatch_button(
     value: &str,
 ) -> Result<EngineResponse> {
     let effective_guild = resolve_authoritative_guild(engine, guild_id, channel_id)?;
-    if !engine
-        .cfg
-        .is_scope_allowed(effective_guild.as_deref(), channel_id)
-    {
+    if !table::is_channel_allowed_or_managed(engine, effective_guild.as_deref(), channel_id) {
         return Ok(EngineResponse::Ignore);
     }
     if let Some(gid) = effective_guild.as_deref().filter(|s| !s.is_empty()) {
@@ -60,7 +56,7 @@ pub async fn dispatch_button(
     match action {
         "resolve" => turn::resolve_turn(engine, channel_id).await,
         "status" => room::cmd_status(engine, channel_id),
-        "story" | "summary" | "recap" => room::cmd_summary(engine, channel_id),
+        "story" | "summary" | "recap" => room::cmd_summary(engine, channel_id, Some(user_id)),
         "undo" => turn::cmd_undo(engine, channel_id),
         "cost" => m1::cmd_cost(engine, channel_id),
         "web" => m1::cmd_web(engine, channel_id),
@@ -68,6 +64,16 @@ pub async fn dispatch_button(
         "endings" => check::cmd_endings(engine, &mk_msg("/endings".into())),
         "help" => Ok(room::cmd_help()),
         "menu" => Ok(room::cmd_list_scenarios(engine, channel_id)),
+        "tables" => table::cmd_tables(engine, &mk_msg("/tables".into())),
+        "table" => {
+            let scenario_id = parts.get(3).copied().unwrap_or("").trim();
+            table::cmd_table(engine, &mk_msg(format!("/table {scenario_id}")), scenario_id)
+        }
+        "close_table_ask" => table::handle_close_table_ask(engine, &mk_msg("/closetable".into())),
+        "close_table_confirm" => {
+            table::handle_close_table_confirm(engine, &mk_msg("/closetable".into()))
+        }
+        "toggle_pause" => table::cmd_pause(engine, channel_id, ""),
         "rolemenu" | "roles" => button_roles::cmd_role_menu(engine, channel_id),
         "export" => export::cmd_export(engine, channel_id, false),
         "start" => {
@@ -114,9 +120,13 @@ pub async fn dispatch_button(
             let idx = parts.get(3).copied().unwrap_or("").trim();
             dnd::cmd_skill(engine, &mk_msg(format!("/skill {idx}")), idx)
         }
+        "lv_menu" => dnd::cmd_levelup(engine, &mk_msg("/levelup".into()), ""),
         "lv" => {
             let choice = parts.get(3).copied().unwrap_or("").trim();
-            if !matches!(choice, "hp" | "charge") {
+            if !matches!(
+                choice,
+                "hp" | "charge" | "body" | "agility" | "investigate" | "social" | "insight"
+            ) {
                 return Ok(EngineResponse::Ignore);
             }
             dnd::cmd_levelup(engine, &mk_msg(format!("/levelup {choice}")), choice)
@@ -131,15 +141,12 @@ pub async fn dispatch_button(
             let arg = if extra.is_empty() { sub.to_string() } else { format!("{sub} {extra}") };
             workshop::cmd_workshop(engine, &mk_msg(format!("/workshop {arg}")), &arg).await
         }
-        "pick" => {
-            let Some(expected_turn) = parts.get(3).and_then(|s| s.parse::<u32>().ok()) else {
-                return Ok(EngineResponse::Ignore);
-            };
-            let Some(idx) = parts.get(4).and_then(|s| s.parse::<usize>().ok()) else {
-                return Ok(EngineResponse::Ignore);
-            };
-            handle_pick_action(engine, &mk_msg(String::new()), expected_turn, idx).await
-        }
+        "pick" => Ok(EngineResponse::PrivateNotice {
+            user_id: user_id.to_string(),
+            title: "💡 快捷选择题已升级为自由行动".into(),
+            body: "v2.1 起不再限制于固定选项按钮啦！请参考最新剧情卡里的「眼下可切入焦点」，直接在频道打人话描述你的想法或行动（任何脑洞/掀桌都行）喵！".into(),
+            actions: Vec::new(),
+        }),
         "toggle_mode" => handle_toggle_mode(engine, channel_id),
         "toggle_style" => handle_toggle_style(engine, channel_id),
         _ => Ok(EngineResponse::Ignore),
@@ -163,84 +170,8 @@ pub fn will_button_likely_resolve_turn(
         "ws" if matches!(parts.get(3).copied(), Some("forge" | "gen" | "锻造" | "生成")) => {
             will_likely_resolve_turn(engine, guild_id, channel_id, user_id, "/workshop forge", false)
         }
-        "pick" => {
-            let Some(expected_turn) = parts.get(3).and_then(|s| s.parse::<u32>().ok()) else {
-                return false;
-            };
-            let Some(idx) = parts.get(4).and_then(|s| s.parse::<usize>().ok()) else {
-                return false;
-            };
-            let Ok(Some(room)) = engine.store.get_room(channel_id) else {
-                return false;
-            };
-            if !room.active
-                || room.turn_phase == TurnPhase::Resolving
-                || room.ended_id.is_some()
-                || room.turn_number != expected_turn
-                || idx >= room.suggested_actions.len()
-            {
-                return false;
-            }
-            will_likely_resolve_turn(engine, guild_id, channel_id, user_id, "/act pick", false)
-        }
         _ => false,
     }
-}
-
-async fn handle_pick_action(
-    engine: &GameEngine,
-    msg: &IncomingMessage,
-    expected_turn: u32,
-    idx: usize,
-) -> Result<EngineResponse> {
-    let Some(room) = engine.store.get_room(&msg.channel_id)? else {
-        return Ok(EngineResponse::Notice {
-            title: "ℹ️ 当前频道尚未开团".to_string(),
-            body: "先点「📚 换剧本」开启冒险吧喵！".to_string(),
-            theme: CardTheme::Warning,
-            show_actions: false,
-        });
-    };
-    if !room.active {
-        return Ok(EngineResponse::Notice {
-            title: "ℹ️ 当前房间已归档".to_string(),
-            body: "请重新开启新剧本喵！".to_string(),
-            theme: CardTheme::Warning,
-            show_actions: false,
-        });
-    }
-    if let Some(notice) = check::ended_room_notice(&room) {
-        return Ok(notice);
-    }
-    if room.turn_phase == TurnPhase::Resolving {
-        return Ok(EngineResponse::Notice {
-            title: "⏳ DM 正在推演本轮剧情".to_string(),
-            body: "稍等几秒，等新剧情卡出来后再点新选项（也可以直接打字暂存下一轮行动）喵！"
-                .to_string(),
-            theme: CardTheme::Warning,
-            show_actions: false,
-        });
-    }
-    if room.turn_number != expected_turn {
-        return Ok(EngineResponse::Notice {
-            title: "🕒 这是上一轮的旧选项按钮".to_string(),
-            body: format!(
-                "当前已经推进到 **第 {} 回合** 啦，请翻到最下面点最新剧情卡上的选项按钮（或直接打字行动）喵！",
-                room.turn_number
-            ),
-            theme: CardTheme::Info,
-            show_actions: false,
-        });
-    }
-    let Some(action_text) = room.suggested_actions.get(idx).cloned() else {
-        return Ok(EngineResponse::Notice {
-            title: "⚠️ 选项已失效".to_string(),
-            body: "该快捷行动选项已更新，请直接发消息行动或点最新剧情卡喵。".to_string(),
-            theme: CardTheme::Warning,
-            show_actions: false,
-        });
-    };
-    party::cmd_act(engine, msg, &action_text).await
 }
 
 fn handle_toggle_mode(engine: &GameEngine, channel_id: &str) -> Result<EngineResponse> {

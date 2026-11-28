@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use serde_json::{Value, json};
-use tavern_domain::{EngineResponse, LiveStoryHud};
+use tavern_domain::{CheckSystem, EngineResponse, LiveStoryHud};
 
 use crate::card_widgets::{
     action_group, btn, chunk_kmarkdown, ending_toolbar, push_bulletin_section,
@@ -171,6 +171,8 @@ pub fn render_story_turn_card(
             .to_string();
     }
 
+    let check_system = hud.map(|h| h.check_system).unwrap_or(CheckSystem::TwoD6);
+    let is_managed_table = hud.is_some_and(|h| h.is_managed_table);
     if let Some(end) = ending_reached {
         let unlock_tag = if end.newly_unlocked {
             " 🆕 **本服首次解锁成就！**"
@@ -188,7 +190,7 @@ pub fn render_story_turn_card(
                 )
             }
         }));
-        modules.push(ending_toolbar(turn_chan));
+        modules.push(ending_toolbar(turn_chan, is_managed_table));
     } else {
         if let Some(h) = hud
             && modules.len() < 36
@@ -198,7 +200,7 @@ pub fn render_story_turn_card(
         push_story_action_footer(
             &mut modules,
             turn_chan,
-            *turn_number,
+            check_system,
             suggested_actions,
             suggested_check.as_ref(),
         );
@@ -227,6 +229,9 @@ fn push_live_hud_modules(modules: &mut Vec<Value>, channel_id: &str, hud: &LiveS
     }
     if !hud.turn_progress.is_empty() {
         hud_lines.push(format!("📌 **本轮动态**：{}", hud.turn_progress.join(" ｜ ")));
+    }
+    if hud.manual_resolve {
+        hud_lines.push("⏸️ **手动结算 / 飙戏中**：全员发言不会打断对话，聊完点「⚡ 立刻结算」或 `/go` 出卡".into());
     }
     if !hud_lines.is_empty() {
         modules.push(json!({ "type": "divider" }));
@@ -309,20 +314,16 @@ mod tests {
             direct_messages: vec![],
         };
         let hud = LiveStoryHud {
-            turn_number: 0,
-            rule_badge: "经典 D&D (d20)".into(),
+            turn_number: 0, check_system: CheckSystem::D20, manual_resolve: false,
+            is_managed_table: true, rule_badge: "经典 D&D (d20)".into(),
             current_goal: "查清蓝血信使与断钥匙真相".into(),
             clock_lines: vec!["🔴 ⏳ **午夜星仪过载** ●●○○○○ `2/6`".into()],
             party_lines: vec!["**沐涵**（齿轮机械师 · ❤️12/12 🧠10/10）".into()],
             turn_progress: vec!["🎲 **沐涵**：🔍 侦查 16（✨成功）（待行动）".into()],
             opening_roles: vec![PresetRole {
-                name: "齿轮机械师".into(),
-                traits: vec!["手巧".into()],
-                bonus_items: vec![],
-                stats: CharacterStats::default(),
-                alignment: String::new(),
-                proficient_skills: vec![],
-                abilities: vec![],
+                name: "齿轮机械师".into(), traits: vec!["手巧".into()], bonus_items: vec![],
+                stats: CharacterStats::default(), alignment: String::new(),
+                proficient_skills: vec![], abilities: vec![],
             }],
         };
 

@@ -330,6 +330,12 @@ async fn print_response(stdout: &mut io::Stdout, resp: &EngineResponse) -> Resul
             buf.push_str("└──────────────────────────────────────────────────────────\n\n");
             stdout.write_all(buf.as_bytes()).await?;
         }
+        EngineResponse::CreateTableRequest { scenario_name, .. } => {
+            stdout.write_all(format!("🚪 独立包间《{scenario_name}》仅在 KOOK 服务器频道可用，CLI 请直接 `/start`。\n\n").as_bytes()).await?;
+        }
+        EngineResponse::CloseTableRequest { title, .. } => {
+            stdout.write_all(format!("🗑️ 已拆除独立包间《{title}》。\n\n").as_bytes()).await?;
+        }
     }
     stdout.flush().await?;
     Ok(())

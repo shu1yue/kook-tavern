@@ -12,6 +12,7 @@ pub mod scenario_io;
 pub mod scenarios;
 pub mod st_import;
 pub mod st_png;
+pub mod table_tx;
 pub mod turn_queries;
 pub mod turn_tx;
 pub mod workshop_tx;

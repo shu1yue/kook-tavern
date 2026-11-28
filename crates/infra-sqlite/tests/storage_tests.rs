@@ -72,6 +72,7 @@ fn cas_atomic_actions_mode_isolation_and_profile_preservation() {
         turn_phase: TurnPhase::Collecting,
         chat_mode: ChatMode::Strict,
         narrative_style: NarrativeStyle::Prose,
+        manual_resolve: false,
         gm_user_id: "u1".into(),
         web_token: "tok123".into(),
         clues: vec![],

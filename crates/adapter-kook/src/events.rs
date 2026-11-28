@@ -278,9 +278,8 @@ fn button_sync_mode(value: &str) -> InPlaceSyncMode {
     let action = value.split(':').nth(1).unwrap_or("");
     match action {
         "pickrole" | "quickjoin" | "pick" | "afk" => InPlaceSyncMode::SilentOnSuccess,
-        "check" | "roll" | "skill" | "lv" | "leave" | "toggle_mode" | "toggle_style" => {
-            InPlaceSyncMode::TempToast
-        }
+        "check" | "roll" | "skill" | "lv" | "leave" | "toggle_mode" | "toggle_style"
+        | "toggle_pause" => InPlaceSyncMode::TempToast,
         _ => InPlaceSyncMode::PublicCard,
     }
 }
@@ -311,7 +310,8 @@ fn message_sync_mode(content: &str) -> InPlaceSyncMode {
             }
             "roll" | "r" | "掷骰" | "check" | "ck" | "检定" | "属性"
             | "skill" | "sk" | "技能" | "绝活"
-            | "levelup" | "lv" | "升级" | "成长" | "mode" | "模式" | "style" | "风格" | "档位" => {
+            | "levelup" | "lv" | "升级" | "成长" | "mode" | "模式" | "style" | "风格" | "档位"
+            | "pause" | "等人" | "飙戏" => {
                 InPlaceSyncMode::TempToast
             }
             _ => InPlaceSyncMode::PublicCard,
